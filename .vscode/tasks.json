@@ -1,0 +1,23 @@
+{
+   "version": "2.0.0",
+   "tasks": [
+      {
+         "type": "cargo",
+         "group": "build",
+         "label": "build",
+         "command": "build",
+         "problemMatcher": [
+            "$rustc"
+         ],
+         "presentation": {
+            "clear": true,
+            "echo": false,
+            "close": true,
+            "focus": false,
+            "panel": "shared",
+            "reveal": "always",
+            "showReuseMessage": false,
+         }
+      }
+   ]
+}
