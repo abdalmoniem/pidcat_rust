@@ -10,14 +10,107 @@
             "$rustc"
          ],
          "presentation": {
-            "clear": true,
+            "clear": false,
             "echo": false,
-            "close": true,
+            "close": false,
             "focus": false,
             "panel": "shared",
             "reveal": "always",
             "showReuseMessage": false,
          }
-      }
+      },
+      {
+         "type": "cargo",
+         "group": "build",
+         "label": "build release",
+         "command": "build",
+         "args": [
+            "--release"
+         ],
+         "problemMatcher": [
+            "$rustc"
+         ],
+         "presentation": {
+            "clear": false,
+            "echo": false,
+            "close": false,
+            "focus": false,
+            "panel": "shared",
+            "reveal": "always",
+            "showReuseMessage": false,
+         }
+      },
+      {
+         "group": "build",
+         "label": "build all",
+         "dependsOrder": "sequence",
+         "dependsOn": [
+            "build",
+            "build release",
+         ],
+         "presentation": {
+            "clear": false,
+            "echo": false,
+            "close": false,
+            "focus": false,
+            "panel": "shared",
+            "reveal": "always",
+            "showReuseMessage": false,
+         }
+      },
+      {
+         "type": "cargo",
+         "group": "build",
+         "label": "clean",
+         "command": "clean",
+         "problemMatcher": [
+            "$rustc"
+         ],
+         "presentation": {
+            "clear": false,
+            "echo": false,
+            "close": false,
+            "focus": false,
+            "panel": "shared",
+            "reveal": "always",
+            "showReuseMessage": false,
+         }
+      },
+      {
+         "group": "build",
+         "label": "rebuild",
+         "dependsOrder": "sequence",
+         "dependsOn": [
+            "clean",
+            "build",
+         ],
+         "presentation": {
+            "clear": false,
+            "echo": false,
+            "close": false,
+            "focus": false,
+            "panel": "shared",
+            "reveal": "always",
+            "showReuseMessage": false,
+         }
+      },
+      {
+         "group": "build",
+         "label": "rebuild all",
+         "dependsOrder": "sequence",
+         "dependsOn": [
+            "clean",
+            "build all",
+         ],
+         "presentation": {
+            "clear": false,
+            "echo": false,
+            "close": false,
+            "focus": false,
+            "panel": "shared",
+            "reveal": "always",
+            "showReuseMessage": false,
+         }
+      },
    ]
 }

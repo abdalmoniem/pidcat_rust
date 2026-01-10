@@ -1,88 +1,98 @@
 use clap::ValueEnum;
+
 use colored::*;
+
 use once_cell::sync::Lazy;
+
 use pidcat::CliArgs;
 use pidcat::LogLevel;
+use pidcat::ResultOrPanic;
 use pidcat::State;
 use pidcat::Writer;
+
 use regex::Regex;
+
 use std::collections::HashMap;
 use std::collections::HashSet;
+
 use std::fs::File;
+
 use std::io::BufRead;
 use std::io::BufReader;
+
 use std::process::Command;
 use std::process::Stdio;
 
-static BACKTRACE_LINE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^#(.*?)pc\s(.*?)$").expect("Invalid Regex for BACKTRACE_LINE"));
+static BACKTRACE_LINE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^#(.*?)pc\s(.*?)$").unwrap_or_panic("Invalid Regex for BACKTRACE_LINE")
+});
 
 static NATIVE_TAGS_LINE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r".*nativeGetEnabledTags.*").expect("Invalid Regex for NATIVE_TAGS_LINE")
+    Regex::new(r".*nativeGetEnabledTags.*").unwrap_or_panic("Invalid Regex for NATIVE_TAGS_LINE")
 });
 
 static LOG_LINE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^([A-Z])/(.+?)\( *(\d+)\): (.*?)$").expect("Invalid Regex for LOG_LINE")
+    Regex::new(r"^([A-Z])/(.+?)\( *(\d+)\): (.*?)$").unwrap_or_panic("Invalid Regex for LOG_LINE")
 });
 
 static PID_LINE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^\w+\s+(\w+)\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+\s+\w\s(.*?)$")
-        .expect("Invalid Regex for PID_LINE")
+        .unwrap_or_panic("Invalid Regex for PID_LINE")
 });
 
 static PID_START: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^.*: Start proc (\d+):([a-zA-Z0-9._:]+)/[a-z0-9]+ for .*? \{(.*?)\}$")
-        .expect("Invalid Regex for PID_START")
+        .unwrap_or_panic("Invalid Regex for PID_START")
 });
 
 static PID_START_UGID: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r"^.*: Start proc ([a-zA-Z0-9._:]+) for ([a-z]+ [^:]+): pid=(\d+) uid=(\d+) gids=(.*)$",
     )
-    .expect("Invalid Regex for PID_START_UGID")
+    .unwrap_or_panic("Invalid Regex for PID_START_UGID")
 });
 
 static PID_START_DALVIK: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^E/dalvikvm\(\s*(\d+)\): >>>>> ([a-zA-Z0-9._:]+) \[ userId:0 \| appId:(\d+) \]$")
-        .expect("Invalid Regex for PID_START_DALVIK")
+        .unwrap_or_panic("Invalid Regex for PID_START_DALVIK")
 });
 
 static PID_KILL: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^Killing (\d+):([a-zA-Z0-9._:]+)/[^:]+: (.*)$")
-        .expect("Invalid Regex for PID_KILL")
+        .unwrap_or_panic("Invalid Regex for PID_KILL")
 });
 
 static PID_LEAVE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^No longer want ([a-zA-Z0-9._:]+) \(pid (\d+)\): .*$")
-        .expect("Invalid Regex for PID_LEAVE")
+        .unwrap_or_panic("Invalid Regex for PID_LEAVE")
 });
 
 static PID_DEATH: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^Process ([a-zA-Z0-9._:]+) \(pid (\d+)\) has died.?$")
-        .expect("Invalid Regex for PID_DEATH")
+        .unwrap_or_panic("Invalid Regex for PID_DEATH")
 });
 
 static STRICT_MODE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^(StrictMode policy violation)(; ~duration=)(\d+ ms)")
-        .expect("Invalid Regex for STRICT_MODE")
+        .unwrap_or_panic("Invalid Regex for STRICT_MODE")
 });
 
 static GC_COLOR: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r"^(GC_(?:CONCURRENT|FOR_M?ALLOC|EXTERNAL_ALLOC|EXPLICIT) )(freed <?\d+.)(, \d+\% free \d+./\d+., )(paused \d+ms(?:\+\d+ms)?)"
-    ).expect("Invalid Regex for GC_COLOR")
+    ).unwrap_or_panic("Invalid Regex for GC_COLOR")
 });
 
 static VISIBLE_ACTIVITIES: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r"VisibleActivityProcess:\[\s*(?:(?:ProcessRecord\{\w+\s*\d+:(?:[a-zA-Z.]+)/\w+\})\s*)+\]",
     )
-    .expect("Invalid Regex for VISIBLE_ACTIVITIES")
+    .unwrap_or_panic("Invalid Regex for VISIBLE_ACTIVITIES")
 });
 
 static VISIBLE_PACKAGES: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"ProcessRecord\{\w+\s*\d+:([a-zA-Z.]+)/\w+\}")
-        .expect("Invalid Regex for VISIBLE_PACKAGES")
+        .unwrap_or_panic("Invalid Regex for VISIBLE_PACKAGES")
 });
 
 static SYSTEM_TAGS: Lazy<&[&str]> = Lazy::new(|| {
@@ -260,7 +270,8 @@ fn get_token_color(tag: &str, state: &mut State) -> colored::Color {
 }
 
 fn get_adb_command(args: &CliArgs) -> Vec<String> {
-    let mut base_adb_command = vec!["adb".to_string()];
+    let adb_path = args.adb_path.clone().unwrap_or_else(|| "adb".to_string());
+    let mut base_adb_command = vec![adb_path];
 
     if args.use_device {
         base_adb_command.push("-d".to_string());
@@ -948,7 +959,7 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         .trim()
         .to_string();
     let level = log_line.get(1).map_or(LogLevel::VERBOSE, |mat| {
-        LogLevel::from_str(mat.as_str(), true).expect("Invalid log level")
+        LogLevel::from_str(mat.as_str(), true).unwrap_or_panic("Invalid log level")
     });
 
     let mut message = log_line
@@ -1131,7 +1142,7 @@ fn main() {
 
     if let Some(path) = args.output_path.clone() {
         let file_writer =
-            Writer::new_file(File::create(path).expect("Failed to create output file"));
+            Writer::new_file(File::create(path).unwrap_or_panic("Failed to create output file"));
         writers.push(file_writer);
     }
 
@@ -1218,28 +1229,24 @@ fn main() {
         .args(&adb_command[1..])
         .stdout(Stdio::piped())
         .spawn()
-        .expect("Failed to start adb logcat");
+        .unwrap_or_panic("Failed to start adb logcat process");
 
     if let Some(stdout) = child.stdout.take() {
         let mut reader = BufReader::new(stdout);
 
         loop {
             let mut buffer = vec![];
-            match reader.read_until(b'\n', &mut buffer) {
-                Ok(0) => break,
-                Ok(_) => {
-                    let content = String::from_utf8_lossy(&buffer);
-                    let trimmed = content.trim_end_matches(['\r', '\n']);
-                    write_log_line(trimmed, &mut state, &args, &mut writers);
-                }
-                Err(err) => {
-                    eprintln!(
-                        "{}{}",
-                        "Error reading stream: ".red().bold().italic(),
-                        err.to_string().red().bold().italic()
-                    );
-                    break;
-                }
+            let bytes_read = reader
+                .read_until(b'\n', &mut buffer)
+                .unwrap_or_panic("Error reading stream");
+
+            if bytes_read == 0 {
+                break;
+            } else {
+                let content = String::from_utf8_lossy(&buffer).to_string();
+                let trimmed = content.trim_end_matches(['\r', '\n']).to_string();
+
+                write_log_line(&trimmed, &mut state, &args, &mut writers);
             }
         }
     }

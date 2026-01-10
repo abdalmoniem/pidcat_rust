@@ -1,4 +1,5 @@
 use clap::{Parser, ValueEnum, builder::styling};
+use colored::Colorize;
 use std::{env, fmt};
 
 const POSITIONAL_ARGUMENTS: &str = "Positional Arguments";
@@ -87,6 +88,17 @@ pub struct CliArgs {
         help = "Print the version number and exit",
     )]
     pub version: Option<bool>,
+
+    #[arg(
+        short = 'A',
+        long = "adb",
+        required = false,
+        default_value = None,
+        value_name = "ADB_PATH",
+        help_heading = ABOUT_OPTIONS,
+        help = "Path to adb executable (if not in PATH)",
+    )]
+    pub adb_path: Option<String>,
 
     #[arg(
         short = 'd',
@@ -220,7 +232,7 @@ pub struct CliArgs {
         value_name = "REGEX",
         default_value = None,
         help_heading = FILTERING_OPTIONS,
-        help = "Filter output messages using the specified [REGEX]",
+        help = format!("Filter output messages using the specified {}", "[REGEX]".cyan().bold()),
     )]
     pub regex: Option<String>,
 
@@ -324,7 +336,7 @@ pub struct CliArgs {
         value_name = "FILE_PATH",
         default_value = None,
         help_heading = OUTPUT_OPTIONS,
-        help = "Save output to [FILE_PATH]",
+        help = format!("Save output to {}", "[FILE_PATH]".cyan().bold()),
     )]
     pub output_path: Option<String>,
 }
