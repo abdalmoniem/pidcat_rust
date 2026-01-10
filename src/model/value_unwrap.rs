@@ -1,8 +1,6 @@
-use crate::ValueOrPanic;
 use colored::ColoredString;
-use colored::Colorize;
 
-/// Trait to extend `Result` with custom unwrap methods that panic with styled messages.
+/// Trait to extend `Result` or `Option` with custom unwrap methods that panic with styled messages.
 ///
 /// ### Example
 ///
@@ -13,14 +11,17 @@ use colored::Colorize;
 /// let result: Result<i32, &str> = Err("Oops");
 /// let value = result.unwrap_or_panic("Custom panic message");
 ///
+/// let option: Option<i32> = None;
+/// let value = option.unwrap_or_panic("Custom panic message");
+///
 /// let result: Result<i32, &str> = Err("Oops");
 /// let value = result.unwrap_or_panic_with("Custom panic message", |msg| msg.red().bold());
+///
+/// let option: Option<i32> = None;
+/// let value = option.unwrap_or_panic_with("Custom panic message", |msg| msg.red().bold());
 /// ```
-impl<T, E> ValueOrPanic<T> for Result<T, E>
-where
-    E: std::fmt::Debug,
-{
-    /// Unwraps a `Result` with a custom panic message.
+pub trait ValueOrPanic<T> {
+    /// Unwraps a `Result` or an `Option` with a custom panic message.
     ///
     /// Instead of panicking with a default message, this method panics with a custom message.
     ///
@@ -31,20 +32,14 @@ where
     ///
     /// let result: Result<i32, &str> = Err("Oops");
     /// let value = result.unwrap_or_panic("Custom panic message");
+    ///
+    /// let option: Option<i32> = None;
+    /// let value = option.unwrap_or_panic("Custom panic message");
     /// ```
-    fn unwrap_or_panic(self, msg: &str) -> T {
-        match self {
-            Ok(value) => value,
-            Err(err) => {
-                let msg_str = msg.to_string().red().bold();
-                let err_str = format!("{:?}", err).red().bold();
+    ///
+    fn unwrap_or_panic(self, msg: &str) -> T;
 
-                panic!("{}\n{}", msg_str, err_str)
-            }
-        }
-    }
-
-    /// Unwraps a `Result` with a custom panic message and style.
+    /// Unwraps a `Result` or an `Option` with a custom panic message and style.
     ///
     /// ### Example
     ///
@@ -54,16 +49,10 @@ where
     ///
     /// let result: Result<i32, &str> = Err("Oops");
     /// let value = result.unwrap_or_panic_with("Custom panic message", |msg| msg.red().bold());
+    ///
+    /// let option: Option<i32> = None;
+    /// let value = option.unwrap_or_panic_with("Custom panic message", |msg| msg.red().bold());
     /// ```
-    fn unwrap_or_panic_with(self, msg: &str, style: fn(&str) -> ColoredString) -> T {
-        match self {
-            Ok(value) => value,
-            Err(err) => {
-                let msg_str = style(msg);
-                let err_str = style(&format!("{:?}", err));
-
-                panic!("{}\n{}", msg_str, err_str)
-            }
-        }
-    }
+    ///
+    fn unwrap_or_panic_with(self, msg: &str, style: fn(&str) -> ColoredString) -> T;
 }

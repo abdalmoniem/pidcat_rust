@@ -1,13 +1,14 @@
 use clap::ValueEnum;
 
-use colored::*;
+use colored::Color;
+use colored::Colorize;
 
 use once_cell::sync::Lazy;
 
 use pidcat::CliArgs;
 use pidcat::LogLevel;
-use pidcat::ResultOrPanic;
 use pidcat::State;
+use pidcat::ValueOrPanic;
 use pidcat::Writer;
 
 use regex::Regex;
@@ -22,6 +23,8 @@ use std::io::BufReader;
 
 use std::process::Command;
 use std::process::Stdio;
+
+use strip_ansi_escapes::strip;
 
 static BACKTRACE_LINE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^#(.*?)pc\s(.*?)$").unwrap_or_panic("Invalid Regex for BACKTRACE_LINE")
@@ -172,44 +175,174 @@ static SYSTEM_TAGS: Lazy<&[&str]> = Lazy::new(|| {
     ]
 });
 
+#[derive(Debug, Clone)]
+struct AnsiSegment {
+    code: String,       // The ANSI escape sequence
+    visible_pos: usize, // Position in the visible (plain) text
+}
+
 fn get_console_width() -> i16 {
     terminal_size::terminal_size()
         .map(|(terminal_size::Width(width), _)| width as i16)
         .unwrap_or(80)
 }
 
+fn get_ansi_segments(text: &str) -> Vec<AnsiSegment> {
+    let mut segments = Vec::new();
+    let mut chars = text.chars().peekable();
+    let mut visible_pos = 0;
+
+    while let Some(ch) = chars.next() {
+        if ch == '\x1b' && chars.peek() == Some(&'[') {
+            let mut code = String::from("\x1b");
+            let cmd = chars
+                .next()
+                .unwrap_or_panic("Unexpected end of input after ESC");
+            code.push(cmd); // '['
+
+            while let Some(&next_ch) = chars.peek() {
+                let param = chars
+                    .next()
+                    .unwrap_or_panic("Unexpected end of input in ANSI code");
+                code.push(param);
+
+                if next_ch.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+
+            segments.push(AnsiSegment { visible_pos, code });
+        } else {
+            visible_pos += 1;
+        }
+    }
+
+    segments
+}
+
+fn get_active_codes_at_pos(segments: &[AnsiSegment], pos: usize) -> Vec<String> {
+    let mut active = Vec::new();
+
+    for seg in segments {
+        if seg.visible_pos >= pos {
+            break;
+        }
+
+        if seg.code.contains("0m") {
+            active.clear();
+        } else {
+            active.push(seg.code.clone());
+        }
+    }
+
+    active
+}
+
+fn insert_ansi_codes_in_range(
+    plain_text: &str,
+    segments: &[AnsiSegment],
+    start_pos: usize,
+    end_pos: usize,
+    active_codes: &[String],
+) -> String {
+    let mut result = String::new();
+    let chars: Vec<char> = plain_text.chars().collect();
+
+    for code in active_codes {
+        result.push_str(code);
+    }
+
+    let mut segment_idx = 0;
+
+    while segment_idx < segments.len() && segments[segment_idx].visible_pos < start_pos {
+        segment_idx += 1;
+    }
+
+    for (i, ch) in chars.iter().enumerate() {
+        let absolute_pos = start_pos + i;
+
+        while segment_idx < segments.len() {
+            let seg = &segments[segment_idx];
+
+            if seg.visible_pos >= end_pos {
+                break;
+            }
+
+            if seg.visible_pos == absolute_pos {
+                result.push_str(&seg.code);
+                segment_idx += 1;
+            } else if seg.visible_pos > absolute_pos {
+                break;
+            } else {
+                segment_idx += 1;
+            }
+        }
+
+        result.push(*ch);
+    }
+
+    result
+}
+
 fn get_wrapped_indent(
     message: &str,
     width: i16,
-    header_size: usize,
-    level_foreground: colored::Color,
-    level_background: colored::Color,
+    header_width: usize,
+    level_foreground: Color,
+    level_background: Color,
 ) -> String {
     if width == -1 {
         return message.to_string();
     }
 
     let message = message.replace('\t', "    ");
-    let wrap_area = (width as usize).saturating_sub(header_size);
+    let wrap_area = (width as usize).saturating_sub(header_width);
 
     if wrap_area == 0 {
         return message;
     }
 
+    let ansi_segments = get_ansi_segments(&message);
+    let plain_bytes = strip(message.as_bytes());
+    let plain_text = String::from_utf8_lossy(&plain_bytes).to_string();
+
+    // Check if wrapping is needed
+    if plain_text.chars().count() <= wrap_area {
+        return message;
+    }
+
     let mut message_buffer = String::new();
-    let chars = message.chars().collect::<Vec<_>>();
+    let chars: Vec<char> = plain_text.chars().collect();
     let mut current = 0;
 
     while current < chars.len() {
         let next_index = std::cmp::min(current + wrap_area, chars.len());
-        let segment = chars[current..next_index].iter().collect::<String>();
+        let segment: String = chars[current..next_index].iter().collect();
 
-        message_buffer.push_str(&segment);
+        // Get active codes at the start of this segment (for continuation lines)
+        let active_codes = if current > 0 {
+            get_active_codes_at_pos(&ansi_segments, current)
+        } else {
+            Vec::new()
+        };
+
+        // Reconstruct segment with ANSI codes
+        let colored_segment = insert_ansi_codes_in_range(
+            &segment,
+            &ansi_segments,
+            current,
+            next_index,
+            &active_codes,
+        );
+        message_buffer.push_str(&colored_segment);
 
         if next_index < chars.len() {
+            // Add reset to prevent color bleeding
+            message_buffer.push_str("\x1b[0m");
+
             message_buffer.push('\n');
 
-            let indent_len = header_size.saturating_sub(4);
+            let indent_len = header_width.saturating_sub(5);
             let spaces = if level_foreground == level_background {
                 " ".repeat(indent_len)
                     .color(level_foreground)
@@ -223,7 +356,7 @@ fn get_wrapped_indent(
             let future_index = next_index + wrap_area;
             let is_last_line = future_index >= chars.len();
             let connector = if level_foreground == level_background {
-                "   "
+                "    "
             } else if is_last_line {
                 " └ "
             } else {
@@ -238,6 +371,9 @@ fn get_wrapped_indent(
 
             message_buffer.push_str(&colored_connector);
             message_buffer.push(' ');
+        } else {
+            // Add reset at the end
+            message_buffer.push_str("\x1b[0m");
         }
 
         current = next_index;
@@ -246,22 +382,24 @@ fn get_wrapped_indent(
     message_buffer
 }
 
-fn get_token_color(tag: &str, state: &mut State) -> colored::Color {
+fn get_token_color(tag: &str, state: &mut State) -> Color {
     if !state.known_tags.contains_key(tag) {
         if !state.tag_colors.is_empty() {
-            // Equivalent to TAG_COLORS.pop(0)
-            let color = state.tag_colors.remove(0);
+            let color = state.tag_colors[0];
             state.known_tags.insert(tag.to_string(), color);
+            state.tag_colors.rotate_left(1);
         } else {
-            // Fallback if we run out of colors (though logic below prevents this)
-            return colored::Color::White;
+            return Color::White;
         }
     }
 
-    let color = *state.known_tags.get(tag).unwrap();
+    let color = *state
+        .known_tags
+        .get(tag)
+        .unwrap_or_panic(&format!("Unknown tag '{}' in known tags", tag));
 
     // Move to end of list (LRU logic)
-    if let Some(pos) = state.tag_colors.iter().position(|&c| c == color) {
+    if let Some(pos) = state.tag_colors.iter().position(|&col| col == color) {
         state.tag_colors.remove(pos);
     }
     state.tag_colors.push(color);
@@ -270,7 +408,7 @@ fn get_token_color(tag: &str, state: &mut State) -> colored::Color {
 }
 
 fn get_adb_command(args: &CliArgs) -> Vec<String> {
-    let adb_path = args.adb_path.clone().unwrap_or_else(|| "adb".to_string());
+    let adb_path = args.adb_path.clone().unwrap_or("adb".to_string());
     let mut base_adb_command = vec![adb_path];
 
     if args.use_device {
@@ -472,13 +610,13 @@ fn is_matching_tag(tag: &str, tags: &[String]) -> bool {
 
 fn write_token(
     token: &str,
-    wrap: bool,
-    level_foreground: colored::Color,
-    level_background: colored::Color,
-    header_size: usize,
     writers: &mut [Writer],
+    wrap: bool,
+    header_width: usize,
+    level_foreground: Color,
+    level_background: Color,
 ) -> usize {
-    let local_header = header_size;
+    let local_header = header_width;
     for writer in writers.iter_mut() {
         writer.width = get_console_width();
 
@@ -486,7 +624,7 @@ fn write_token(
             get_wrapped_indent(
                 token,
                 writer.width,
-                header_size,
+                header_width,
                 level_foreground,
                 level_background,
             )
@@ -511,29 +649,29 @@ fn write_started_process(
     line: &str,
     state: &mut State,
     writers: &mut [Writer],
-    current_header_size: usize,
-    level_foreground: Color,
-    spaces: &str,
+    header_width: usize,
 ) {
+    let spaces = " ".repeat(header_width.saturating_sub(1));
+
     if let Some(procs) = get_started_process(line) {
         let (started_pid, started_uid, started_gids, started_package, started_target) = procs;
 
         let spaces = spaces
-            .color(colored::Color::Green)
-            .on_color(colored::Color::Green)
+            .color(Color::Green)
+            .on_color(Color::Green)
             .to_string();
 
         let started_process_message = format!(
             " Process {} created for {}\n",
-            &started_package.color(colored::Color::Yellow),
-            &started_target.color(colored::Color::Yellow)
+            &started_package.color(Color::Yellow),
+            &started_target.color(Color::Yellow)
         );
 
         let pugid_message = format!(
             " PID: {}   UID: {}   GIDs: {}",
-            &started_pid.color(colored::Color::Yellow),
-            &started_uid.color(colored::Color::Yellow),
-            &started_gids.color(colored::Color::Yellow)
+            &started_pid.color(Color::Yellow),
+            &started_uid.color(Color::Yellow),
+            &started_gids.color(Color::Yellow)
         );
 
         if is_matching_package(
@@ -547,57 +685,84 @@ fn write_started_process(
             state.app_pid = Some(started_pid.clone());
 
             write_token(
-                "\n",
-                false,
-                level_foreground,
-                colored::Color::Green,
-                current_header_size,
+                &spaces,
                 writers,
+                false,
+                header_width,
+                Color::Green,
+                Color::Green,
+            );
+
+            write_token(
+                "\n",
+                writers,
+                false,
+                header_width,
+                Color::Green,
+                Color::Green,
             );
 
             write_token(
                 &spaces,
-                false,
-                colored::Color::Green,
-                colored::Color::Green,
-                current_header_size,
                 writers,
+                false,
+                header_width,
+                Color::Green,
+                Color::Green,
             );
 
             write_token(
                 &started_process_message,
-                true,
-                colored::Color::Green,
-                colored::Color::Green,
-                current_header_size,
                 writers,
+                true,
+                header_width,
+                Color::Green,
+                Color::Green,
             );
 
             write_token(
                 &spaces,
-                false,
-                colored::Color::Green,
-                colored::Color::Green,
-                current_header_size,
                 writers,
+                false,
+                header_width,
+                Color::Green,
+                Color::Green,
             );
 
             write_token(
                 &pugid_message,
-                false,
-                colored::Color::Green,
-                colored::Color::Green,
-                current_header_size,
                 writers,
+                true,
+                header_width,
+                Color::Green,
+                Color::Green,
             );
 
             write_token(
                 "\n",
-                false,
-                colored::Color::Green,
-                colored::Color::Green,
-                current_header_size,
                 writers,
+                false,
+                header_width,
+                Color::Green,
+                Color::Green,
+            );
+
+            write_token(
+                &spaces,
+                writers,
+                false,
+                header_width,
+                Color::Green,
+                Color::Green,
+            );
+
+            write_token(
+                "\n",
+                writers,
+                false,
+                header_width,
+                Color::Green,
+                Color::Green,
             );
 
             state.last_tag = None;
@@ -606,13 +771,14 @@ fn write_started_process(
 }
 
 fn write_dead_process(
-    state: &mut State,
-    writers: &mut [Writer],
-    current_header_size: usize,
     tag: &str,
     message: &str,
-    spaces: String,
+    state: &mut State,
+    writers: &mut [Writer],
+    header_width: usize,
 ) {
+    let spaces = " ".repeat(header_width.saturating_sub(1));
+
     if let Some((dead_pid, dead_process_name)) = get_dead_process(
         tag,
         message,
@@ -620,15 +786,12 @@ fn write_dead_process(
         &state.named_processes,
         &state.catchall_package,
     ) {
-        let spaces = spaces
-            .color(colored::Color::Red)
-            .on_color(colored::Color::Red)
-            .to_string();
+        let spaces = spaces.color(Color::Red).on_color(Color::Red).to_string();
 
         let dead_process_message = format!(
             " Process {} (PID: {}) ended\n",
-            &dead_process_name.color(colored::Color::Yellow),
-            &dead_pid.color(colored::Color::Yellow)
+            &dead_process_name.color(Color::Yellow),
+            &dead_pid.color(Color::Yellow)
         );
 
         if state.pids_map.contains_key(&dead_pid) {
@@ -636,37 +799,44 @@ fn write_dead_process(
         }
 
         write_token(
-            "\n",
-            false,
-            colored::Color::Red,
-            colored::Color::Red,
-            current_header_size,
+            &spaces,
             writers,
+            false,
+            header_width,
+            Color::Red,
+            Color::Red,
         );
+
+        write_token("\n", writers, false, header_width, Color::Red, Color::Red);
+
         write_token(
             &spaces,
-            false,
-            colored::Color::Red,
-            colored::Color::Red,
-            current_header_size,
             writers,
+            false,
+            header_width,
+            Color::Red,
+            Color::Red,
         );
+
         write_token(
             &dead_process_message,
-            false,
-            colored::Color::Red,
-            colored::Color::Red,
-            current_header_size,
             writers,
+            true,
+            header_width,
+            Color::Red,
+            Color::Red,
         );
+
         write_token(
-            "\n",
-            false,
-            colored::Color::Red,
-            colored::Color::Red,
-            current_header_size,
+            &spaces,
             writers,
+            false,
+            header_width,
+            Color::Red,
+            Color::Red,
         );
+
+        write_token("\n", writers, false, header_width, Color::Red, Color::Red);
 
         state.last_tag = None;
     }
@@ -676,12 +846,13 @@ fn write_pid(
     state: &mut State,
     args: &CliArgs,
     writers: &mut [Writer],
-    current_header_size: &mut usize,
-    pid_width: usize,
+    header_width: &mut usize,
     owner: &str,
     level_foreground: Color,
     level_background: Color,
 ) {
+    let pid_width = args.pid_width as usize;
+
     if args.show_pid && !&owner.is_empty() {
         let mut display_owner = owner.to_string();
         let pid_color = get_token_color(owner, state);
@@ -697,36 +868,37 @@ fn write_pid(
         } else {
             pid_display.color(pid_color).to_string()
         };
-        *current_header_size = write_token(
+        *header_width = write_token(
             &pid_display,
+            writers,
             false,
+            *header_width,
             level_foreground,
             level_background,
-            *current_header_size,
-            writers,
         );
-        *current_header_size = write_token(
+        *header_width = write_token(
             " ",
+            writers,
             false,
+            *header_width,
             level_foreground,
             level_background,
-            *current_header_size,
-            writers,
         );
-        *current_header_size += pid_width + 1;
+        *header_width += pid_width + 1;
     }
 }
 
 fn write_package_name(
-    state: &mut State,
-    args: &CliArgs,
-    writers: &mut [Writer],
-    current_header_size: &mut usize,
-    package_width: usize,
     owner: &str,
+    args: &CliArgs,
+    state: &mut State,
+    writers: &mut [Writer],
+    header_width: &mut usize,
     level_foreground: Color,
     level_background: Color,
 ) {
+    let package_width = args.package_width as usize;
+
     if args.show_package && !&owner.is_empty() {
         let package_name = state
             .pids_map
@@ -747,36 +919,37 @@ fn write_package_name(
             pkg_display.color(pkg_color).to_string()
         };
 
-        *current_header_size = write_token(
+        *header_width = write_token(
             &pkg_display,
+            writers,
             false,
+            *header_width,
             level_foreground,
             level_background,
-            *current_header_size,
-            writers,
         );
-        *current_header_size = write_token(
+        *header_width = write_token(
             " ",
+            writers,
             false,
+            *header_width,
             level_foreground,
             level_background,
-            *current_header_size,
-            writers,
         );
-        *current_header_size += package_width + 1;
+        *header_width += package_width + 1;
     }
 }
 
 fn write_tag(
-    state: &mut State,
-    args: &CliArgs,
-    writers: &mut [Writer],
-    current_header_size: &mut usize,
-    tag_width: usize,
     tag: &str,
+    args: &CliArgs,
+    state: &mut State,
+    writers: &mut [Writer],
+    header_width: &mut usize,
     level_foreground: Color,
     level_background: Color,
 ) {
+    let tag_width = args.tag_width as usize;
+
     if tag_width > 0 {
         if Some(tag.to_string()) != state.last_tag || args.always_show_tags {
             state.last_tag = Some(tag.to_string());
@@ -787,8 +960,8 @@ fn write_tag(
                 display_tag = format!("{}...", &display_tag[..tag_width - 3]);
             }
 
-            let tag_color = get_token_color(&tag, state);
-            let tag_display = if args.show_package {
+            let tag_color = get_token_color(tag, state);
+            let tag_display = if args.show_pid || args.show_package {
                 format!("{:>width$}", display_tag, width = tag_width)
             } else {
                 format!("{:width$}", display_tag, width = tag_width)
@@ -800,42 +973,41 @@ fn write_tag(
                 tag_display.color(tag_color).to_string()
             };
 
-            *current_header_size = write_token(
+            *header_width = write_token(
                 &tag_display,
+                writers,
                 false,
+                *header_width,
                 level_foreground,
                 level_background,
-                *current_header_size,
-                writers,
             );
         } else {
-            *current_header_size = write_token(
+            *header_width = write_token(
                 &" ".repeat(tag_width),
+                writers,
                 false,
+                *header_width,
                 level_foreground,
                 level_background,
-                *current_header_size,
-                writers,
             );
         }
-        *current_header_size = write_token(
+        *header_width = write_token(
             " ",
+            writers,
             false,
+            *header_width,
             level_foreground,
             level_background,
-            *current_header_size,
-            writers,
         );
-        *current_header_size += tag_width + 1;
+        *header_width += tag_width + 1;
     }
 }
 
 fn write_log_level(
+    level: LogLevel,
     args: &CliArgs,
     writers: &mut [Writer],
-    base_level_size: usize,
-    current_header_size: &mut usize,
-    level: LogLevel,
+    header_width: &mut usize,
     level_foreground: Color,
     level_background: Color,
 ) {
@@ -855,23 +1027,22 @@ fn write_log_level(
         )
     };
 
-    *current_header_size = write_token(
+    *header_width = write_token(
         &level_str,
+        writers,
         false,
+        *header_width,
         level_foreground,
         level_background,
-        *current_header_size,
-        writers,
     );
-    *current_header_size = write_token(
+    *header_width = write_token(
         " ",
+        writers,
         false,
+        *header_width,
         level_foreground,
         level_background,
-        *current_header_size,
-        writers,
     );
-    *current_header_size += base_level_size;
 }
 
 fn apply_message_rules(args: &CliArgs, message: &str) -> String {
@@ -907,37 +1078,33 @@ fn apply_message_rules(args: &CliArgs, message: &str) -> String {
 }
 
 fn write_message(
-    writers: &mut [Writer],
-    current_header_size: usize,
     message: &str,
+    writers: &mut [Writer],
+    header_width: usize,
     level_foreground: Color,
     level_background: Color,
 ) {
     write_token(
         message,
+        writers,
         true,
+        header_width,
         level_foreground,
         level_background,
-        current_header_size,
-        writers,
     );
     write_token(
         "\n",
+        writers,
         false,
+        header_width,
         level_foreground,
         level_background,
-        current_header_size,
-        writers,
     );
 }
 
 fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [Writer]) {
-    let base_level_size = 3 + 1;
-    let mut current_header_size;
-
-    let pid_width = args.pid_width as usize;
-    let package_width = args.package_width as usize;
-    let tag_width = args.tag_width as usize;
+    let base_level_size = 3 + 1 + 1;
+    let header_width = &mut 0;
 
     if NATIVE_TAGS_LINE.is_match(line) {
         return;
@@ -969,32 +1136,30 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         .to_string();
 
     let level_foreground = match level {
-        LogLevel::VERBOSE => colored::Color::White,
-        _ => colored::Color::Black,
+        LogLevel::VERBOSE => Color::White,
+        _ => Color::Black,
     };
 
     let level_background = match level {
-        LogLevel::DEBUG => colored::Color::BrightBlue,
-        LogLevel::INFO => colored::Color::Green,
-        LogLevel::WARN => colored::Color::Yellow,
-        LogLevel::ERROR | LogLevel::FATAL => colored::Color::Red,
-        _ => colored::Color::Black,
+        LogLevel::DEBUG => Color::BrightBlue,
+        LogLevel::INFO => Color::Green,
+        LogLevel::WARN => Color::Yellow,
+        LogLevel::ERROR | LogLevel::FATAL => Color::Red,
+        _ => Color::Black,
     };
 
-    current_header_size = if args.show_package { package_width } else { 0 };
-    current_header_size += 1 + tag_width + base_level_size;
-    let spaces = " ".repeat(current_header_size - 1);
+    if args.show_pid {
+        *header_width += args.pid_width as usize
+    }
 
-    write_started_process(
-        line,
-        state,
-        writers,
-        current_header_size,
-        level_foreground,
-        &spaces,
-    );
+    if args.show_package {
+        *header_width += args.package_width as usize
+    }
 
-    write_dead_process(state, writers, current_header_size, &tag, &message, spaces);
+    *header_width += 2 + args.tag_width as usize + base_level_size;
+
+    write_started_process(line, state, writers, *header_width);
+    write_dead_process(&tag, &message, state, writers, *header_width);
 
     if !args.all && !state.pids_map.contains_key(&owner) {
         return;
@@ -1022,57 +1187,55 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         message = message.trim_start().to_string();
     }
 
-    current_header_size = 0;
+    *header_width = 0;
 
     write_pid(
         state,
         args,
         writers,
-        &mut current_header_size,
-        pid_width,
+        header_width,
         &owner,
         level_foreground,
         level_background,
     );
 
     write_package_name(
-        state,
-        args,
-        writers,
-        &mut current_header_size,
-        package_width,
         &owner,
+        args,
+        state,
+        writers,
+        header_width,
         level_foreground,
         level_background,
     );
 
     write_tag(
-        state,
-        args,
-        writers,
-        &mut current_header_size,
-        tag_width,
         &tag,
+        args,
+        state,
+        writers,
+        header_width,
         level_foreground,
         level_background,
     );
 
     write_log_level(
+        level,
         args,
         writers,
-        base_level_size,
-        &mut current_header_size,
-        level,
+        header_width,
         level_foreground,
         level_background,
     );
 
+    *header_width += base_level_size;
+
     message = apply_message_rules(args, &message);
 
     write_message(
-        writers,
-        current_header_size,
         &message,
+        writers,
+        *header_width,
         level_foreground,
         level_background,
     );
@@ -1193,23 +1356,23 @@ fn main() {
     let pids_map = get_processes(&base_adb_command, &catchall_package, &args);
 
     let tag_colors = vec![
-        colored::Color::Red,
-        colored::Color::Blue,
-        colored::Color::Cyan,
-        colored::Color::Green,
-        colored::Color::Yellow,
-        colored::Color::Magenta,
+        Color::Red,
+        Color::Blue,
+        Color::Cyan,
+        Color::Green,
+        Color::Yellow,
+        Color::Magenta,
     ];
 
     let known_tags = HashMap::from([
-        ("jdwp".to_string(), colored::Color::White),
-        ("DEBUG".to_string(), colored::Color::Yellow),
-        ("Process".to_string(), colored::Color::White),
-        ("dalvikvm".to_string(), colored::Color::White),
-        ("StrictMode".to_string(), colored::Color::White),
-        ("AndroidRuntime".to_string(), colored::Color::Cyan),
-        ("ActivityThread".to_string(), colored::Color::White),
-        ("ActivityManager".to_string(), colored::Color::White),
+        ("jdwp".to_string(), Color::White),
+        ("DEBUG".to_string(), Color::Yellow),
+        ("Process".to_string(), Color::White),
+        ("dalvikvm".to_string(), Color::White),
+        ("StrictMode".to_string(), Color::White),
+        ("AndroidRuntime".to_string(), Color::Cyan),
+        ("ActivityThread".to_string(), Color::White),
+        ("ActivityManager".to_string(), Color::White),
     ]);
 
     let mut state = State {
