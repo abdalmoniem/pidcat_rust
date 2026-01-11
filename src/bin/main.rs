@@ -5,6 +5,7 @@ use colored::Colorize;
 
 use once_cell::sync::Lazy;
 
+use pidcat::AnsiSegment;
 use pidcat::CliArgs;
 use pidcat::LogLevel;
 use pidcat::State;
@@ -174,12 +175,6 @@ static SYSTEM_TAGS: Lazy<&[&str]> = Lazy::new(|| {
         r"oplus\.android\.OplusFrameworkFactoryImpl",
     ]
 });
-
-#[derive(Debug, Clone)]
-struct AnsiSegment {
-    code: String,       // The ANSI escape sequence
-    visible_pos: usize, // Position in the visible (plain) text
-}
 
 fn get_console_width() -> i16 {
     terminal_size::terminal_size()
@@ -364,9 +359,9 @@ fn get_wrapped_indent(
             };
 
             let colored_connector = connector
+                .bold()
                 .color(level_foreground)
                 .on_color(level_background)
-                .bold()
                 .to_string();
 
             message_buffer.push_str(&colored_connector);
@@ -1011,21 +1006,15 @@ fn write_log_level(
     level_foreground: Color,
     level_background: Color,
 ) {
-    let level_str = if args.no_color {
-        format!(" {level} ")
-    } else {
-        let space = " ".color(level_foreground).on_color(level_background);
-        format!(
-            "{}{}{}",
-            space,
-            level
-                .to_string()
-                .bold()
-                .color(level_foreground)
-                .on_color(level_background),
-            space
-        )
-    };
+    let mut level_str = format!(" {level} ");
+
+    if !args.no_color {
+        level_str = level_str
+            .bold()
+            .color(level_foreground)
+            .on_color(level_background)
+            .to_string();
+    }
 
     *header_width = write_token(
         &level_str,
@@ -1103,7 +1092,7 @@ fn write_message(
 }
 
 fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [Writer]) {
-    let base_level_size = 3 + 1 + 1;
+    let base_level_size = 1 + 1 + 3;
     let header_width = &mut 0;
 
     if NATIVE_TAGS_LINE.is_match(line) {
@@ -1135,17 +1124,15 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         .trim()
         .to_string();
 
-    let level_foreground = match level {
-        LogLevel::VERBOSE => Color::White,
-        _ => Color::Black,
-    };
+    let level_foreground = Color::White;
 
     let level_background = match level {
-        LogLevel::DEBUG => Color::BrightBlue,
+        LogLevel::DEBUG => Color::Blue,
         LogLevel::INFO => Color::Green,
-        LogLevel::WARN => Color::Yellow,
-        LogLevel::ERROR | LogLevel::FATAL => Color::Red,
-        _ => Color::Black,
+        LogLevel::WARN => Color::Magenta,
+        LogLevel::ERROR => Color::BrightRed,
+        LogLevel::FATAL => Color::Red,
+        LogLevel::VERBOSE => Color::Cyan,
     };
 
     if args.show_pid {

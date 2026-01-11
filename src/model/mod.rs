@@ -1,3 +1,4 @@
+pub mod ansi_segment;
 pub mod cli_args;
 pub mod option_unwrap;
 pub mod result_unwrap;
