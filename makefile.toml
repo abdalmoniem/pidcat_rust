@@ -1,0 +1,44 @@
+[tasks.build]
+description = "Runs cargo build"
+command = "cargo"
+args = ["build"]
+
+[tasks.build-release]
+description = "Runs cargo build in release mode"
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.build-all]
+description = "Runs cargo build for both debug and release modes"
+dependencies = ["build", "build-release"]
+
+[tasks.rebuild]
+description = "Runs clean and then build"
+dependencies = ["clean-all", "build"]
+
+[tasks.rebuild-all]
+description = "Runs clean and then build for both debug and release modes"
+dependencies = ["clean-all", "build-all"]
+
+[tasks.clean]
+description = "Runs cargo clean"
+command = "cargo"
+args = ["clean"]
+
+[tasks.clean-setup]
+description = "Removes installer output directory"
+script = ["rm -rf build/setup/Output"]
+
+[tasks.clean-all]
+description = "Cleans the build artifacts"
+dependencies = ["clean", "clean-setup"]
+
+[tasks.build-installer]
+description = "Builds the release binary and then creates the installer"
+dependencies = ["build-release"]
+script = ["iscc build/setup/setup.iss"]
+
+[tasks.rebuild-installer]
+description = "Cleans, Builds the release binary and then creates the installer"
+dependencies = ["clean-all", "build-release"]
+script = ["iscc build/setup/setup.iss"]

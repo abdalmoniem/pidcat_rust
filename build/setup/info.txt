@@ -1,0 +1,68 @@
+📃 PidCat
+🎯 Overview
+PidCat is an enhanced Android logcat viewer originally created by Jake Wharton for the Android Open Source Project. This Windows-optimized fork adds modern features including VT100 color support, advanced tag filtering with substring matching, and improved column formatting.
+PidCat filters logcat output by application package name, colorizes the output for better readability, and provides powerful filtering options to help you focus on the logs that matter.
+
+✨ Features
+Core Features
+
+🎨 Colorized Output - Different colors for log levels, tags, and packages
+📦 Package Filtering - Show logs only from specific app packages
+🏷️ Tag Filtering - Filter by log tags with substring matching support
+🔍 Regex Support - Use regular expressions for advanced tag filtering
+📊 Process Tracking - Automatically tracks process starts and deaths
+💻 Windows VT100 Support - Native color support on Windows 10/11
+
+🐛 Troubleshooting
+Colors Not Showing on Windows
+Problem: No colors appear in the output.
+Solution:
+Ensure you're on Windows 10/11
+Run from Windows Terminal or PowerShell
+Check that -n (no-color) flag is not set
+
+ADB Not Found
+Problem: adb: command not found or similar error.
+Solution:
+Add Android SDK platform-tools to your PATH
+Or specify full path to adb in environment
+
+No Logs Appearing
+Problem: PidCat runs but shows no output.
+Solution:
+Verify your app is running: adb shell ps | grep your.package.name
+Check package name is correct (case-sensitive)
+Try with -a flag to see all logs
+Ensure device is connected: adb devices
+
+Tag Filter Not Working
+Problem: Using -t but not seeing expected logs.
+Solution:
+Tags use substring matching by default
+Check tag names in logcat: adb logcat -v brief
+Tags are case-sensitive
+Use --always-display-tags to verify which tags are shown
+
+
+🙏 Credits
+Original Author
+
+Jake Wharton - Original PidCat creator
+
+Windows Fork Maintainer
+
+AbdElMoniem ElHifnawy - Windows optimizations and enhancements
+GitHub: @abdalmoniem
+Website: abdalmoniem.github.io
+
+Contributors
+Thanks to all contributors who have helped improve PidCat!
+
+🔗 Links
+
+GitHub Repository: github.com/abdalmoniem/pidcat
+Issue Tracker: github.com/abdalmoniem/pidcat/issues
+Original PidCat: github.com/JakeWharton/pidcat
+
+Made with ❤️ for Android Developers
+If you find PidCat useful, please ⭐ star the repository!

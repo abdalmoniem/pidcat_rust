@@ -1,0 +1,82 @@
+{
+   "template": "#{{CHANGELOG}}",
+   "ignore_labels": [
+      "ignore"
+   ],
+   "categories": [
+      {
+         "title": "## 🚀 Features",
+         "labels": [
+            "feat",
+            "feature"
+         ]
+      },
+      {
+         "title": "## 🐛 Fixes",
+         "labels": [
+            "fix"
+         ]
+      },
+      {
+         "title": "## ⚡ Performance Improvements",
+         "labels": [
+            "perf"
+         ]
+      },
+      {
+         "title": "## ♻️ Refactors",
+         "labels": [
+            "refactor"
+         ]
+      },
+      {
+         "title": "## 🎨 Code Style",
+         "labels": [
+            "style"
+         ]
+      },
+      {
+         "title": "## 📚 Documentation",
+         "labels": [
+            "docs"
+         ]
+      },
+      {
+         "title": "## 🧪 Tests",
+         "labels": [
+            "test"
+         ]
+      },
+      {
+         "title": "## ⏪ Reverts",
+         "labels": [
+            "revert"
+         ]
+      },
+      {
+         "title": "## 🛠️ Maintenance",
+         "labels": [
+            "chore",
+            "ci",
+            "build"
+         ]
+      },
+      {
+         "title": "## 📦 Other",
+         "labels": []
+      }
+   ],
+   "label_extractor": [
+      {
+         "pattern": "^(feat|feature|fix|perf|refactor|style|docs|test|revert|chore|ci|build){1}(\\([\\w\\-\\.]+\\))?(!)?:\\s*((?:[\\w ])+(?:[\\s\\S]*))",
+         "on_property": "title",
+         "target": "$1"
+      }
+   ],
+   "transformers": [
+      {
+         "pattern": "^(feat|feature|fix|perf|refactor|style|docs|test|revert|chore|ci|build){1}(\\([\\w\\-\\.]+\\))?(!)?:\\s*((?:[\\w ])+(?:[\\s\\S]*))",
+         "target": "$4"
+      }
+   ]
+}

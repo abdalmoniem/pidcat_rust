@@ -1,6 +1,13 @@
-use clap::{Parser, ValueEnum, builder::styling};
+use clap::Parser;
+use clap::ValueEnum;
+use clap::builder::styling;
+
 use colored::Colorize;
-use std::{env, fmt};
+
+use std::env;
+use std::fmt;
+
+use crate::ValueOrPanic;
 
 const POSITIONAL_ARGUMENTS: &str = "Positional Arguments";
 const ABOUT_OPTIONS: &str = "Options";
@@ -48,12 +55,14 @@ impl fmt::Display for LogLevel {
 #[derive(Debug, Parser)]
 #[command(
     disable_help_flag = true,
+    name = CliArgs::get_name(),
     disable_version_flag = true,
+    about = CliArgs::get_about(),
     arg_required_else_help = false,
     color = clap::ColorChoice::Auto,
+    version = CliArgs::get_version(),
     styles = CliArgs::get_cli_styles(),
-    version = concat!("v", env!("CARGO_PKG_VERSION")),
-    long_version = concat!("v", env!("CARGO_PKG_VERSION")),
+    long_version = CliArgs::get_long_version(),
 )]
 pub struct CliArgs {
     #[arg(
@@ -353,6 +362,38 @@ impl CliArgs {
             .context_value(styling::AnsiColor::Cyan.on_default().bold())
             .usage(styling::AnsiColor::Blue.on_default().underline().bold())
             .header(styling::AnsiColor::Blue.on_default().underline().bold())
+    }
+
+    fn get_about() -> String {
+        let bin_name = Self::get_name();
+        let version = Self::get_version();
+        let description = env!("CARGO_PKG_DESCRIPTION");
+
+        format!("{} {}\n{}", bin_name, version, description)
+    }
+
+    fn get_name() -> &'static str {
+        let bin_name = env::current_exe()
+            .unwrap_or_panic("Failed to get current executable path")
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().to_string())
+            .unwrap_or(env!("CARGO_PKG_NAME").to_string());
+
+        bin_name.leak()
+    }
+
+    fn get_version() -> &'static str {
+        let version = env!("CARGO_PKG_VERSION");
+
+        format!("v{}", version).leak()
+    }
+
+    fn get_long_version() -> &'static str {
+        let version = Self::get_version();
+        let author = env!("CARGO_PKG_AUTHORS");
+        let description = env!("CARGO_PKG_DESCRIPTION");
+
+        format!("{}\n{}\nAuthor: {}", version, description, author).leak()
     }
 
     pub fn parse_args() -> Self {

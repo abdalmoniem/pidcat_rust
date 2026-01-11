@@ -1,0 +1,75 @@
+name: Publish Release On Tag
+run-name: ${{ github.workflow }} ${{ github.ref_name }} ${{ github.event.repository.updated_at}}
+
+on:
+  push:
+    tags:
+      - "v[0-9]+"
+      - "v[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build And Test
+    uses: ./.github/workflows/build_installer.yml
+    secrets: inherit
+
+  publish-release-on-tag:
+    name: Publish Release On Tag
+    needs: [build-and-test]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout ${{ github.ref }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get Previous Tag
+        run: |
+          $tag = git describe --tags --abbrev=0 HEAD~1 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            $tag = git rev-list --max-parents=0 HEAD
+          }
+
+          echo PREVIOUS_TAG=$tag >> $env:GITHUB_ENV
+
+      - name: Generate Changelog
+        id: generate-changelog
+        uses: mikepenz/release-changelog-builder-action@v6.0.1
+        with:
+          mode: "COMMIT"
+          fromTag: ${{ env.PREVIOUS_TAG }}
+          toTag: ${{ github.ref_name }}
+          token: ${{ secrets.RELEASE_GITHUB_TOKEN }}
+          configuration: "changelog_config.json"
+
+      - name: Download Artifact
+        id: download-artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-and-test.outputs.artifact_name }}
+          path: artifacts
+
+      - name: Get Artifact Path
+        id: get-artifact-path
+        run: |
+          $artifactPath = $(ls ${{ steps.download-artifact.outputs.download-path }}\*.exe -recurse).FullName
+
+          echo "artifact_path=$artifactPath" >> $env:GITHUB_OUTPUT
+
+      - name: Publish Release ${{ github.ref_name }}
+        uses: svenstaro/upload-release-action@v2
+        with:
+          file: ${{ steps.get-artifact-path.outputs.artifact_path }}
+          tag: ${{ github.ref }}
+          draft: false
+          make_latest: true
+          overwrite: true
+          promote: true
+          body: ${{ steps.generate-changelog.outputs.changelog }}
+          release_name: ${{ github.ref_name }}
+          repo_token: ${{ secrets.RELEASE_GITHUB_TOKEN }}
