@@ -4,9 +4,9 @@ run-name: ${{ github.workflow }} ${{ github.event.repository.updated_at}}
 on:
   workflow_call:
     outputs:
-      artifact_id:
-        description: "The ID of the generated artifact"
-        value: ${{ jobs.build-installer.outputs.artifact_id }}
+      artifact_name:
+        description: "The name of the generated artifact"
+        value: ${{ jobs.build-installer.outputs.artifact_name }}
   workflow_dispatch:
   push:
     branches: ["main"]
