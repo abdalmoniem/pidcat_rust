@@ -281,6 +281,7 @@ fn insert_ansi_codes_in_range(
 
 fn get_wrapped_indent(
     message: &str,
+    show_colors: bool,
     width: i16,
     header_width: usize,
     level_foreground: Color,
@@ -291,27 +292,29 @@ fn get_wrapped_indent(
     }
 
     let message = message.replace('\t', "    ");
-    let wrap_area = (width as usize).saturating_sub(header_width);
+    let wrap_width = (width as usize).saturating_sub(header_width);
 
-    if wrap_area == 0 {
+    if wrap_width == 0 {
+        return message;
+    }
+
+    let message_bytes = message.as_bytes();
+    let plain_message_bytes = strip(message_bytes);
+    let plain_message = String::from_utf8_lossy(&plain_message_bytes).to_string();
+
+    // Check if wrapping is needed
+    if plain_message.chars().count() <= wrap_width {
         return message;
     }
 
     let ansi_segments = get_ansi_segments(&message);
-    let plain_bytes = strip(message.as_bytes());
-    let plain_text = String::from_utf8_lossy(&plain_bytes).to_string();
+    let chars = plain_message.chars().collect::<Vec<_>>();
 
-    // Check if wrapping is needed
-    if plain_text.chars().count() <= wrap_area {
-        return message;
-    }
-
-    let mut message_buffer = String::new();
-    let chars: Vec<char> = plain_text.chars().collect();
     let mut current = 0;
+    let mut message_buffer = String::new();
 
     while current < chars.len() {
-        let next_index = std::cmp::min(current + wrap_area, chars.len());
+        let next_index = std::cmp::min(current + wrap_width, chars.len());
         let segment: String = chars[current..next_index].iter().collect();
 
         // Get active codes at the start of this segment (for continuation lines)
@@ -348,7 +351,7 @@ fn get_wrapped_indent(
             };
             message_buffer.push_str(&spaces);
 
-            let future_index = next_index + wrap_area;
+            let future_index = next_index + wrap_width;
             let is_last_line = future_index >= chars.len();
             let connector = if level_foreground == level_background {
                 "    "
@@ -364,7 +367,11 @@ fn get_wrapped_indent(
                 .on_color(level_background)
                 .to_string();
 
-            message_buffer.push_str(&colored_connector);
+            if show_colors {
+                message_buffer.push_str(&colored_connector);
+            } else {
+                message_buffer.push_str(connector);
+            }
             message_buffer.push(' ');
         } else {
             // Add reset at the end
@@ -613,11 +620,12 @@ fn write_token(
 ) -> usize {
     let local_header = header_width;
     for writer in writers.iter_mut() {
-        writer.width = get_console_width();
-
         let buffer = if wrap && writer.width != -1 {
+            writer.width = get_console_width();
+
             get_wrapped_indent(
                 token,
+                writer.show_colors,
                 writer.width,
                 header_width,
                 level_foreground,
@@ -627,13 +635,16 @@ fn write_token(
             token.to_string()
         };
 
-        let line = if writer.show_colors {
-            &buffer
+        let token = if writer.show_colors {
+            buffer.clone()
         } else {
-            &buffer.normal().clear().to_string()
+            let buffer_bytes = buffer.as_bytes();
+            let plain_buffer_bytes = strip(buffer_bytes);
+
+            String::from_utf8_lossy(&plain_buffer_bytes).to_string()
         };
 
-        writer.write(line);
+        writer.write(&token);
         writer.flush();
     }
 
