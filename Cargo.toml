@@ -1,12 +1,10 @@
 [package]
 name = "pidcat"
 edition = "2024"
-version = "1.0.0"
+version = "1.0.1"
 build = "build/build.rs"
 description = "A colorized Android logcat viewer with advanced filtering capabilities."
-authors = [
-    "AbdElMoniem ElHifnawy"
-]
+authors = ["AbdElMoniem ElHifnawy"]
 
 [dependencies]
 ctrlc = "3.5.1"
@@ -18,8 +16,12 @@ strip-ansi-escapes = "0.2.1"
 clap = { version = "4.5.54", features = ["derive"] }
 
 [build-dependencies]
+build-print = "1.0.1"
 embed-resource = "3.0.6"
 
 [[bin]]
 name = "PidCat"
 path = "src/bin/main.rs"
+
+[dev-dependencies]
+build-print = "1.0.1"

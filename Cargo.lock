@@ -77,6 +77,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "build-print"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8e6738dfb11354886f890621b4a34c0b177f75538023f7100b608ab9adbd66b"
+
+[[package]]
 name = "cc"
 version = "1.2.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -299,8 +305,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "pidcat"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
+ "build-print",
  "clap",
  "colored",
  "ctrlc",

@@ -1,5 +1,5 @@
 #define AppName "PidCat"
-#define AppVersion "1.0.0"
+#define AppVersion "1.0.1"
 #define AppPublisher "AbdElMoniem ElHifnawy"
 #define AppURL "https://abdalmoniem-alhifnawy.is-a.dev"
 #define AppExeName "PidCat.exe"
@@ -59,205 +59,216 @@ Filename: "{sys}\ping.exe"; Description: "Add program directory to the system PA
 
 [Code]
 var
-  InstallOptionsPage: TWizardPage;
-  ReInstallRadioButton: TNewRadioButton;
-  UninstallRadioButton: TNewRadioButton;
-  IsAlreadyInstalled: Boolean;
+    InstallOptionsPage: TWizardPage;
+    ReInstallRadioButton: TNewRadioButton;
+    UninstallRadioButton: TNewRadioButton;
+    IsAlreadyInstalled: Boolean;
 
 const EnvironmentKey = 'Environment';
 
 procedure ExitProcess(uExitCode: Integer);
-  external 'ExitProcess@kernel32.dll stdcall';
+    external 'ExitProcess@kernel32.dll stdcall';
 
 function GetDefaultDirName(Param: String): String;
 begin
-  if IsAdmin then
-    Result := ExpandConstant('{commonpf}\{#AppPublisher}\{#AppName}')
-  else
-    Result := ExpandConstant('{localappdata}\Programs\{#AppPublisher}\{#AppName}');
+    if IsAdmin then Result := ExpandConstant('{commonpf}\{#AppPublisher}\{#AppName}')
+    else Result := ExpandConstant('{localappdata}\Programs\{#AppPublisher}\{#AppName}');
 end;
 
-procedure EnvAddPath(Path: string);
+procedure EnvAddPath(Path: String);
 var
-    Paths: string;
+    Paths: String;
+    PathPos: Integer;
+
+    IsRegQueryOk: Boolean;
+    IsRegWriteOk: Boolean;
 begin
-    { Retrieve current path (use empty string if entry not exists) }
-    if not RegQueryStringValue(HKEY_CURRENT_USER, EnvironmentKey, 'Path', Paths)
-    then Paths := '';
+    IsRegQueryOk := RegQueryStringValue(HKEY_CURRENT_USER, EnvironmentKey, 'Path', Paths);
+    if not IsRegQueryOk then Paths := '';
 
-    { Skip if string already found in path }
-    if Pos(';' + Uppercase(Path) + ';', ';' + Uppercase(Paths) + ';') > 0 then exit;
+    PathPos := Pos(';' + Uppercase(Path) + ';', ';' + Uppercase(Paths) + ';');
+    if PathPos > 0 then exit;
 
-    { App string to the end of the path variable }
     Paths := Paths + ';'+ Path +';'
 
-    { Overwrite (or create if missing) path environment variable }
-    if RegWriteStringValue(HKEY_CURRENT_USER, EnvironmentKey, 'Path', Paths)
-    then Log(Format('The [%s] added to PATH: [%s]', [Path, Paths]))
+    IsRegWriteOk := RegWriteStringValue(HKEY_CURRENT_USER, EnvironmentKey, 'Path', Paths);
+    if IsRegWriteOk then Log(Format('The [%s] added to PATH: [%s]', [Path, Paths]))
     else Log(Format('Error while adding the [%s] to PATH: [%s]', [Path, Paths]));
 end;
 
-procedure EnvRemovePath(Path: string);
+procedure EnvRemovePath(Path: String);
 var
-    Paths: string;
-    P: Integer;
+    Paths: String;
+    PathPos: Integer;
+
+    IsRegQueryOk: Boolean;
+    IsRegWriteOk: Boolean;
 begin
-    { Skip if registry entry not exists }
-    if not RegQueryStringValue(HKEY_CURRENT_USER, EnvironmentKey, 'Path', Paths) then
-        exit;
+    IsRegQueryOk := RegQueryStringValue(HKEY_CURRENT_USER, EnvironmentKey, 'Path', Paths);
+    if not IsRegQueryOk then exit;
 
-    { Skip if string not found in path }
-    P := Pos(';' + Uppercase(Path) + ';', ';' + Uppercase(Paths) + ';');
-    if P = 0 then exit;
+    PathPos := Pos(';' + Uppercase(Path) + ';', ';' + Uppercase(Paths) + ';');
+    if PathPos = 0 then exit;
 
-    { Update path variable }
-    Delete(Paths, P - 1, Length(Path) + 1);
+    Delete(Paths, PathPos - 1, Length(Path) + 1);
 
-    { Overwrite path environment variable }
-    if RegWriteStringValue(HKEY_CURRENT_USER, EnvironmentKey, 'Path', Paths)
-    then Log(Format('The [%s] removed from PATH: [%s]', [Path, Paths]))
+    IsRegWriteOk := RegWriteStringValue(HKEY_CURRENT_USER, EnvironmentKey, 'Path', Paths);
+    if IsRegWriteOk then Log(Format('The [%s] removed from PATH: [%s]', [Path, Paths]))
     else Log(Format('Error while removing the [%s] from PATH: [%s]', [Path, Paths]));
 end;
 
-function GetUninstallString(const AppId: string): string;
+function GetUninstallString(const AppId: String): String;
 var
-  S: string;
+    UninstallPath: String;
+    
+    IsInHKLM: Boolean;
+    IsInHKCU: Boolean;
 begin
-  Result := '';
-  if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + AppId + '_is1', 'UninstallString', S) then
-    Result := S
-  else if RegQueryStringValue(HKCU, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + AppId + '_is1', 'UninstallString', S) then
-    Result := S;
+    Result := '';
+
+    IsInHKLM := RegQueryStringValue(
+        HKLM,
+        'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + AppId + '_is1',
+        'UninstallString',
+        UninstallPath
+    );
+    
+    Result := UninstallPath
+    if IsInHKLM then exit;
+    
+    IsInHKCU := RegQueryStringValue(
+        HKCU,
+        'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + AppId + '_is1',
+        'UninstallString',
+        UninstallPath
+    );
+    
+    Result := UninstallPath
+    if IsInHKCU then exit;
 end;
 
-// This procedure creates the custom page with our custom buttons.
 procedure CreateOptionsPage;
 var
-  ReInstallDescLabel: TLabel;
-  UninstallDescLabel: TLabel;
+    ReInstallDescLabel: TLabel;
+    UninstallDescLabel: TLabel;
 begin
-  InstallOptionsPage := CreateCustomPage(
-    wpWelcome,
-    'Installation Options',
-    'Choose how to proceed with the installation'
-  );
-  
-  ReInstallRadioButton := TNewRadioButton.Create(InstallOptionsPage);
-  with ReInstallRadioButton do begin
-    Parent := InstallOptionsPage.Surface;
-    Checked := True;
-    Top := 15;
-    Width := InstallOptionsPage.SurfaceWidth;
-    Font.Style := [fsBold];
-    Font.Size := 10;
-    Caption := 'Re-Install'
-  end;
-    
-  ReInstallDescLabel := TLabel.Create(InstallOptionsPage);
-  with ReInstallDescLabel do begin
-    Parent := InstallOptionsPage.Surface;
-    Left := 5;
-    Top := ReInstallRadioButton.Top + ReInstallRadioButton.Height + 8;
-    Width := InstallOptionsPage.SurfaceWidth; 
-    Height := 40;
-    AutoSize := False;
-    Wordwrap := True;
-    Caption := 'Re-Install. Will reinstall the application again with new settings';
-  end;
-  
-  UninstallRadioButton := TNewRadioButton.Create(InstallOptionsPage);
-  with UninstallRadioButton do begin
-    Checked := False;
-    Parent := InstallOptionsPage.Surface;
-    Top := ReInstallDescLabel.Top + ReInstallDescLabel.Height + 16;
-    Width := InstallOptionsPage.SurfaceWidth;
-    Font.Style := [fsBold];
-    Font.Size := 10;
-    Caption := 'Uninstall'
-  end;
-  
-  UninstallDescLabel := TLabel.Create(WizardForm);
-  with UninstallDescLabel do begin
-    Parent := InstallOptionsPage.Surface;
-    Left := 5;
-    Top := UninstallRadioButton.Top + UninstallRadioButton.Height + 8;
-    Width := InstallOptionsPage.SurfaceWidth;
-    Height := 40;
-    AutoSize := False;
-    Wordwrap := True;
-    Caption := 'Uninstall. Removes the application from your computer';
-  end;
+    InstallOptionsPage := CreateCustomPage(
+        wpWelcome,
+        'Installation Options',
+        'Choose how to proceed with the installation'
+    );
+
+    ReInstallRadioButton := TNewRadioButton.Create(InstallOptionsPage);
+    with ReInstallRadioButton do begin
+        Parent := InstallOptionsPage.Surface;
+        Checked := True;
+        Top := 15;
+        Width := InstallOptionsPage.SurfaceWidth;
+        Font.Style := [fsBold];
+        Font.Size := 10;
+        Caption := 'Re-Install'
+    end;
+
+    ReInstallDescLabel := TLabel.Create(InstallOptionsPage);
+    with ReInstallDescLabel do begin
+        Parent := InstallOptionsPage.Surface;
+        Left := 5;
+        Top := ReInstallRadioButton.Top + ReInstallRadioButton.Height + 8;
+        Width := InstallOptionsPage.SurfaceWidth; 
+        Height := 40;
+        AutoSize := False;
+        Wordwrap := True;
+        Caption := 'Re-Install. Will reinstall the application again with new settings';
+    end;
+
+    UninstallRadioButton := TNewRadioButton.Create(InstallOptionsPage);
+    with UninstallRadioButton do begin
+        Checked := False;
+        Parent := InstallOptionsPage.Surface;
+        Top := ReInstallDescLabel.Top + ReInstallDescLabel.Height + 16;
+        Width := InstallOptionsPage.SurfaceWidth;
+        Font.Style := [fsBold];
+        Font.Size := 10;
+        Caption := 'Uninstall'
+    end;
+
+    UninstallDescLabel := TLabel.Create(WizardForm);
+    with UninstallDescLabel do begin
+        Parent := InstallOptionsPage.Surface;
+        Left := 5;
+        Top := UninstallRadioButton.Top + UninstallRadioButton.Height + 8;
+        Width := InstallOptionsPage.SurfaceWidth;
+        Height := 40;
+        AutoSize := False;
+        Wordwrap := True;
+        Caption := 'Uninstall. Removes the application from your computer';
+    end;
 end;
 
-// This function runs at the start of the setup. It should not access wizard pages.
 function InitializeSetup(): Boolean;
 var
-  UninstallPath: string;
+    UninstallPath: String;
 begin
-  Result := True;
-  IsAlreadyInstalled := False;
+    IsAlreadyInstalled := False;
 
-  // Check for an existing installation using the AppId.
-  UninstallPath := GetUninstallString(ExpandConstant('{#emit SetupSetting("AppId")}'));
-  
-  if UninstallPath <> '' then begin
-    IsAlreadyInstalled := True;
-  end;
+    UninstallPath := GetUninstallString(ExpandConstant('{#emit SetupSetting("AppId")}'));
+    if UninstallPath <> '' then IsAlreadyInstalled := True;
+
+    Result := True;
 end;
 
-// InitializeWizard is the correct place to create custom wizard pages.
 procedure InitializeWizard;
 var
-  Suffix: String;
+    Suffix: String;
 begin
-  if IsAdmin then
-    Suffix := '⁂ Admin'
-  else
-    Suffix := '⌂ ' + GetUserNameString();
-  
-  WizardForm.Caption := Format('Setup - {#AppName} v{#AppVersion} {#DateTime} (%s)', [Suffix]);
-  
-  if IsAlreadyInstalled then begin
-    CreateOptionsPage;
-  end;
+    if IsAdmin then Suffix := '⁂ Admin'
+    else Suffix := '⌂ ' + GetUserNameString();
+
+    WizardForm.Caption := Format('Setup - {#AppName} v{#AppVersion} {#DateTime} (%s)', [Suffix]);
+
+    if IsAlreadyInstalled
+    then CreateOptionsPage;
 end;
 
-// This function controls the wizard's behavior based on user choices.
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
-  UninstallPath: string;
-  ResultCode: Integer;
+    UninstallPath: String;
+    ResultCode: Integer;
+
+    IsExecOk: Boolean;
 begin
-  Result := True;
-  
-  // If the user is on our custom page...
-  if (InstallOptionsPage <> nil) and (CurPageID = InstallOptionsPage.ID) then
-  begin
-    if ReInstallRadioButton.Checked then begin
-      // Re-Install: Continue with the installation.
-    end else if UninstallRadioButton.Checked then begin
-      // Uninstall: Launch the uninstaller and abort the current setup.
-      UninstallPath := RemoveQuotes(GetUninstallString(ExpandConstant('{#emit SetupSetting("AppId")}')));
-      if not Exec(UninstallPath, '', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
-      begin
-        ExitProcess(ResultCode);
-      end
-      else
-      begin
-        ExitProcess(0);
-      end;
+    Result := True;
+
+    if (InstallOptionsPage <> nil) and (CurPageID = InstallOptionsPage.ID)
+    then
+    begin
+        if ReInstallRadioButton.Checked
+        then
+        begin
+            // Re-Install: Continue with the installation.
+        end else if UninstallRadioButton.Checked
+        then
+        begin
+            // Uninstall: Launch the uninstaller and abort the current setup.
+            UninstallPath := RemoveQuotes(GetUninstallString(ExpandConstant('{#emit SetupSetting("AppId")}')));
+            
+            IsExecOk := Exec(UninstallPath, '', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
+            if not IsExecOk then ExitProcess(ResultCode)
+            else ExitProcess(0);
+        end;
     end;
-  end;
-  
-  Result := True;
+
+    Result := True;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if CurStep = ssPostInstall then if WizardSilent then EnvAddPath(ExpandConstant('{app}'));
+    if (CurStep = ssPostInstall) and WizardSilent
+    then EnvAddPath(ExpandConstant('{app}'));
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-    if CurUninstallStep = usPostUninstall then EnvRemovePath(ExpandConstant('{app}'));
+    if CurUninstallStep = usPostUninstall
+    then EnvRemovePath(ExpandConstant('{app}'));
 end;

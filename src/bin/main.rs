@@ -1140,7 +1140,7 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
     let level_background = match level {
         LogLevel::DEBUG => Color::Blue,
         LogLevel::INFO => Color::Green,
-        LogLevel::WARN => Color::Magenta,
+        LogLevel::WARN => Color::Yellow,
         LogLevel::ERROR => Color::BrightRed,
         LogLevel::FATAL => Color::Red,
         LogLevel::VERBOSE => Color::Cyan,

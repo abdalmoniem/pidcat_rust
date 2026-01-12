@@ -1,44 +1,82 @@
 [tasks.build]
-description = "Runs cargo build"
 command = "cargo"
+category = "Makefile"
+description = "Runs cargo build"
 args = ["build"]
 
 [tasks.build-release]
-description = "Runs cargo build in release mode"
 command = "cargo"
+category = "Makefile"
+description = "Runs cargo build in release mode"
 args = ["build", "--release"]
 
 [tasks.build-all]
+category = "Makefile"
 description = "Runs cargo build for both debug and release modes"
 dependencies = ["build", "build-release"]
 
 [tasks.rebuild]
+category = "Makefile"
 description = "Runs clean and then build"
 dependencies = ["clean-all", "build"]
 
 [tasks.rebuild-all]
+category = "Makefile"
 description = "Runs clean and then build for both debug and release modes"
 dependencies = ["clean-all", "build-all"]
 
 [tasks.clean]
-description = "Runs cargo clean"
 command = "cargo"
+category = "Makefile"
+description = "Runs cargo clean"
 args = ["clean"]
 
 [tasks.clean-setup]
+category = "Makefile"
 description = "Removes installer output directory"
 script = ["rm -rf build/setup/Output"]
 
 [tasks.clean-all]
+category = "Makefile"
 description = "Cleans the build artifacts"
 dependencies = ["clean", "clean-setup"]
 
 [tasks.build-installer]
+category = "Makefile"
 description = "Builds the release binary and then creates the installer"
 dependencies = ["build-release"]
 script = ["iscc build/setup/setup.iss"]
 
 [tasks.rebuild-installer]
+category = "Makefile"
 description = "Cleans, Builds the release binary and then creates the installer"
-dependencies = ["clean-all", "build-release"]
 script = ["iscc build/setup/setup.iss"]
+dependencies = ["clean-all", "build-release"]
+
+[tasks.install]
+category = "Makefile"
+command = "powershell"
+description = "Locates the latest installer and runs it"
+dependencies = ["build-installer"]
+args = [
+    "-NoProfile",
+    "-Command",
+    "start -wait (ls build/setup/Output/*.exe | sort LastWriteTime -Descending)[0].FullName",
+]
+
+[tasks.reinstall]
+category = "Makefile"
+description = "Rebuilds the installer and runs it"
+dependencies = ["rebuild-installer", "install"]
+
+[tasks.run]
+command = "cargo"
+category = "Makefile"
+description = "Runs cargo run"
+args = ["run", "@@split(CARGO_MAKE_CARGO_RELEASE_ARGS, )", "--", "${@}"]
+
+[tasks.run-release]
+command = "cargo"
+category = "Makefile"
+description = "Runs cargo run in release mode"
+args = ["run", "--release", "@@split(CARGO_MAKE_CARGO_RELEASE_ARGS, )", "--", "${@}"]

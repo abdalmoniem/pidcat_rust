@@ -5,111 +5,189 @@
          "type": "cargo",
          "group": "build",
          "label": "build",
-         "command": "build",
+         "command": "make",
+         "args": [
+            "build"
+         ],
          "problemMatcher": [
             "$rustc"
          ],
          "presentation": {
-            "clear": false,
+            "clear": true,
             "echo": false,
             "close": false,
             "focus": false,
             "panel": "shared",
             "reveal": "always",
-            "showReuseMessage": false,
+            "showReuseMessage": true,
          }
       },
       {
          "type": "cargo",
          "group": "build",
          "label": "build release",
-         "command": "build",
+         "command": "make",
          "args": [
-            "--release"
+            "build-release",
          ],
          "problemMatcher": [
             "$rustc"
          ],
          "presentation": {
-            "clear": false,
+            "clear": true,
             "echo": false,
             "close": false,
             "focus": false,
             "panel": "shared",
             "reveal": "always",
-            "showReuseMessage": false,
+            "showReuseMessage": true,
          }
       },
       {
+         "type": "cargo",
          "group": "build",
          "label": "build all",
-         "dependsOrder": "sequence",
-         "dependsOn": [
-            "build",
-            "build release",
+         "command": "make",
+         "args": [
+            "build-all"
          ],
          "presentation": {
-            "clear": false,
+            "clear": true,
             "echo": false,
             "close": false,
             "focus": false,
             "panel": "shared",
             "reveal": "always",
-            "showReuseMessage": false,
+            "showReuseMessage": true,
          }
       },
       {
          "type": "cargo",
          "group": "build",
          "label": "clean",
-         "command": "clean",
+         "command": "make",
+         "args": [
+            "clean"
+         ],
          "problemMatcher": [
             "$rustc"
          ],
          "presentation": {
-            "clear": false,
+            "clear": true,
             "echo": false,
             "close": false,
             "focus": false,
             "panel": "shared",
             "reveal": "always",
-            "showReuseMessage": false,
+            "showReuseMessage": true,
          }
       },
       {
+         "type": "cargo",
          "group": "build",
          "label": "rebuild",
-         "dependsOrder": "sequence",
-         "dependsOn": [
-            "clean",
-            "build",
+         "command": "make",
+         "args": [
+            "rebuild"
          ],
          "presentation": {
-            "clear": false,
+            "clear": true,
             "echo": false,
             "close": false,
             "focus": false,
             "panel": "shared",
             "reveal": "always",
-            "showReuseMessage": false,
+            "showReuseMessage": true,
          }
       },
       {
+         "type": "cargo",
          "group": "build",
          "label": "rebuild all",
-         "dependsOrder": "sequence",
-         "dependsOn": [
-            "clean",
-            "build all",
+         "command": "make",
+         "args": [
+            "rebuild-all"
          ],
          "presentation": {
-            "clear": false,
+            "clear": true,
             "echo": false,
             "close": false,
             "focus": false,
             "panel": "shared",
             "reveal": "always",
-            "showReuseMessage": false,
+            "showReuseMessage": true,
+         }
+      },
+      {
+         "type": "cargo",
+         "group": "build",
+         "label": "build installer",
+         "command": "make",
+         "args": [
+            "build-installer"
+         ],
+         "presentation": {
+            "clear": true,
+            "echo": false,
+            "close": false,
+            "focus": false,
+            "panel": "shared",
+            "reveal": "always",
+            "showReuseMessage": true,
+         }
+      },
+      {
+         "type": "cargo",
+         "group": "build",
+         "label": "rebuild installer",
+         "command": "make",
+         "args": [
+            "rebuild-installer"
+         ],
+         "presentation": {
+            "clear": true,
+            "echo": false,
+            "close": false,
+            "focus": false,
+            "panel": "shared",
+            "reveal": "always",
+            "showReuseMessage": true,
+         }
+      },
+      {
+         "type": "cargo",
+         "group": "build",
+         "label": "install",
+         "command": "make",
+         "args": [
+            "install"
+         ],
+         "presentation": {
+            "clear": true,
+            "echo": false,
+            "close": false,
+            "focus": false,
+            "panel": "shared",
+            "reveal": "always",
+            "showReuseMessage": true,
+         }
+      },
+      {
+         "type": "cargo",
+         "group": "build",
+         "label": "reinstall",
+         "command": "make",
+         "args": [
+            "reinstall"
+         ],
+         "presentation": {
+            "clear": true,
+            "echo": false,
+            "close": false,
+            "focus": false,
+            "panel": "shared",
+            "reveal": "always",
+            "showReuseMessage": true,
          }
       },
    ]
