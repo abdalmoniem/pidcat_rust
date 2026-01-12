@@ -3,6 +3,10 @@ use clap::ValueEnum;
 use colored::Color;
 use colored::Colorize;
 
+use itertools::Itertools;
+
+use is_terminal::IsTerminal;
+
 use once_cell::sync::Lazy;
 
 use pidcat::AnsiSegment;
@@ -21,9 +25,15 @@ use std::fs::File;
 
 use std::io::BufRead;
 use std::io::BufReader;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Read;
+use std::io::stdin;
 
+use std::process::Child;
 use std::process::Command;
 use std::process::Stdio;
+use std::process::exit;
 
 use strip_ansi_escapes::strip;
 
@@ -423,6 +433,100 @@ fn get_adb_command(args: &CliArgs) -> Vec<String> {
     }
 
     base_adb_command
+}
+
+#[derive(Debug)]
+pub enum LogSource {
+    Process(Child),
+    Stdin,
+}
+
+#[derive(Debug)]
+pub enum AdbState {
+    Device,
+    Emulator,
+    Offline,
+    UnAuthorized,
+    Recovery,
+    Sideload,
+    NoPermissions,
+    NoDevice,
+}
+
+impl From<String> for AdbState {
+    fn from(str: String) -> Self {
+        match str.as_str() {
+            "device" => AdbState::Device,
+            "emulator" => AdbState::Emulator,
+            "offline" => AdbState::Offline,
+            "unauthorized" => AdbState::UnAuthorized,
+            "recovery" => AdbState::Recovery,
+            "sideload" => AdbState::Sideload,
+            "no permissions" => AdbState::NoPermissions,
+            _ => AdbState::NoDevice,
+        }
+    }
+}
+
+impl From<&str> for AdbState {
+    fn from(str: &str) -> Self {
+        match str {
+            "device" => AdbState::Device,
+            "emulator" => AdbState::Emulator,
+            "offline" => AdbState::Offline,
+            "unauthorized" => AdbState::UnAuthorized,
+            "recovery" => AdbState::Recovery,
+            "sideload" => AdbState::Sideload,
+            "no permissions" => AdbState::NoPermissions,
+            _ => AdbState::NoDevice,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct AdbDevice {
+    pub device_id: String,
+    pub device_state: AdbState,
+}
+
+fn get_adb_devices(base_adb_command: &[String]) -> Option<Vec<AdbDevice>> {
+    let output = Command::new(&base_adb_command[0])
+        .args(&base_adb_command[1..])
+        .arg("devices")
+        .output();
+
+    match output {
+        Ok(output) => {
+            let re = Regex::new(r"\s+").unwrap_or_panic("Invalid Regex");
+            let devices = output
+                .stdout
+                .split(|&byte| byte == b'\n')
+                .skip(1)
+                .map(|line| String::from_utf8_lossy(line).trim().to_string())
+                .filter(|line| !line.is_empty())
+                .map(|device| {
+                    let (device_id_str, device_state_str) = re
+                        .split(&device)
+                        .map(|str| str.to_string()) // Convert &str to String
+                        .collect_tuple::<(String, String)>()
+                        .unwrap_or_panic("Failed to get device id and type");
+
+                    AdbDevice {
+                        device_id: device_id_str,
+                        device_state: AdbState::from(device_state_str),
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            if !devices.is_empty() {
+                Some(devices)
+            } else {
+                None
+            }
+        }
+
+        Err(_) => None,
+    }
 }
 
 fn get_current_app_package(base_adb_command: &[String]) -> Option<Vec<String>> {
@@ -1240,6 +1344,16 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
 }
 
 fn main() {
+    ctrlc::set_handler(|| {
+        let bin_name = env!("CARGO_BIN_NAME").cyan().bold().to_string();
+        let message = "Stopped by user.".cyan().bold().to_string();
+
+        println!("{bin_name} {message}");
+        exit(0);
+    })
+    .unwrap_or_panic("Failed to set CTRL+C handler");
+
+    let stdin = stdin();
     let mut args = CliArgs::parse_args();
     let base_adb_command = get_adb_command(&args);
     let mut adb_command = [
@@ -1248,6 +1362,39 @@ fn main() {
     ]
     .concat();
 
+    let mut child = None;
+    let devices = get_adb_devices(&base_adb_command);
+
+    match devices {
+        Some(devices) => {
+            // TODO: implement device selection
+            for (index, device) in devices.iter().enumerate() {
+                println!("device #{index}: {device:?}");
+            }
+        }
+
+        None => {
+            let err = Error::from(ErrorKind::NotConnected);
+            let err_code = err.raw_os_error().unwrap_or(1);
+            let err = err.to_string().red().bold().to_string();
+            let err_header = format!("error: {err}").red().bold().to_string();
+            let error_message = concat!(
+                "ADB cannot find any attached devices!",
+                "\n",
+                "Attach a device and try again!"
+            )
+            .red()
+            .bold()
+            .to_string();
+
+            if stdin.is_terminal() {
+                eprintln!("{err_header}");
+                eprintln!("{error_message}");
+                exit(err_code);
+            }
+        }
+    }
+
     let mut packages = args
         .packages
         .iter()
@@ -1255,7 +1402,6 @@ fn main() {
         .collect::<HashSet<_>>();
 
     let console_width = get_console_width();
-
     let stdout_writer = Writer::new_console(console_width, !args.no_color);
     let mut writers = vec![stdout_writer];
 
@@ -1292,15 +1438,6 @@ fn main() {
         );
     }
 
-    if !args.keep_logcat {
-        let clear_cmd = [
-            base_adb_command.clone(),
-            vec!["logcat".to_string(), "-c".to_string()],
-        ]
-        .concat();
-        let _ = Command::new(&clear_cmd[0]).args(&clear_cmd[1..]).output();
-    }
-
     if let Some(path) = args.output_path.clone() {
         let file_writer =
             Writer::new_file(File::create(path).unwrap_or_panic("Failed to create output file"));
@@ -1323,20 +1460,16 @@ fn main() {
         adb_command.extend(["-e".to_string(), regex]);
     }
 
-    if !packages.is_empty() {
-        let packages_vec = packages.iter().cloned().collect::<Vec<_>>();
-        println!(
-            "{}",
-            format!(
-                "Capturing logcat messages from packages: [{}]...",
-                packages_vec.join(", ")
-            )
-            .cyan()
-            .bold()
-        );
-    } else {
-        args.all = true;
-        println!("{}", "Capturing all logcat messages...".cyan().bold());
+    if !args.keep_logcat && stdin.is_terminal() {
+        let message = "Clearing logcat...".cyan().bold().to_string();
+        println!("{message}");
+
+        let clear_cmd = [
+            base_adb_command.clone(),
+            vec!["logcat".to_string(), "-c".to_string()],
+        ]
+        .concat();
+        let _ = Command::new(&clear_cmd[0]).args(&clear_cmd[1..]).output();
     }
 
     let catchall_package = packages
@@ -1350,6 +1483,10 @@ fn main() {
         .filter(|package| package.contains(':'))
         .map(|package| package.strip_suffix(':').unwrap_or(package).to_string())
         .collect::<Vec<_>>();
+
+    if packages.is_empty() {
+        args.all = true;
+    }
 
     let pids_map = get_processes(&base_adb_command, &catchall_package, &args);
 
@@ -1384,40 +1521,92 @@ fn main() {
         known_tags,
     };
 
-    let _ = ctrlc::set_handler(|| {});
-
-    let mut child = Command::new(&adb_command[0])
-        .args(&adb_command[1..])
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap_or_panic("Failed to start adb logcat process");
-
-    if let Some(stdout) = child.stdout.take() {
-        let mut reader = BufReader::new(stdout);
-
-        loop {
-            let mut buffer = vec![];
-            let bytes_read = reader
-                .read_until(b'\n', &mut buffer)
-                .unwrap_or_panic("Error reading stream");
-
-            if bytes_read == 0 {
-                break;
-            } else {
-                let content = String::from_utf8_lossy(&buffer).to_string();
-                let trimmed = content.trim_end_matches(['\r', '\n']).to_string();
-
-                write_log_line(&trimmed, &mut state, &args, &mut writers);
-            }
-        }
+    if stdin.is_terminal() {
+        child = Some(
+            Command::new(&adb_command[0])
+                .args(&adb_command[1..])
+                .stdout(Stdio::piped())
+                .spawn()
+                .unwrap_or_panic("Failed to start adb logcat process"),
+        );
     }
 
-    let _ = child.kill();
-    let _ = child.wait();
+    let mut source = if let Some(child) = child {
+        LogSource::Process(child)
+    } else {
+        LogSource::Stdin
+    };
 
-    println!(
-        "\n{}{}",
-        env!("CARGO_BIN_NAME").cyan().bold(),
-        " Stopped by user.".cyan().bold()
-    );
+    let reader_source = match source {
+        LogSource::Process(ref mut child) => Box::new(
+            child
+                .stdout
+                .take()
+                .unwrap_or_panic("Failed to capture stdout"),
+        ),
+
+        LogSource::Stdin => Box::new(stdin) as Box<dyn Read>,
+    };
+
+    let mut reader = BufReader::new(reader_source);
+
+    if !packages.is_empty() {
+        let packages_vec = packages.iter().cloned().collect::<Vec<_>>();
+        let packages_str = packages_vec.join(", ");
+        let message = format!("Capturing logcat messages from packages: [{packages_str}]...")
+            .cyan()
+            .bold()
+            .to_string();
+
+        println!("{message}");
+    } else {
+        let message = "Capturing all logcat messages...".cyan().bold().to_string();
+        println!("{message}");
+    }
+
+    loop {
+        if let LogSource::Process(ref mut child) = source {
+            let exit_status = child.try_wait();
+
+            if let Ok(Some(exit_status)) = exit_status {
+                let message = format!(
+                    "Child process {} exited with status: {}",
+                    child.id(),
+                    exit_status
+                )
+                .cyan()
+                .bold()
+                .to_string();
+
+                println!("{message}");
+                break;
+            }
+        }
+
+        let buffer = &mut vec![];
+        let bytes_read = reader
+            .read_until(b'\n', buffer)
+            .unwrap_or_panic("Error reading stream");
+
+        if bytes_read == 0 {
+            break;
+        }
+
+        let content = String::from_utf8_lossy(buffer).to_string();
+        let trimmed = content.trim_end_matches(['\r', '\n']).to_string();
+
+        write_log_line(&trimmed, &mut state, &args, &mut writers);
+    }
+
+    if let LogSource::Process(mut child) = source {
+        let kill_fail_message = format!("Failed to kill child process {}", child.id())
+            .red()
+            .bold();
+        let wait_fail_message = format!("Failed to wait for child process {}", child.id())
+            .red()
+            .bold();
+
+        child.kill().unwrap_or_panic(&kill_fail_message);
+        child.wait().unwrap_or_panic(&wait_fail_message);
+    }
 }

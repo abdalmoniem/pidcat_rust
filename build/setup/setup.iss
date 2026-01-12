@@ -1,5 +1,5 @@
 #define AppName "PidCat"
-#define AppVersion "1.0.1"
+#define AppVersion "1.1.0"
 #define AppPublisher "AbdElMoniem ElHifnawy"
 #define AppURL "https://abdalmoniem-alhifnawy.is-a.dev"
 #define AppExeName "PidCat.exe"
