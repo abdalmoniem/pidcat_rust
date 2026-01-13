@@ -1,11 +1,17 @@
+use clap::ArgAction;
+use clap::ColorChoice;
 use clap::Parser;
 use clap::ValueEnum;
-use clap::builder::styling;
+
+use clap::builder::PossibleValue;
+use clap::builder::styling::AnsiColor;
+use clap::builder::styling::Styles;
 
 use colored::Colorize;
 
-use std::env;
-use std::fmt;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result;
 
 use crate::ValueOrPanic;
 
@@ -17,36 +23,49 @@ const FORMATTING_OPTIONS: &str = "Formatting Options";
 const COLORING_OPTIONS: &str = "Color Options";
 const OUTPUT_OPTIONS: &str = "Output Options";
 
-#[derive(Eq, Ord, Copy, Debug, Clone, ValueEnum, PartialEq, PartialOrd)]
+#[derive(Eq, Ord, Copy, Debug, Clone, PartialEq, PartialOrd)]
 pub enum LogLevel {
-    #[value(alias = "v")]
     VERBOSE = 0,
-
-    #[value(alias = "d")]
     DEBUG = 1,
-
-    #[value(alias = "i")]
     INFO = 2,
-
-    #[value(alias = "w")]
     WARN = 3,
-
-    #[value(alias = "e")]
     ERROR = 4,
-
-    #[value(alias = "f")]
     FATAL = 5,
 }
 
-impl fmt::Display for LogLevel {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+impl ValueEnum for LogLevel {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[
+            Self::VERBOSE,
+            Self::DEBUG,
+            Self::INFO,
+            Self::WARN,
+            Self::ERROR,
+            Self::FATAL,
+        ]
+    }
+
+    fn to_possible_value(&self) -> Option<PossibleValue> {
+        Some(match self {
+            Self::VERBOSE => PossibleValue::new("V").alias("verbose"),
+            Self::DEBUG => PossibleValue::new("D").alias("debug"),
+            Self::INFO => PossibleValue::new("I").alias("info"),
+            Self::WARN => PossibleValue::new("W").alias("warn"),
+            Self::ERROR => PossibleValue::new("E").alias("error"),
+            Self::FATAL => PossibleValue::new("F").alias("fatal"),
+        })
+    }
+}
+
+impl Display for LogLevel {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
         let letter = match self {
-            LogLevel::VERBOSE => "V",
-            LogLevel::DEBUG => "D",
-            LogLevel::INFO => "I",
-            LogLevel::WARN => "W",
-            LogLevel::ERROR => "E",
-            LogLevel::FATAL => "F",
+            Self::VERBOSE => "V",
+            Self::DEBUG => "D",
+            Self::INFO => "I",
+            Self::WARN => "W",
+            Self::ERROR => "E",
+            Self::FATAL => "F",
         };
         write!(formatter, "{}", letter)
     }
@@ -59,7 +78,7 @@ impl fmt::Display for LogLevel {
     disable_version_flag = true,
     about = CliArgs::get_about(),
     arg_required_else_help = false,
-    color = clap::ColorChoice::Auto,
+    color = ColorChoice::Auto,
     version = CliArgs::get_version(),
     styles = CliArgs::get_cli_styles(),
     long_version = CliArgs::get_long_version(),
@@ -82,7 +101,7 @@ pub struct CliArgs {
         required = false,
         value_name = None,
         help_heading = ABOUT_OPTIONS,
-        action = clap::ArgAction::Help,
+        action = ArgAction::Help,
         help = "Show this help message and exit",
     )]
     pub help: Option<bool>,
@@ -93,7 +112,7 @@ pub struct CliArgs {
         required = false,
         value_name = None,
         help_heading = ABOUT_OPTIONS,
-        action = clap::ArgAction::Version,
+        action = ArgAction::Version,
         help = "Print the version number and exit",
     )]
     pub version: Option<bool>,
@@ -116,7 +135,7 @@ pub struct CliArgs {
         value_name = None,
         default_value_t = false,
         help_heading = DEVICE_OPTIONS,
-        action = clap::ArgAction::SetTrue,
+        action = ArgAction::SetTrue,
         help = "Use first device for log input",
     )]
     pub use_device: bool,
@@ -128,7 +147,7 @@ pub struct CliArgs {
         value_name = None,
         default_value_t = false,
         help_heading = DEVICE_OPTIONS,
-        action = clap::ArgAction::SetTrue,
+        action = ArgAction::SetTrue,
         help = "Use first emulator for log input",
     )]
     pub use_emulator: bool,
@@ -151,7 +170,7 @@ pub struct CliArgs {
         value_name = None,
         default_value_t = false,
         help_heading = FILTERING_OPTIONS,
-        action = clap::ArgAction::SetTrue,
+        action = ArgAction::SetTrue,
         help = "Print log messages from all packages",
     )]
     pub all: bool,
@@ -163,7 +182,7 @@ pub struct CliArgs {
         value_name = None,
         default_value_t = false,
         help_heading = FILTERING_OPTIONS,
-        action = clap::ArgAction::SetTrue,
+        action = ArgAction::SetTrue,
         help = "Keep the entire log before running",
     )]
     pub keep_logcat: bool,
@@ -175,7 +194,7 @@ pub struct CliArgs {
         value_name = None,
         default_value_t = false,
         help_heading = FILTERING_OPTIONS,
-        action = clap::ArgAction::SetTrue,
+        action = ArgAction::SetTrue,
         help = "Filter logcat by current running app(s)",
     )]
     pub current_app: bool,
@@ -187,7 +206,7 @@ pub struct CliArgs {
         value_name = None,
         default_value_t = false,
         help_heading = FILTERING_OPTIONS,
-        action = clap::ArgAction::SetTrue,
+        action = ArgAction::SetTrue,
         help = concat!(
             "Filter output by ignoring known system tags",
             "\nUse --ignore-tag to ignore additional tags if needed"
@@ -227,7 +246,7 @@ pub struct CliArgs {
         short = 'l',
         long = "log-level",
         ignore_case = true,
-        default_value = "v",
+        default_value_t = LogLevel::VERBOSE,
         value_name = "LEVEL",
         help_heading = FILTERING_OPTIONS,
         help = "Filter messages lower than minimum log level",
@@ -253,7 +272,7 @@ pub struct CliArgs {
         default_value_t = false,
         help = "Show PID in output",
         help_heading = FORMATTING_OPTIONS,
-        action = clap::ArgAction::SetTrue,
+        action = ArgAction::SetTrue,
     )]
     pub show_pid: bool,
 
@@ -264,7 +283,7 @@ pub struct CliArgs {
         long = "show-package",
         default_value_t = false,
         help_heading = FORMATTING_OPTIONS,
-        action = clap::ArgAction::SetTrue,
+        action = ArgAction::SetTrue,
         help = "Show package name in output",
     )]
     pub show_package: bool,
@@ -276,7 +295,7 @@ pub struct CliArgs {
         long = "always-show-tags",
         default_value_t = false,
         help_heading = FORMATTING_OPTIONS,
-        action = clap::ArgAction::SetTrue,
+        action = ArgAction::SetTrue,
         help = "Always show the tag name",
     )]
     pub always_show_tags: bool,
@@ -321,7 +340,7 @@ pub struct CliArgs {
         long = "gc-color",
         default_value_t = false,
         help_heading = COLORING_OPTIONS,
-        action = clap::ArgAction::SetTrue,
+        action = ArgAction::SetTrue,
         help = "Enable garbage collector messages colors",
     )]
     pub gc_color: bool,
@@ -334,7 +353,7 @@ pub struct CliArgs {
         default_value_t = false,
         help_heading = COLORING_OPTIONS,
         help = "Disable message colors",
-        action = clap::ArgAction::SetTrue,
+        action = ArgAction::SetTrue,
     )]
     pub no_color: bool,
 
@@ -351,17 +370,17 @@ pub struct CliArgs {
 }
 
 impl CliArgs {
-    fn get_cli_styles() -> styling::Styles {
-        styling::Styles::styled()
-            .valid(styling::AnsiColor::Green.on_default())
-            .invalid(styling::AnsiColor::Yellow.on_default())
-            .error(styling::AnsiColor::Red.on_default().bold())
-            .placeholder(styling::AnsiColor::Yellow.on_default())
-            .context(styling::AnsiColor::Cyan.on_default().bold())
-            .literal(styling::AnsiColor::Green.on_default().bold())
-            .context_value(styling::AnsiColor::Cyan.on_default().bold())
-            .usage(styling::AnsiColor::Blue.on_default().underline().bold())
-            .header(styling::AnsiColor::Blue.on_default().underline().bold())
+    fn get_cli_styles() -> Styles {
+        Styles::styled()
+            .valid(AnsiColor::Green.on_default())
+            .invalid(AnsiColor::Yellow.on_default())
+            .error(AnsiColor::Red.on_default().bold())
+            .placeholder(AnsiColor::Yellow.on_default())
+            .context(AnsiColor::Cyan.on_default().bold())
+            .literal(AnsiColor::Green.on_default().bold())
+            .context_value(AnsiColor::Cyan.on_default().bold())
+            .usage(AnsiColor::Blue.on_default().underline().bold())
+            .header(AnsiColor::Blue.on_default().underline().bold())
     }
 
     fn get_about() -> String {
@@ -373,7 +392,7 @@ impl CliArgs {
     }
 
     fn get_name() -> &'static str {
-        let bin_name = env::current_exe()
+        let bin_name = std::env::current_exe()
             .unwrap_or_panic("Failed to get current executable path")
             .file_stem()
             .map(|stem| stem.to_string_lossy().to_string())

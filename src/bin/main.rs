@@ -30,10 +30,13 @@ use std::io::ErrorKind;
 use std::io::Read;
 use std::io::stdin;
 
+use std::panic;
+
 use std::process::Child;
 use std::process::Command;
 use std::process::Stdio;
 use std::process::exit;
+use std::process::id;
 
 use strip_ansi_escapes::strip;
 
@@ -185,6 +188,52 @@ static SYSTEM_TAGS: Lazy<&[&str]> = Lazy::new(|| {
         r"oplus\.android\.OplusFrameworkFactoryImpl",
     ]
 });
+
+#[derive(Debug)]
+pub enum AdbState {
+    Device,
+    Emulator,
+    Offline,
+    UnAuthorized,
+    Recovery,
+    Sideload,
+    NoPermissions,
+    NoDevice,
+}
+
+impl From<&str> for AdbState {
+    fn from(str: &str) -> Self {
+        match str {
+            "device" => Self::Device,
+            "emulator" => Self::Emulator,
+            "offline" => Self::Offline,
+            "unauthorized" => Self::UnAuthorized,
+            "recovery" => Self::Recovery,
+            "sideload" => Self::Sideload,
+            "no permissions" => Self::NoPermissions,
+            "no device" => Self::NoDevice,
+            _ => panic!("Invalid AdbState: {str}"),
+        }
+    }
+}
+
+impl From<String> for AdbState {
+    fn from(str: String) -> Self {
+        Self::from(str.as_str())
+    }
+}
+
+#[derive(Debug)]
+pub struct AdbDevice {
+    pub device_id: String,
+    pub device_state: AdbState,
+}
+
+#[derive(Debug)]
+pub enum LogSource {
+    Process(Child),
+    Stdin,
+}
 
 fn get_console_width() -> i16 {
     terminal_size::terminal_size()
@@ -433,60 +482,6 @@ fn get_adb_command(args: &CliArgs) -> Vec<String> {
     }
 
     base_adb_command
-}
-
-#[derive(Debug)]
-pub enum LogSource {
-    Process(Child),
-    Stdin,
-}
-
-#[derive(Debug)]
-pub enum AdbState {
-    Device,
-    Emulator,
-    Offline,
-    UnAuthorized,
-    Recovery,
-    Sideload,
-    NoPermissions,
-    NoDevice,
-}
-
-impl From<String> for AdbState {
-    fn from(str: String) -> Self {
-        match str.as_str() {
-            "device" => AdbState::Device,
-            "emulator" => AdbState::Emulator,
-            "offline" => AdbState::Offline,
-            "unauthorized" => AdbState::UnAuthorized,
-            "recovery" => AdbState::Recovery,
-            "sideload" => AdbState::Sideload,
-            "no permissions" => AdbState::NoPermissions,
-            _ => AdbState::NoDevice,
-        }
-    }
-}
-
-impl From<&str> for AdbState {
-    fn from(str: &str) -> Self {
-        match str {
-            "device" => AdbState::Device,
-            "emulator" => AdbState::Emulator,
-            "offline" => AdbState::Offline,
-            "unauthorized" => AdbState::UnAuthorized,
-            "recovery" => AdbState::Recovery,
-            "sideload" => AdbState::Sideload,
-            "no permissions" => AdbState::NoPermissions,
-            _ => AdbState::NoDevice,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct AdbDevice {
-    pub device_id: String,
-    pub device_state: AdbState,
 }
 
 fn get_adb_devices(base_adb_command: &[String]) -> Option<Vec<AdbDevice>> {
@@ -1344,6 +1339,39 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
 }
 
 fn main() {
+    panic::set_hook(Box::new(|info| {
+        let err_loc = info.location().unwrap_or(panic::Location::caller());
+        let err_msg = match info.payload().downcast_ref::<&str>() {
+            Some(str) => *str,
+            None => match info.payload().downcast_ref::<String>() {
+                Some(str) => &str[..],
+                None => "Box<Any>",
+            },
+        };
+
+        let err_msg = format!(
+            "{err_msg} => {}:{}:{}",
+            err_loc.file(),
+            err_loc.line(),
+            err_loc.column()
+        )
+        .red()
+        .bold();
+
+        let thread_err_msg = format!(
+            "thread 'main' ({}) panicked at {}:{}:{}",
+            id(),
+            err_loc.file(),
+            err_loc.line(),
+            err_loc.column()
+        )
+        .red()
+        .bold();
+
+        eprintln!("{thread_err_msg}");
+        eprintln!("{err_msg}");
+    }));
+
     ctrlc::set_handler(|| {
         let bin_name = env!("CARGO_BIN_NAME").cyan().bold().to_string();
         let message = "Stopped by user.".cyan().bold().to_string();
