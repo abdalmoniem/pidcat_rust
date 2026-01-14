@@ -37,6 +37,7 @@ pub trait ValueOrPanic<T> {
     /// let value = option.unwrap_or_panic("Custom panic message");
     /// ```
     ///
+    #[track_caller]
     fn unwrap_or_panic(self, msg: &str) -> T;
 
     /// Unwraps a `Result` or an `Option` with a custom panic message and style.
@@ -54,5 +55,6 @@ pub trait ValueOrPanic<T> {
     /// let value = option.unwrap_or_panic_with("Custom panic message", |msg| msg.red().bold());
     /// ```
     ///
+    #[track_caller]
     fn unwrap_or_panic_with(self, msg: &str, style: fn(&str) -> ColoredString) -> T;
 }

@@ -61,7 +61,7 @@ dependencies = ["build-installer"]
 args = [
     "-NoProfile",
     "-Command",
-    "start -wait (ls build/setup/Output/*.exe | sort LastWriteTime -Descending)[0].FullName",
+    "start -wait (ls build/setup/Output/*.exe | sort LastWriteTime -Descending)[0].FullName /verysilent",
 ]
 
 [tasks.reinstall]

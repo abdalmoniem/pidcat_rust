@@ -1,5 +1,3 @@
-use clap::ValueEnum;
-
 use colored::Color;
 use colored::Colorize;
 
@@ -9,9 +7,12 @@ use is_terminal::IsTerminal;
 
 use once_cell::sync::Lazy;
 
+use pidcat::AdbDevice;
+use pidcat::AdbState;
 use pidcat::AnsiSegment;
 use pidcat::CliArgs;
 use pidcat::LogLevel;
+use pidcat::LogSource;
 use pidcat::State;
 use pidcat::ValueOrPanic;
 use pidcat::Writer;
@@ -32,7 +33,6 @@ use std::io::stdin;
 
 use std::panic;
 
-use std::process::Child;
 use std::process::Command;
 use std::process::Stdio;
 use std::process::exit;
@@ -189,52 +189,6 @@ static SYSTEM_TAGS: Lazy<&[&str]> = Lazy::new(|| {
     ]
 });
 
-#[derive(Debug)]
-pub enum AdbState {
-    Device,
-    Emulator,
-    Offline,
-    UnAuthorized,
-    Recovery,
-    Sideload,
-    NoPermissions,
-    NoDevice,
-}
-
-impl From<&str> for AdbState {
-    fn from(str: &str) -> Self {
-        match str {
-            "device" => Self::Device,
-            "emulator" => Self::Emulator,
-            "offline" => Self::Offline,
-            "unauthorized" => Self::UnAuthorized,
-            "recovery" => Self::Recovery,
-            "sideload" => Self::Sideload,
-            "no permissions" => Self::NoPermissions,
-            "no device" => Self::NoDevice,
-            _ => panic!("Invalid AdbState: {str}"),
-        }
-    }
-}
-
-impl From<String> for AdbState {
-    fn from(str: String) -> Self {
-        Self::from(str.as_str())
-    }
-}
-
-#[derive(Debug)]
-pub struct AdbDevice {
-    pub device_id: String,
-    pub device_state: AdbState,
-}
-
-#[derive(Debug)]
-pub enum LogSource {
-    Process(Child),
-    Stdin,
-}
-
 fn get_console_width() -> i16 {
     terminal_size::terminal_size()
         .map(|(terminal_size::Width(width), _)| width as i16)
@@ -242,7 +196,7 @@ fn get_console_width() -> i16 {
 }
 
 fn get_ansi_segments(text: &str) -> Vec<AnsiSegment> {
-    let mut segments = Vec::new();
+    let mut segments = Vec::default();
     let mut chars = text.chars().peekable();
     let mut visible_pos = 0;
 
@@ -275,7 +229,7 @@ fn get_ansi_segments(text: &str) -> Vec<AnsiSegment> {
 }
 
 fn get_active_codes_at_pos(segments: &[AnsiSegment], pos: usize) -> Vec<String> {
-    let mut active = Vec::new();
+    let mut active = Vec::default();
 
     for seg in segments {
         if seg.visible_pos >= pos {
@@ -299,7 +253,7 @@ fn insert_ansi_codes_in_range(
     end_pos: usize,
     active_codes: &[String],
 ) -> String {
-    let mut result = String::new();
+    let mut result = String::default();
     let chars: Vec<char> = plain_text.chars().collect();
 
     for code in active_codes {
@@ -370,7 +324,7 @@ fn get_wrapped_indent(
     let chars = plain_message.chars().collect::<Vec<_>>();
 
     let mut current = 0;
-    let mut message_buffer = String::new();
+    let mut message_buffer = String::default();
 
     while current < chars.len() {
         let next_index = std::cmp::min(current + wrap_width, chars.len());
@@ -380,7 +334,7 @@ fn get_wrapped_indent(
         let active_codes = if current > 0 {
             get_active_codes_at_pos(&ansi_segments, current)
         } else {
-            Vec::new()
+            Vec::default()
         };
 
         // Reconstruct segment with ANSI codes
@@ -415,13 +369,12 @@ fn get_wrapped_indent(
             let connector = if level_foreground == level_background {
                 "    "
             } else if is_last_line {
-                " └ "
+                " └─"
             } else {
-                " | "
+                " ├─"
             };
 
             let colored_connector = connector
-                .bold()
                 .color(level_foreground)
                 .on_color(level_background)
                 .to_string();
@@ -558,7 +511,7 @@ fn get_processes(
     catchall_package: &[String],
     args: &CliArgs,
 ) -> HashMap<String, String> {
-    let mut pids_map = HashMap::new();
+    let mut pids_map = HashMap::default();
     let mut cmd = Command::new(&base_adb_command[0]);
 
     if base_adb_command.len() > 1 {
@@ -755,7 +708,7 @@ fn write_started_process(
     state: &mut State,
     writers: &mut [Writer],
     header_width: usize,
-) {
+) -> bool {
     let spaces = " ".repeat(header_width.saturating_sub(1));
 
     if let Some(procs) = get_started_process(line) {
@@ -871,8 +824,12 @@ fn write_started_process(
             );
 
             state.last_tag = None;
+
+            return true;
         }
     }
+
+    false
 }
 
 fn write_dead_process(
@@ -881,7 +838,7 @@ fn write_dead_process(
     state: &mut State,
     writers: &mut [Writer],
     header_width: usize,
-) {
+) -> bool {
     let spaces = " ".repeat(header_width.saturating_sub(1));
 
     if let Some((dead_pid, dead_process_name)) = get_dead_process(
@@ -944,7 +901,11 @@ fn write_dead_process(
         write_token("\n", writers, false, header_width, Color::Red, Color::Red);
 
         state.last_tag = None;
+
+        return true;
     }
+
+    false
 }
 
 fn write_pid(
@@ -1120,7 +1081,6 @@ fn write_log_level(
 
     if !args.no_color {
         level_str = level_str
-            .bold()
             .color(level_foreground)
             .on_color(level_background)
             .to_string();
@@ -1216,28 +1176,30 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
 
     let owner = log_line
         .get(3)
-        .map_or("", |mat| mat.as_str())
+        .map_or(String::default(), |mat| mat.as_str().to_string())
         .trim()
         .to_string();
+
     let tag = log_line
         .get(2)
-        .map_or("", |mat| mat.as_str())
+        .map_or(String::default(), |mat| mat.as_str().to_string())
         .trim()
         .to_string();
-    let level = log_line.get(1).map_or(LogLevel::VERBOSE, |mat| {
-        LogLevel::from_str(mat.as_str(), true).unwrap_or_panic("Invalid log level")
-    });
+
+    let level = log_line
+        .get(1)
+        .map_or(LogLevel::default(), |mat| LogLevel::from(mat.as_str()));
 
     let mut message = log_line
         .get(4)
-        .map_or("", |mat| mat.as_str())
+        .map_or(String::default(), |mat| mat.as_str().to_string())
         .trim()
         .to_string();
 
-    let level_foreground = Color::White;
+    let level_foreground = Color::Black;
 
     let level_background = match level {
-        LogLevel::DEBUG => Color::Blue,
+        LogLevel::DEBUG => Color::BrightBlue,
         LogLevel::INFO => Color::Green,
         LogLevel::WARN => Color::Yellow,
         LogLevel::ERROR => Color::BrightRed,
@@ -1253,10 +1215,15 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         *header_width += args.package_width as usize
     }
 
-    *header_width += 2 + args.tag_width as usize + base_level_size;
+    *header_width += (2 + args.tag_width + base_level_size) as usize;
 
-    write_started_process(line, state, writers, *header_width);
-    write_dead_process(&tag, &message, state, writers, *header_width);
+    if write_started_process(line, state, writers, *header_width) {
+        return;
+    }
+
+    if write_dead_process(&tag, &message, state, writers, *header_width) {
+        return;
+    }
 
     if !args.all && !state.pids_map.contains_key(&owner) {
         return;
@@ -1325,7 +1292,7 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         level_background,
     );
 
-    *header_width += base_level_size;
+    *header_width += base_level_size as usize;
 
     message = apply_message_rules(args, &message);
 
@@ -1525,6 +1492,12 @@ fn main() {
         Color::Green,
         Color::Yellow,
         Color::Magenta,
+        Color::BrightRed,
+        Color::BrightBlue,
+        Color::BrightCyan,
+        Color::BrightGreen,
+        Color::BrightYellow,
+        Color::BrightMagenta,
     ];
 
     let known_tags = HashMap::from([
