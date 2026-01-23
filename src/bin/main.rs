@@ -1,3 +1,5 @@
+#![deny(clippy::unwrap_used)]
+
 use colored::Color;
 use colored::Colorize;
 
@@ -21,6 +23,7 @@ use regex::Regex;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::panic::PanicHookInfo;
 
 use std::fs::File;
 
@@ -37,8 +40,17 @@ use std::process::Command;
 use std::process::Stdio;
 use std::process::exit;
 use std::process::id;
+use std::sync::Mutex;
 
 use strip_ansi_escapes::strip;
+
+/// ELLIPSIS is a unicode ellipsis character.
+/// It is used to represent truncated lines.
+static ELLIPSIS: Lazy<&str> = Lazy::new(|| "…");
+
+/// ELLIPSIS_COUNT is the number of characters in [ELLIPSIS]
+/// It is used to represent truncated lines.
+static ELLIPSIS_COUNT: Lazy<usize> = Lazy::new(|| ELLIPSIS.chars().count());
 
 static BACKTRACE_LINE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^#(.*?)pc\s(.*?)$").unwrap_or_panic("Invalid Regex for BACKTRACE_LINE")
@@ -111,6 +123,9 @@ static VISIBLE_PACKAGES: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"ProcessRecord\{\w+\s*\d+:([a-zA-Z.]+)/\w+\}")
         .unwrap_or_panic("Invalid Regex for VISIBLE_PACKAGES")
 });
+
+static REGEX_CACHE: Lazy<Mutex<HashMap<String, Option<Regex>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 static SYSTEM_TAGS: Lazy<&[&str]> = Lazy::new(|| {
     &[
@@ -266,8 +281,8 @@ fn insert_ansi_codes_in_range(
         segment_idx += 1;
     }
 
-    for (i, ch) in chars.iter().enumerate() {
-        let absolute_pos = start_pos + i;
+    for (index, char) in chars.iter().enumerate() {
+        let absolute_pos = start_pos + index;
 
         while segment_idx < segments.len() {
             let seg = &segments[segment_idx];
@@ -286,7 +301,7 @@ fn insert_ansi_codes_in_range(
             }
         }
 
-        result.push(*ch);
+        result.push(*char);
     }
 
     result
@@ -368,10 +383,10 @@ fn get_wrapped_indent(
             let is_last_line = future_index >= chars.len();
             let connector = if level_foreground == level_background {
                 "    "
-            } else if is_last_line {
-                " └─"
+            } else if !is_last_line {
+                " ╠═"
             } else {
-                " ├─"
+                " ╚═"
             };
 
             let colored_connector = connector
@@ -396,27 +411,28 @@ fn get_wrapped_indent(
     message_buffer
 }
 
-fn get_token_color(tag: &str, state: &mut State) -> Color {
-    if !state.known_tags.contains_key(tag) {
-        if !state.tag_colors.is_empty() {
-            let color = state.tag_colors[0];
-            state.known_tags.insert(tag.to_string(), color);
-            state.tag_colors.rotate_left(1);
+fn get_token_color(token: &str, state: &mut State) -> Color {
+    if !state.known_tokens.contains_key(token) {
+        if !state.token_colors.is_empty() {
+            let color = state.token_colors[0];
+            state.known_tokens.insert(token.to_string(), color);
+            state.token_colors.rotate_left(1);
         } else {
             return Color::White;
         }
     }
 
     let color = *state
-        .known_tags
-        .get(tag)
-        .unwrap_or_panic(&format!("Unknown tag '{}' in known tags", tag));
+        .known_tokens
+        .get(token)
+        .unwrap_or_panic(&format!("Unknown tag '{}' in known tags", token));
 
     // Move to end of list (LRU logic)
-    if let Some(pos) = state.tag_colors.iter().position(|&col| col == color) {
-        state.tag_colors.remove(pos);
+    if let Some(pos) = state.token_colors.iter().position(|&col| col == color) {
+        state.token_colors.remove(pos);
+        state.token_colors.rotate_left(1);
     }
-    state.tag_colors.push(color);
+    state.token_colors.push(color);
 
     color
 }
@@ -521,11 +537,15 @@ fn get_processes(
     let output = cmd.args(["shell", "ps"]).stdout(Stdio::piped()).output();
 
     if let Ok(out) = output {
-        let reader = BufReader::new(&out.stdout[..]);
-        for line in reader.lines().map_while(Result::ok) {
+        let stdout = BufReader::new(&out.stdout[..]);
+        for line in stdout.lines().map_while(Result::ok) {
             if let Some(caps) = PID_LINE.captures(&line) {
-                let pid = caps.get(1).map_or("", |m| m.as_str()).to_string();
-                let process = caps.get(2).map_or("", |m| m.as_str()).to_string();
+                let pid = caps
+                    .get(1)
+                    .map_or(String::default(), |mat| mat.as_str().to_string());
+                let process = caps
+                    .get(2)
+                    .map_or(String::default(), |mat| mat.as_str().to_string());
 
                 let is_target_package = catchall_package.contains(&process);
 
@@ -543,8 +563,8 @@ fn get_started_process(line: &str) -> Option<(String, String, String, String, St
     if let Some(caps) = PID_START.captures(line) {
         return Some((
             caps[1].to_string(), // started_pid
-            "".to_string(),      // started_uid
-            "".to_string(),      // started_gids
+            String::default(),   // started_uid
+            String::default(),   // started_gids
             caps[2].to_string(), // started_package
             caps[3].to_string(), // started_target
         ));
@@ -564,9 +584,9 @@ fn get_started_process(line: &str) -> Option<(String, String, String, String, St
         return Some((
             caps[1].to_string(), // started_pid
             caps[3].to_string(), // started_uid
-            "".to_string(),      // started_gids
+            String::default(),   // started_gids
             caps[2].to_string(), // started_package
-            "".to_string(),      // started_target
+            String::default(),   // started_target
         ));
     }
 
@@ -618,7 +638,7 @@ fn get_dead_process(
 }
 
 fn is_matching_package(
-    token: &str,
+    token: &String,
     named_processes: &[String],
     catchall_package: &[String],
 ) -> bool {
@@ -626,12 +646,12 @@ fn is_matching_package(
         return true;
     }
 
-    if named_processes.contains(&token.to_string()) {
+    if named_processes.contains(token) {
         return true;
     }
 
     match token.find(':') {
-        None => catchall_package.contains(&token.to_string()),
+        None => catchall_package.contains(token),
         Some(index) => catchall_package.contains(&token[..index].to_string()),
     }
 }
@@ -644,15 +664,21 @@ fn is_matching_tag(tag: &str, tags: &[String]) -> bool {
 
         if is_regex {
             let pattern = if m_tag.starts_with('^') {
-                m_tag.to_string()
+                m_tag
             } else {
-                format!("^{}", m_tag)
+                &format!("^{}", m_tag)
             };
 
-            if let Ok(re) = Regex::new(&pattern)
-                && re.is_match(tag)
-            {
-                return true;
+            let mut cache = REGEX_CACHE
+                .lock()
+                .unwrap_or_panic("Failed to lock regex cache");
+            let re_opt = cache
+                .entry(pattern.to_string())
+                .or_insert_with(|| Regex::new(pattern).ok());
+
+            match re_opt {
+                Some(re) if re.is_match(tag) => return true,
+                _ => continue,
             }
         } else if tag.contains(m_tag) {
             return true;
@@ -924,7 +950,8 @@ fn write_pid(
         let pid_color = get_token_color(owner, state);
 
         if display_owner.len() > pid_width {
-            display_owner = format!("{}...", &display_owner[..pid_width - 3]);
+            display_owner.truncate(pid_width - *ELLIPSIS_COUNT);
+            display_owner = format!("{}{}", &display_owner, *ELLIPSIS);
         }
 
         let pid_display = format!("{:width$}", display_owner, width = pid_width);
@@ -970,12 +997,13 @@ fn write_package_name(
             .pids_map
             .get(owner)
             .cloned()
-            .unwrap_or(format!("UNKNOWN({})", owner));
+            .unwrap_or(format!("UNKNOWN({owner})"));
         let mut display_pkg = package_name.clone();
         let pkg_color = get_token_color(&package_name, state);
 
         if display_pkg.len() > package_width {
-            display_pkg = format!("{}...", &display_pkg[..package_width - 3]);
+            display_pkg.truncate(package_width - *ELLIPSIS_COUNT);
+            display_pkg = format!("{}{}", &display_pkg, *ELLIPSIS);
         }
 
         let pkg_display = format!("{:width$}", display_pkg, width = package_width);
@@ -1023,7 +1051,8 @@ fn write_tag(
             let mut display_tag = tag.to_string();
 
             if display_tag.len() > tag_width {
-                display_tag = format!("{}...", &display_tag[..tag_width - 3]);
+                display_tag.truncate(tag_width - *ELLIPSIS_COUNT);
+                display_tag = format!("{}{}", &display_tag, *ELLIPSIS);
             }
 
             let tag_color = get_token_color(tag, state);
@@ -1305,82 +1334,90 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
     );
 }
 
+fn panic_hook(info: &PanicHookInfo) {
+    let err_loc = info.location().unwrap_or(panic::Location::caller());
+    let err_msg = match info.payload().downcast_ref::<&str>() {
+        Some(str) => *str,
+        None => match info.payload().downcast_ref::<String>() {
+            Some(str) => &str[..],
+            None => "Box<Any>",
+        },
+    };
+
+    let err_msg = format!(
+        "{err_msg} => {}:{}:{}",
+        err_loc.file(),
+        err_loc.line(),
+        err_loc.column()
+    )
+    .red()
+    .bold();
+
+    let thread_err_msg = format!(
+        "thread 'main' ({}) panicked at {}:{}:{}",
+        id(),
+        err_loc.file(),
+        err_loc.line(),
+        err_loc.column()
+    )
+    .red()
+    .bold();
+
+    eprintln!("{thread_err_msg}");
+    eprintln!("{err_msg}");
+}
+
+fn ctrlc_handler() {
+    let bin_name = env!("CARGO_BIN_NAME").cyan().bold();
+    let message = "Stopped by user.".cyan().bold();
+
+    println!("{bin_name} {message}");
+    exit(0);
+}
+
 fn main() {
-    panic::set_hook(Box::new(|info| {
-        let err_loc = info.location().unwrap_or(panic::Location::caller());
-        let err_msg = match info.payload().downcast_ref::<&str>() {
-            Some(str) => *str,
-            None => match info.payload().downcast_ref::<String>() {
-                Some(str) => &str[..],
-                None => "Box<Any>",
-            },
-        };
+    panic::set_hook(Box::new(panic_hook));
+    ctrlc::set_handler(ctrlc_handler).unwrap_or_panic("Failed to set CTRL+C handler");
 
-        let err_msg = format!(
-            "{err_msg} => {}:{}:{}",
-            err_loc.file(),
-            err_loc.line(),
-            err_loc.column()
-        )
-        .red()
-        .bold();
+    let mut adb_child = None;
 
-        let thread_err_msg = format!(
-            "thread 'main' ({}) panicked at {}:{}:{}",
-            id(),
-            err_loc.file(),
-            err_loc.line(),
-            err_loc.column()
-        )
-        .red()
-        .bold();
-
-        eprintln!("{thread_err_msg}");
-        eprintln!("{err_msg}");
-    }));
-
-    ctrlc::set_handler(|| {
-        let bin_name = env!("CARGO_BIN_NAME").cyan().bold().to_string();
-        let message = "Stopped by user.".cyan().bold().to_string();
-
-        println!("{bin_name} {message}");
-        exit(0);
-    })
-    .unwrap_or_panic("Failed to set CTRL+C handler");
-
+    let args = &mut CliArgs::parse_args();
     let stdin = stdin();
-    let mut args = CliArgs::parse_args();
-    let base_adb_command = get_adb_command(&args);
-    let mut adb_command = [
-        base_adb_command.clone(),
-        vec!["logcat".to_string(), "-v".to_string(), "brief".to_string()],
-    ]
-    .concat();
+    let base_adb_command = &get_adb_command(args);
+    let logcat_command = ["logcat", "-v", "brief"].map(|item| item.to_string());
+    let adb_command = &mut base_adb_command.clone();
+    let console_width = get_console_width();
+    let stdout_writer = Writer::new_console(console_width, !args.no_color);
+    let writers = &mut vec![stdout_writer];
+    let packages = &mut args
+        .packages
+        .iter()
+        .map(|package| package.to_string())
+        .collect::<HashSet<_>>();
 
-    let mut child = None;
-    let devices = get_adb_devices(&base_adb_command);
+    adb_command.extend(logcat_command);
 
-    match devices {
+    match get_adb_devices(base_adb_command) {
+        // TODO: implement device selection
         Some(devices) => {
-            // TODO: implement device selection
             for (index, device) in devices.iter().enumerate() {
-                println!("device #{index}: {device:?}");
+                let message = format!("Found Device #{index}: {device:?}").cyan().bold();
+                println!("{message}");
             }
         }
 
         None => {
             let err = Error::from(ErrorKind::NotConnected);
             let err_code = err.raw_os_error().unwrap_or(1);
-            let err = err.to_string().red().bold().to_string();
-            let err_header = format!("error: {err}").red().bold().to_string();
+            let err = err.to_string().red().bold();
+            let err_header = format!("error: {err}").red().bold();
             let error_message = concat!(
                 "ADB cannot find any attached devices!",
                 "\n",
                 "Attach a device and try again!"
             )
             .red()
-            .bold()
-            .to_string();
+            .bold();
 
             if stdin.is_terminal() {
                 eprintln!("{err_header}");
@@ -1389,16 +1426,6 @@ fn main() {
             }
         }
     }
-
-    let mut packages = args
-        .packages
-        .iter()
-        .map(|package| package.to_string())
-        .collect::<HashSet<_>>();
-
-    let console_width = get_console_width();
-    let stdout_writer = Writer::new_console(console_width, !args.no_color);
-    let mut writers = vec![stdout_writer];
 
     if args.ignore_system_tags {
         let mut system_tags: Vec<String> =
@@ -1440,7 +1467,7 @@ fn main() {
     }
 
     if args.current_app
-        && let Some(running_packages) = get_current_app_package(&base_adb_command)
+        && let Some(running_packages) = get_current_app_package(base_adb_command)
         && !running_packages.is_empty()
     {
         packages.extend(
@@ -1456,7 +1483,7 @@ fn main() {
     }
 
     if !args.keep_logcat && stdin.is_terminal() {
-        let message = "Clearing logcat...".cyan().bold().to_string();
+        let message = format!("Clearing logcat{}", *ELLIPSIS).cyan().bold();
         println!("{message}");
 
         let clear_cmd = [
@@ -1467,7 +1494,7 @@ fn main() {
         let _ = Command::new(&clear_cmd[0]).args(&clear_cmd[1..]).output();
     }
 
-    let catchall_package = packages
+    let catchall_package = &packages
         .iter()
         .filter(|package| !package.contains(':'))
         .cloned()
@@ -1483,7 +1510,7 @@ fn main() {
         args.all = true;
     }
 
-    let pids_map = get_processes(&base_adb_command, &catchall_package, &args);
+    let pids_map = get_processes(base_adb_command, catchall_package, args);
 
     let tag_colors = vec![
         Color::Red,
@@ -1517,97 +1544,140 @@ fn main() {
         app_pid: None,
         log_level: args.log_level,
         named_processes,
-        catchall_package,
-        tag_colors,
-        known_tags,
+        catchall_package: catchall_package.clone(),
+        token_colors: tag_colors,
+        known_tokens: known_tags,
     };
 
     if stdin.is_terminal() {
-        child = Some(
+        adb_child = Some(
             Command::new(&adb_command[0])
                 .args(&adb_command[1..])
                 .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
                 .spawn()
                 .unwrap_or_panic("Failed to start adb logcat process"),
         );
     }
 
-    let mut source = if let Some(child) = child {
-        LogSource::Process(child)
+    let mut log_source = if let Some(adb_child) = adb_child {
+        LogSource::Process(adb_child)
     } else {
         LogSource::Stdin
     };
 
-    let reader_source = match source {
-        LogSource::Process(ref mut child) => Box::new(
-            child
+    let (stdout_source, stderr_source) = match log_source {
+        LogSource::Process(ref mut child) => {
+            let stdout = child
                 .stdout
                 .take()
-                .unwrap_or_panic("Failed to capture stdout"),
-        ),
+                .map(|stdout| Box::new(stdout) as Box<dyn Read>)
+                .unwrap_or_panic("Failed to capture stdout");
 
-        LogSource::Stdin => Box::new(stdin) as Box<dyn Read>,
+            let stderr = child
+                .stderr
+                .take()
+                .map(|stderr| Box::new(stderr) as Box<dyn Read>);
+
+            (stdout, stderr)
+        }
+
+        LogSource::Stdin => (Box::new(stdin) as Box<dyn Read>, None),
     };
 
-    let mut reader = BufReader::new(reader_source);
+    let mut stdout = BufReader::new(stdout_source);
+    let mut stderr = stderr_source.map(BufReader::new);
 
-    if !packages.is_empty() {
+    let message = if !packages.is_empty() {
         let packages_vec = packages.iter().cloned().collect::<Vec<_>>();
         let packages_str = packages_vec.join(", ");
-        let message = format!("Capturing logcat messages from packages: [{packages_str}]...")
+
+        format!(
+            "Capturing logcat messages from packages: [{packages_str}]{}",
+            *ELLIPSIS
+        )
+        .cyan()
+        .bold()
+    } else {
+        format!("Capturing all logcat messages{}", *ELLIPSIS)
             .cyan()
             .bold()
-            .to_string();
+    };
 
-        println!("{message}");
-    } else {
-        let message = "Capturing all logcat messages...".cyan().bold().to_string();
-        println!("{message}");
-    }
+    println!("{message}");
 
     loop {
-        if let LogSource::Process(ref mut child) = source {
-            let exit_status = child.try_wait();
+        if let LogSource::Process(ref mut adb_child) = log_source {
+            let exit_status = adb_child.try_wait();
 
-            if let Ok(Some(exit_status)) = exit_status {
-                let message = format!(
-                    "Child process {} exited with status: {}",
-                    child.id(),
-                    exit_status
-                )
-                .cyan()
-                .bold()
-                .to_string();
+            match exit_status {
+                Ok(exit_status) => {
+                    if let Some(status) = exit_status {
+                        let message = format!(
+                            "Child process {} exited with status: {status}",
+                            adb_child.id()
+                        )
+                        .cyan()
+                        .bold();
 
-                println!("{message}");
-                break;
+                        println!("{message}");
+                        break;
+                    }
+                }
+                Err(err) => {
+                    let message = format!(
+                        "Failed to wait for child process {}: {}",
+                        adb_child.id(),
+                        err
+                    )
+                    .red()
+                    .bold();
+
+                    eprintln!("{message}");
+                    break;
+                }
             }
         }
 
-        let buffer = &mut vec![];
-        let bytes_read = reader
-            .read_until(b'\n', buffer)
+        let stdout_buffer = &mut vec![];
+        let stderr_buffer = &mut vec![];
+
+        let stdout_bytes_read = stdout
+            .read_until(b'\n', stdout_buffer)
             .unwrap_or_panic("Error reading stream");
 
-        if bytes_read == 0 {
+        if stdout_bytes_read == 0 {
+            if let Some(ref mut stderr) = stderr
+                && let Ok(stderr_bytes_read) = stderr.read_to_end(stderr_buffer)
+                && stderr_bytes_read > 0
+            {
+                let err = String::from_utf8_lossy(stderr_buffer)
+                    .trim_end_matches(['\r', '\n'])
+                    .red()
+                    .bold();
+
+                let err_msg = format!("Error reading stream:\n{}", err).red().bold();
+                eprintln!("{err_msg}");
+            }
+
             break;
         }
 
-        let content = String::from_utf8_lossy(buffer).to_string();
-        let trimmed = content.trim_end_matches(['\r', '\n']).to_string();
-
-        write_log_line(&trimmed, &mut state, &args, &mut writers);
+        let line = String::from_utf8_lossy(stdout_buffer)
+            .trim_end_matches(['\r', '\n'])
+            .to_string();
+        write_log_line(&line, &mut state, args, writers);
     }
 
-    if let LogSource::Process(mut child) = source {
-        let kill_fail_message = format!("Failed to kill child process {}", child.id())
+    if let LogSource::Process(mut adb_child) = log_source {
+        let kill_fail_message = format!("Failed to kill child process {}", adb_child.id())
             .red()
             .bold();
-        let wait_fail_message = format!("Failed to wait for child process {}", child.id())
+        let wait_fail_message = format!("Failed to wait for child process {}", adb_child.id())
             .red()
             .bold();
 
-        child.kill().unwrap_or_panic(&kill_fail_message);
-        child.wait().unwrap_or_panic(&wait_fail_message);
+        adb_child.kill().unwrap_or_panic(&kill_fail_message);
+        adb_child.wait().unwrap_or_panic(&wait_fail_message);
     }
 }

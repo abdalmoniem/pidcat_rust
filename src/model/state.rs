@@ -10,6 +10,6 @@ pub struct State {
     pub log_level: LogLevel,
     pub named_processes: Vec<String>,
     pub catchall_package: Vec<String>,
-    pub tag_colors: Vec<colored::Color>,
-    pub known_tags: HashMap<String, colored::Color>,
+    pub token_colors: Vec<colored::Color>,
+    pub known_tokens: HashMap<String, colored::Color>,
 }

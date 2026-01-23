@@ -2,3 +2,5 @@
 /.vscode/*.log
 /target
 /build/setup/Output/
+*.svg
+*.json.gz
