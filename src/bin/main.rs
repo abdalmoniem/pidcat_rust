@@ -416,7 +416,7 @@ fn get_token_color(token: &str, state: &mut State) -> Color {
         if !state.token_colors.is_empty() {
             let color = state.token_colors[0];
             state.known_tokens.insert(token.to_string(), color);
-            state.token_colors.rotate_left(1);
+            state.token_colors.rotate_left(0);
         } else {
             return Color::White;
         }
@@ -430,7 +430,7 @@ fn get_token_color(token: &str, state: &mut State) -> Color {
     // Move to end of list (LRU logic)
     if let Some(pos) = state.token_colors.iter().position(|&col| col == color) {
         state.token_colors.remove(pos);
-        state.token_colors.rotate_left(1);
+        state.token_colors.rotate_left(0);
     }
     state.token_colors.push(color);
 
@@ -1229,11 +1229,11 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
 
     let level_background = match level {
         LogLevel::DEBUG => Color::BrightBlue,
-        LogLevel::INFO => Color::Green,
-        LogLevel::WARN => Color::Yellow,
-        LogLevel::ERROR => Color::BrightRed,
-        LogLevel::FATAL => Color::Red,
-        LogLevel::VERBOSE => Color::Cyan,
+        LogLevel::INFO => Color::BrightGreen,
+        LogLevel::WARN => Color::BrightYellow,
+        LogLevel::ERROR => Color::TrueColor { r: 255, g: 100, b: 0 }, // DarkOrange
+        LogLevel::FATAL => Color::BrightRed,
+        LogLevel::VERBOSE => Color::BrightCyan,
     };
 
     if args.show_pid {
@@ -1513,12 +1513,6 @@ fn main() {
     let pids_map = get_processes(base_adb_command, catchall_package, args);
 
     let tag_colors = vec![
-        Color::Red,
-        Color::Blue,
-        Color::Cyan,
-        Color::Green,
-        Color::Yellow,
-        Color::Magenta,
         Color::BrightRed,
         Color::BrightBlue,
         Color::BrightCyan,
