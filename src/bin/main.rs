@@ -453,6 +453,28 @@ fn get_adb_command(args: &CliArgs) -> Vec<String> {
     base_adb_command
 }
 
+fn start_adb_server(base_adb_command: &[String]) -> Result<(), Error> {
+    let output = Command::new(&base_adb_command[0])
+        .args(&base_adb_command[1..])
+        .arg("start-server")
+        .output()?;
+
+    let stdout = output
+        .stdout
+        .split(|&byte| byte == b'\n')
+        .map(|line| String::from_utf8_lossy(line).trim().to_string())
+        .take_while(|line| !line.is_empty())
+        .join("\n")
+        .cyan()
+        .bold();
+
+    if !stdout.is_empty() {
+        println!("{stdout}");
+    }
+
+    Ok(())
+}
+
 fn get_adb_devices(base_adb_command: &[String]) -> Option<Vec<AdbDevice>> {
     let output = Command::new(&base_adb_command[0])
         .args(&base_adb_command[1..])
@@ -469,9 +491,11 @@ fn get_adb_devices(base_adb_command: &[String]) -> Option<Vec<AdbDevice>> {
                 .map(|line| String::from_utf8_lossy(line).trim().to_string())
                 .filter(|line| !line.is_empty())
                 .map(|device| {
+                    println!("{device}");
+
                     let (device_id_str, device_state_str) = re
                         .split(&device)
-                        .map(|str| str.to_string()) // Convert &str to String
+                        .map(|str| str.to_string())
                         .collect_tuple::<(String, String)>()
                         .unwrap_or_panic("Failed to get device id and type");
 
@@ -1231,7 +1255,11 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         LogLevel::DEBUG => Color::BrightBlue,
         LogLevel::INFO => Color::BrightGreen,
         LogLevel::WARN => Color::BrightYellow,
-        LogLevel::ERROR => Color::TrueColor { r: 255, g: 100, b: 0 }, // DarkOrange
+        LogLevel::ERROR => Color::TrueColor {
+            r: 255,
+            g: 100,
+            b: 0,
+        }, // DarkOrange
         LogLevel::FATAL => Color::BrightRed,
         LogLevel::VERBOSE => Color::BrightCyan,
     };
@@ -1397,6 +1425,22 @@ fn main() {
 
     adb_command.extend(logcat_command);
 
+    let message = "Starting ADB server...".cyan().bold();
+    println!("{message}");
+
+    if let Err(err) = start_adb_server(base_adb_command) {
+        let err_code = err.raw_os_error().unwrap_or(1);
+        let err_hdr = format!("ERROR: {err}").red().bold();
+        let err_msg =
+            "Could not start ADB server, check that ADB is added to env PATH and try again!"
+                .red()
+                .bold();
+
+        eprintln!("{err_hdr}");
+        eprintln!("{err_msg}");
+        exit(err_code);
+    }
+
     match get_adb_devices(base_adb_command) {
         // TODO: implement device selection
         Some(devices) => {
@@ -1410,18 +1454,14 @@ fn main() {
             let err = Error::from(ErrorKind::NotConnected);
             let err_code = err.raw_os_error().unwrap_or(1);
             let err = err.to_string().red().bold();
-            let err_header = format!("error: {err}").red().bold();
-            let error_message = concat!(
-                "ADB cannot find any attached devices!",
-                "\n",
-                "Attach a device and try again!"
-            )
-            .red()
-            .bold();
+            let err_hdr = format!("ERROR: {err}").red().bold();
+            let err_msg = "ADB cannot find any attached devices, attach a device and try again!"
+                .red()
+                .bold();
 
             if stdin.is_terminal() {
-                eprintln!("{err_header}");
-                eprintln!("{error_message}");
+                eprintln!("{err_hdr}");
+                eprintln!("{err_msg}");
                 exit(err_code);
             }
         }
