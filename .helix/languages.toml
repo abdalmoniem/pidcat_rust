@@ -1,0 +1,19 @@
+[[language]]
+name = "rust"
+
+[language.debugger]
+name = "lldb-vscode"
+transport = "stdio"
+command = "lldb-vscode"
+
+[[language.debugger.templates]]
+name = "binary (windows)"
+request = "launch"
+completion = [ { name = "binary", completion = "filename", default = "target/debug/PidCat.exe" } ]
+args = { program = "{0}", initCommands = [ "command script import ~/.local/etc/lldb_vscode_rustc_primer.py" ] }
+
+[[language.debugger.templates]]
+name = "binary (linux)"
+request = "launch"
+completion = [ { name = "binary", completion = "filename", default = "target/debug/PidCat" } ]
+args = { program = "{0}", initCommands = [ "command script import ~/.local/etc/lldb_vscode_rustc_primer.py" ] }

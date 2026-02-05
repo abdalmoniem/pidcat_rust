@@ -1,0 +1,2 @@
+[keys.normal.space]
+"C-b" = ":sh makers build"
