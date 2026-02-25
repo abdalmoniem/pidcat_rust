@@ -5,6 +5,8 @@ use clap::Parser;
 use clap::builder::styling::AnsiColor;
 use clap::builder::styling::Styles;
 
+use clap_complete::Shell;
+
 use colored::Colorize;
 
 use crate::LogLevel;
@@ -19,17 +21,15 @@ const COLORING_OPTIONS: &str = "Color Options";
 const OUTPUT_OPTIONS: &str = "Output Options";
 
 #[derive(Debug, Parser)]
-#[command(
-    disable_help_flag = true,
-    name = CliArgs::get_name(),
-    disable_version_flag = true,
-    about = CliArgs::get_about(),
-    arg_required_else_help = false,
-    color = ColorChoice::Auto,
-    version = CliArgs::get_version(),
-    styles = CliArgs::get_cli_styles(),
-    long_version = CliArgs::get_long_version(),
-)]
+#[command(disable_help_flag = true)]
+#[command(color = ColorChoice::Auto)]
+#[command(name = CliArgs::get_name())]
+#[command(disable_version_flag = true)]
+#[command(about = CliArgs::get_about())]
+#[command(arg_required_else_help = false)]
+#[command(version = CliArgs::get_version())]
+#[command(styles = CliArgs::get_cli_styles())]
+#[command(long_version = CliArgs::get_long_version())]
 pub struct CliArgs {
     #[arg(
         required = false,
@@ -47,8 +47,8 @@ pub struct CliArgs {
         long = "help",
         required = false,
         value_name = None,
-        help_heading = ABOUT_OPTIONS,
         action = ArgAction::Help,
+        help_heading = ABOUT_OPTIONS,
         help = "Show this help message and exit",
     )]
     pub help: Option<bool>,
@@ -58,11 +58,20 @@ pub struct CliArgs {
         long = "version",
         required = false,
         value_name = None,
-        help_heading = ABOUT_OPTIONS,
         action = ArgAction::Version,
+        help_heading = ABOUT_OPTIONS,
         help = "Print the version number and exit",
     )]
     pub version: Option<bool>,
+
+    #[arg(
+        required = false,
+        long = "completions",
+        value_name = "SHELL",
+        help_heading = ABOUT_OPTIONS,
+        help = format!("Generate shell completions for {}", "[SHELL]".cyan().bold()),
+    )]
+    pub completions: Option<Shell>,
 
     #[arg(
         short = 'A',
@@ -81,8 +90,8 @@ pub struct CliArgs {
         required = false,
         value_name = None,
         default_value_t = false,
-        help_heading = DEVICE_OPTIONS,
         action = ArgAction::SetTrue,
+        help_heading = DEVICE_OPTIONS,
         help = "Use first device for log input",
     )]
     pub use_device: bool,
@@ -93,8 +102,8 @@ pub struct CliArgs {
         long = "emulator",
         value_name = None,
         default_value_t = false,
-        help_heading = DEVICE_OPTIONS,
         action = ArgAction::SetTrue,
+        help_heading = DEVICE_OPTIONS,
         help = "Use first emulator for log input",
     )]
     pub use_emulator: bool,
@@ -106,7 +115,7 @@ pub struct CliArgs {
         default_value = None,
         value_name = "DEVICE_SERIAL",
         help_heading = DEVICE_OPTIONS,
-        help = "Use first emulator for log input",
+        help = format!("Use {} for log input", "[DEVICE_SERIAL]".cyan().bold()),
     )]
     pub device_serial: Option<String>,
 
@@ -116,8 +125,8 @@ pub struct CliArgs {
         required = false,
         value_name = None,
         default_value_t = false,
-        help_heading = FILTERING_OPTIONS,
         action = ArgAction::SetTrue,
+        help_heading = FILTERING_OPTIONS,
         help = "Print log messages from all packages",
     )]
     pub all: bool,
@@ -128,8 +137,8 @@ pub struct CliArgs {
         required = false,
         value_name = None,
         default_value_t = false,
-        help_heading = FILTERING_OPTIONS,
         action = ArgAction::SetTrue,
+        help_heading = FILTERING_OPTIONS,
         help = "Keep the entire log before running",
     )]
     pub keep_logcat: bool,
@@ -140,8 +149,8 @@ pub struct CliArgs {
         required = false,
         value_name = None,
         default_value_t = false,
-        help_heading = FILTERING_OPTIONS,
         action = ArgAction::SetTrue,
+        help_heading = FILTERING_OPTIONS,
         help = "Filter logcat by current running app(s)",
     )]
     pub current_app: bool,
@@ -193,9 +202,9 @@ pub struct CliArgs {
         short = 'l',
         long = "log-level",
         ignore_case = true,
-        default_value_t = LogLevel::VERBOSE,
         value_name = "LEVEL",
         help_heading = FILTERING_OPTIONS,
+        default_value_t = LogLevel::VERBOSE,
         help = "Filter messages lower than minimum log level",
     )]
     pub log_level: LogLevel,
@@ -218,8 +227,8 @@ pub struct CliArgs {
         value_name = None,
         default_value_t = false,
         help = "Show PID in output",
-        help_heading = FORMATTING_OPTIONS,
         action = ArgAction::SetTrue,
+        help_heading = FORMATTING_OPTIONS,
     )]
     pub show_pid: bool,
 
@@ -229,8 +238,8 @@ pub struct CliArgs {
         value_name = None,
         long = "show-package",
         default_value_t = false,
-        help_heading = FORMATTING_OPTIONS,
         action = ArgAction::SetTrue,
+        help_heading = FORMATTING_OPTIONS,
         help = "Show package name in output",
     )]
     pub show_package: bool,
@@ -239,11 +248,11 @@ pub struct CliArgs {
         short = 'S',
         required = false,
         value_name = None,
-        long = "always-show-tags",
         default_value_t = false,
-        help_heading = FORMATTING_OPTIONS,
+        long = "always-show-tags",
         action = ArgAction::SetTrue,
         help = "Always show the tag name",
+        help_heading = FORMATTING_OPTIONS,
     )]
     pub always_show_tags: bool,
 
@@ -286,8 +295,8 @@ pub struct CliArgs {
         value_name = None,
         long = "gc-color",
         default_value_t = false,
-        help_heading = COLORING_OPTIONS,
         action = ArgAction::SetTrue,
+        help_heading = COLORING_OPTIONS,
         help = "Enable garbage collector messages colors",
     )]
     pub gc_color: bool,
@@ -298,9 +307,9 @@ pub struct CliArgs {
         value_name = None,
         long = "no-color",
         default_value_t = false,
-        help_heading = COLORING_OPTIONS,
-        help = "Disable message colors",
         action = ArgAction::SetTrue,
+        help = "Disable message colors",
+        help_heading = COLORING_OPTIONS,
     )]
     pub no_color: bool,
 
@@ -308,8 +317,8 @@ pub struct CliArgs {
         short = 'o',
         long = "output",
         required = false,
-        value_name = "FILE_PATH",
         default_value = None,
+        value_name = "FILE_PATH",
         help_heading = OUTPUT_OPTIONS,
         help = format!("Save output to {}", "[FILE_PATH]".cyan().bold()),
     )]
@@ -319,15 +328,15 @@ pub struct CliArgs {
 impl CliArgs {
     fn get_cli_styles() -> Styles {
         Styles::styled()
-            .valid(AnsiColor::Green.on_default())
-            .invalid(AnsiColor::Yellow.on_default())
             .error(AnsiColor::Red.on_default().bold())
-            .placeholder(AnsiColor::Yellow.on_default())
+            .valid(AnsiColor::Green.on_default().bold())
             .context(AnsiColor::Cyan.on_default().bold())
+            .usage(AnsiColor::Yellow.on_default().bold())
+            .header(AnsiColor::Yellow.on_default().bold())
             .literal(AnsiColor::Green.on_default().bold())
+            .invalid(AnsiColor::Yellow.on_default().bold())
+            .placeholder(AnsiColor::Cyan.on_default().bold())
             .context_value(AnsiColor::Cyan.on_default().bold())
-            .usage(AnsiColor::Blue.on_default().underline().bold())
-            .header(AnsiColor::Blue.on_default().underline().bold())
     }
 
     fn get_about() -> String {

@@ -154,7 +154,6 @@ fn main() {
         Err(err) => panic!("Failed to read setup file: {}", err),
     }
 
-
     let manifest_result =
         embed_resource::compile("resources.rc", embed_resource::NONE).manifest_optional();
 

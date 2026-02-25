@@ -1,5 +1,8 @@
 #![deny(clippy::unwrap_used)]
 
+use clap::CommandFactory;
+use clap_complete::generate;
+
 use colored::Color;
 use colored::Colorize;
 
@@ -1425,46 +1428,11 @@ fn main() {
 
     adb_command.extend(logcat_command);
 
-    let message = "Starting ADB server...".cyan().bold();
-    println!("{message}");
-
-    if let Err(err) = start_adb_server(base_adb_command) {
-        let err_code = err.raw_os_error().unwrap_or(1);
-        let err_hdr = format!("ERROR: {err}").red().bold();
-        let err_msg =
-            "Could not start ADB server, check that ADB is added to env PATH and try again!"
-                .red()
-                .bold();
-
-        eprintln!("{err_hdr}");
-        eprintln!("{err_msg}");
-        exit(err_code);
-    }
-
-    match get_adb_devices(base_adb_command) {
-        // TODO: implement device selection
-        Some(devices) => {
-            for (index, device) in devices.iter().enumerate() {
-                let message = format!("Found Device #{index}: {device:?}").cyan().bold();
-                println!("{message}");
-            }
-        }
-
-        None => {
-            let err = Error::from(ErrorKind::NotConnected);
-            let err_code = err.raw_os_error().unwrap_or(1);
-            let err = err.to_string().red().bold();
-            let err_hdr = format!("ERROR: {err}").red().bold();
-            let err_msg = "ADB cannot find any attached devices, attach a device and try again!"
-                .red()
-                .bold();
-
-            if stdin.is_terminal() {
-                eprintln!("{err_hdr}");
-                eprintln!("{err_msg}");
-                exit(err_code);
-            }
-        }
+    if let Some(shell) = args.completions {
+        let mut cmd = CliArgs::command();
+        let bin_name = cmd.get_name().to_string();
+        generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
+        std::process::exit(0);
     }
 
     if args.ignore_system_tags {
@@ -1520,6 +1488,48 @@ fn main() {
 
     if let Some(regex) = args.regex.clone() {
         adb_command.extend(["-e".to_string(), regex]);
+    }
+
+    let message = "Starting ADB server...".cyan().bold();
+    println!("{message}");
+
+    if let Err(err) = start_adb_server(base_adb_command) {
+        let err_code = err.raw_os_error().unwrap_or(1);
+        let err_hdr = format!("ERROR: {err}").red().bold();
+        let err_msg =
+            "Could not start ADB server, check that ADB is added to env PATH and try again!"
+                .red()
+                .bold();
+
+        eprintln!("{err_hdr}");
+        eprintln!("{err_msg}");
+        exit(err_code);
+    }
+
+    match get_adb_devices(base_adb_command) {
+        // TODO: implement device selection
+        Some(devices) => {
+            for (index, device) in devices.iter().enumerate() {
+                let message = format!("Found Device #{index}: {device:?}").cyan().bold();
+                println!("{message}");
+            }
+        }
+
+        None => {
+            let err = Error::from(ErrorKind::NotConnected);
+            let err_code = err.raw_os_error().unwrap_or(1);
+            let err = err.to_string().red().bold();
+            let err_hdr = format!("ERROR: {err}").red().bold();
+            let err_msg = "ADB cannot find any attached devices, attach a device and try again!"
+                .red()
+                .bold();
+
+            if stdin.is_terminal() {
+                eprintln!("{err_hdr}");
+                eprintln!("{err_msg}");
+                exit(err_code);
+            }
+        }
     }
 
     if !args.keep_logcat && stdin.is_terminal() {

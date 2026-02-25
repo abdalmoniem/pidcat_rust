@@ -1,8 +1,8 @@
 #define AppName "PidCat"
-#define AppVersion "1.1.3"
+#define AppVersion "1.2.0"
 #define AppPublisher "AbdElMoniem ElHifnawy"
 #define AppURL "https://abdalmoniem-alhifnawy.is-a.dev"
-#define AppExeName "PidCat.exe"
+#define AppExeName "pidcat.exe"
 #define DateTime GetDateTimeString('ddd_dd_mmm_yyyy_hh_nn_ss.zzz_ampm', '', '')
 #define SetupDir ExtractFilePath(SourcePath)
 #define BuildDir ExtractFilePath(RemoveBackslashUnlessRoot(SetupDir))
