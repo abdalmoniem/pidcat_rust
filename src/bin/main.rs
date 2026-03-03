@@ -10,7 +10,7 @@ use itertools::Itertools;
 
 use is_terminal::IsTerminal;
 
-use once_cell::sync::Lazy;
+use lazy_static::lazy_static;
 
 use pidcat::AdbDevice;
 use pidcat::AdbState;
@@ -47,165 +47,147 @@ use std::sync::Mutex;
 
 use strip_ansi_escapes::strip;
 
-/// ELLIPSIS is a unicode ellipsis character.
-/// It is used to represent truncated lines.
-static ELLIPSIS: Lazy<&str> = Lazy::new(|| "…");
+lazy_static! {
+    /// ELLIPSIS is a unicode ellipsis character.
+    /// It is used to represent truncated lines.
+    static ref ELLIPSIS: String = String::from("…");
 
-/// ELLIPSIS_COUNT is the number of characters in [ELLIPSIS]
-/// It is used to represent truncated lines.
-static ELLIPSIS_COUNT: Lazy<usize> = Lazy::new(|| ELLIPSIS.chars().count());
+    /// ELLIPSIS_COUNT is the number of characters in [ELLIPSIS]
+    /// It is used to represent truncated lines.
+    static ref ELLIPSIS_COUNT: usize = ELLIPSIS.chars().count();
 
-static BACKTRACE_LINE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^#(.*?)pc\s(.*?)$").unwrap_or_panic("Invalid Regex for BACKTRACE_LINE")
-});
+    static ref BACKTRACE_LINE: Regex =
+        Regex::new(r"^#(.*?)pc\s(.*?)$").unwrap_or_panic("Invalid Regex for BACKTRACE_LINE");
 
-static NATIVE_TAGS_LINE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r".*nativeGetEnabledTags.*").unwrap_or_panic("Invalid Regex for NATIVE_TAGS_LINE")
-});
+    static ref NATIVE_TAGS_LINE: Regex =
+        Regex::new(r".*nativeGetEnabledTags.*").unwrap_or_panic("Invalid Regex for NATIVE_TAGS_LINE");
 
-static LOG_LINE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^([A-Z])/(.+?)\( *(\d+)\): (.*?)$").unwrap_or_panic("Invalid Regex for LOG_LINE")
-});
+    static ref LOG_LINE: Regex =
+        Regex::new(r"^([A-Z])/(.+?)\( *(\d+)\): (.*?)$").unwrap_or_panic("Invalid Regex for LOG_LINE");
 
-static PID_LINE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^\w+\s+(\w+)\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+\s+\w\s(.*?)$")
-        .unwrap_or_panic("Invalid Regex for PID_LINE")
-});
+    static ref PID_LINE: Regex =
+        Regex::new(r"^\w+\s+(\w+)\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+\s+\w\s(.*?)$")
+            .unwrap_or_panic("Invalid Regex for PID_LINE");
 
-static PID_START: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^.*: Start proc (\d+):([a-zA-Z0-9._:]+)/[a-z0-9]+ for .*? \{(.*?)\}$")
-        .unwrap_or_panic("Invalid Regex for PID_START")
-});
+    static ref PID_START: Regex =
+        Regex::new(r"^.*: Start proc (\d+):([a-zA-Z0-9._:]+)/[a-z0-9]+ for .*? \{(.*?)\}$")
+            .unwrap_or_panic("Invalid Regex for PID_START");
 
-static PID_START_UGID: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r"^.*: Start proc ([a-zA-Z0-9._:]+) for ([a-z]+ [^:]+): pid=(\d+) uid=(\d+) gids=(.*)$",
-    )
-    .unwrap_or_panic("Invalid Regex for PID_START_UGID")
-});
+    static ref PID_START_UGID: Regex =
+        Regex::new(r"^.*: Start proc ([a-zA-Z0-9._:]+) for ([a-z]+ [^:]+): pid=(\d+) uid=(\d+) gids=(.*)$")
+            .unwrap_or_panic("Invalid Regex for PID_START_UGID");
 
-static PID_START_DALVIK: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^E/dalvikvm\(\s*(\d+)\): >>>>> ([a-zA-Z0-9._:]+) \[ userId:0 \| appId:(\d+) \]$")
-        .unwrap_or_panic("Invalid Regex for PID_START_DALVIK")
-});
+    static ref PID_START_DALVIK: Regex =
+        Regex::new(r"^E/dalvikvm\(\s*(\d+)\): >>>>> ([a-zA-Z0-9._:]+) \[ userId:0 \| appId:(\d+) \]$")
+            .unwrap_or_panic("Invalid Regex for PID_START_DALVIK");
 
-static PID_KILL: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^Killing (\d+):([a-zA-Z0-9._:]+)/[^:]+: (.*)$")
-        .unwrap_or_panic("Invalid Regex for PID_KILL")
-});
+    static ref PID_KILL: Regex =
+        Regex::new(r"^Killing (\d+):([a-zA-Z0-9._:]+)/[^:]+: (.*)$")
+            .unwrap_or_panic("Invalid Regex for PID_KILL");
 
-static PID_LEAVE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^No longer want ([a-zA-Z0-9._:]+) \(pid (\d+)\): .*$")
-        .unwrap_or_panic("Invalid Regex for PID_LEAVE")
-});
+    static ref PID_LEAVE: Regex =
+        Regex::new(r"^No longer want ([a-zA-Z0-9._:]+) \(pid (\d+)\): .*$")
+            .unwrap_or_panic("Invalid Regex for PID_LEAVE");
 
-static PID_DEATH: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^Process ([a-zA-Z0-9._:]+) \(pid (\d+)\) has died.?$")
-        .unwrap_or_panic("Invalid Regex for PID_DEATH")
-});
+    static ref PID_DEATH: Regex =
+        Regex::new(r"^Process ([a-zA-Z0-9._:]+) \(pid (\d+)\) has died.?$")
+            .unwrap_or_panic("Invalid Regex for PID_DEATH");
 
-static STRICT_MODE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^(StrictMode policy violation)(; ~duration=)(\d+ ms)")
-        .unwrap_or_panic("Invalid Regex for STRICT_MODE")
-});
+    static ref STRICT_MODE: Regex =
+        Regex::new(r"^(StrictMode policy violation)(; ~duration=)(\d+ ms)")
+            .unwrap_or_panic("Invalid Regex for STRICT_MODE");
 
-static GC_COLOR: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r"^(GC_(?:CONCURRENT|FOR_M?ALLOC|EXTERNAL_ALLOC|EXPLICIT) )(freed <?\d+.)(, \d+\% free \d+./\d+., )(paused \d+ms(?:\+\d+ms)?)"
-    ).unwrap_or_panic("Invalid Regex for GC_COLOR")
-});
+    static ref GC_COLOR: Regex =
+        Regex::new(
+            r"^(GC_(?:CONCURRENT|FOR_M?ALLOC|EXTERNAL_ALLOC|EXPLICIT) )(freed <?\d+.)(, \d+\% free \d+./\d+., )(paused \d+ms(?:\+\d+ms)?)"
+        ).unwrap_or_panic("Invalid Regex for GC_COLOR");
 
-static VISIBLE_ACTIVITIES: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r"VisibleActivityProcess:\[\s*(?:(?:ProcessRecord\{\w+\s*\d+:(?:[a-zA-Z.]+)/\w+\})\s*)+\]",
-    )
-    .unwrap_or_panic("Invalid Regex for VISIBLE_ACTIVITIES")
-});
+    static ref VISIBLE_ACTIVITIES: Regex =
+        Regex::new(r"VisibleActivityProcess:\[\s*(?:(?:ProcessRecord\{\w+\s*\d+:(?:[a-zA-Z.]+)/\w+\})\s*)+\]")
+            .unwrap_or_panic("Invalid Regex for VISIBLE_ACTIVITIES");
 
-static VISIBLE_PACKAGES: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"ProcessRecord\{\w+\s*\d+:([a-zA-Z.]+)/\w+\}")
-        .unwrap_or_panic("Invalid Regex for VISIBLE_PACKAGES")
-});
+    static ref VISIBLE_PACKAGES: Regex =
+        Regex::new(r"ProcessRecord\{\w+\s*\d+:([a-zA-Z.]+)/\w+\}")
+            .unwrap_or_panic("Invalid Regex for VISIBLE_PACKAGES");
 
-static REGEX_CACHE: Lazy<Mutex<HashMap<String, Option<Regex>>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+    static ref REGEX_CACHE: Mutex<HashMap<String, Option<Regex>>> = Mutex::new(HashMap::new());
 
-static SYSTEM_TAGS: Lazy<&[&str]> = Lazy::new(|| {
-    &[
-        r"Tile",
-        r"HWUI",
-        r"skia",
-        r"libc",
-        r"libEGL",
-        r"Dialog",
-        r"System",
-        r"OneTrace",
-        r"PreCache",
-        r"PlayCore",
-        r"BpBinder",
-        r"VRI\[.*?\]",
-        r"AudioTrack",
-        r"ImeTracker",
-        r"cutils-dev",
-        r"JavaBinder",
-        r"FrameEvents",
-        r"QualityInfo",
-        r"ViewExtract",
-        r"FirebaseApp",
-        r"AdrenoUtils",
-        r"ViewRootImpl",
-        r"nativeloader",
-        r"WindowManager",
-        r"OverlayHandler",
-        r"ActivityThread",
-        r"SurfaceControl",
-        r"\[UAH_CLIENT\]",
-        r"DisplayManager",
-        r"AdrenoGLES-.*?",
-        r"VelocityTracker",
-        r"OplusBracketLog",
-        r"PipelineWatcher",
-        r"AppWidgetManager",
-        r"BLASTBufferQueue",
-        r"InsetsController",
-        r"FirebaseSessions",
-        r"ProfileInstaller",
-        r"ExtensionsLoader",
-        r"SurfaceSyncGroup",
-        r"DesktopModeFlags",
-        r"AppCompatDelegate",
-        r"AppWidgetProvider",
-        r"AppWidgetHostView",
-        r"ApplicationLoaders",
-        r"OplusGraphicsEvent",
-        r"OplusAppHeapManager",
-        r"FirebaseCrashlytics",
-        r"ViewRootImplExtImpl",
-        r"BufferQueueConsumer",
-        r"BufferQueueProducer",
-        r"OplusCursorFeedback",
-        r"FirebaseInitProvider",
-        r"OplusActivityManager",
-        r"CompatChangeReporter",
-        r"SessionsDependencies",
-        r"OplusInputMethodUtil",
-        r"BufferPoolAccessor.*?",
-        r"OplusViewDebugManager",
-        r"WindowOnBackDispatcher",
-        r"CompactWindowAppManager",
-        r"OplusScrollToTopManager",
-        r"ResourcesManagerExtImpl",
-        r"ScrollOptimizationHelper",
-        r"OplusActivityThreadExtImpl",
-        r"DynamicFramerate\s*\[.*?\]",
-        r"OplusViewDragTouchViewHelper",
-        r"OplusPredictiveBackController",
-        r"OplusSystemUINavigationGesture",
-        r"OplusInputMethodManagerInternal",
-        r"OplusCustomizeRestrictionManager",
-        r"oplus\.android\.OplusFrameworkFactoryImpl",
-    ]
-});
+    static ref SYSTEM_TAGS: &'static [&'static str] =
+        &[
+            r"Tile",
+            r"HWUI",
+            r"skia",
+            r"libc",
+            r"libEGL",
+            r"Dialog",
+            r"System",
+            r"OneTrace",
+            r"PreCache",
+            r"PlayCore",
+            r"BpBinder",
+            r"VRI\[.*?\]",
+            r"AudioTrack",
+            r"ImeTracker",
+            r"cutils-dev",
+            r"JavaBinder",
+            r"FrameEvents",
+            r"QualityInfo",
+            r"ViewExtract",
+            r"FirebaseApp",
+            r"AdrenoUtils",
+            r"ViewRootImpl",
+            r"nativeloader",
+            r"WindowManager",
+            r"OverlayHandler",
+            r"ActivityThread",
+            r"SurfaceControl",
+            r"\[UAH_CLIENT\]",
+            r"DisplayManager",
+            r"AdrenoGLES-.*?",
+            r"VelocityTracker",
+            r"OplusBracketLog",
+            r"PipelineWatcher",
+            r"AppWidgetManager",
+            r"BLASTBufferQueue",
+            r"InsetsController",
+            r"FirebaseSessions",
+            r"ProfileInstaller",
+            r"ExtensionsLoader",
+            r"SurfaceSyncGroup",
+            r"DesktopModeFlags",
+            r"AppCompatDelegate",
+            r"AppWidgetProvider",
+            r"AppWidgetHostView",
+            r"ApplicationLoaders",
+            r"OplusGraphicsEvent",
+            r"OplusAppHeapManager",
+            r"FirebaseCrashlytics",
+            r"ViewRootImplExtImpl",
+            r"BufferQueueConsumer",
+            r"BufferQueueProducer",
+            r"OplusCursorFeedback",
+            r"FirebaseInitProvider",
+            r"OplusActivityManager",
+            r"CompatChangeReporter",
+            r"SessionsDependencies",
+            r"OplusInputMethodUtil",
+            r"BufferPoolAccessor.*?",
+            r"OplusViewDebugManager",
+            r"WindowOnBackDispatcher",
+            r"CompactWindowAppManager",
+            r"OplusScrollToTopManager",
+            r"ResourcesManagerExtImpl",
+            r"ScrollOptimizationHelper",
+            r"OplusActivityThreadExtImpl",
+            r"DynamicFramerate\s*\[.*?\]",
+            r"OplusViewDragTouchViewHelper",
+            r"OplusPredictiveBackController",
+            r"OplusSystemUINavigationGesture",
+            r"OplusInputMethodManagerInternal",
+            r"OplusCustomizeRestrictionManager",
+            r"oplus\.android\.OplusFrameworkFactoryImpl",
+        ];
+}
 
 fn get_console_width() -> i16 {
     terminal_size::terminal_size()
