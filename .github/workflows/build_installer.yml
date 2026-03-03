@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
 name: Build Installer
 run-name: ${{ github.workflow }} ${{ github.event.repository.updated_at}}
 
@@ -36,17 +38,20 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           components: "clippy, rustfmt"
 
+      - name: Setup Just
+        uses: extractions/setup-just@v3
+                    
       - name: Build
-        run: cargo build --release
+        run: just build-release
 
       - name: Run tests
-        run: cargo test --release
+        run: just test
 
       - name: Run Clippy
-        run: cargo clippy --release -- -D warnings
+        run: just lint
 
       - name: Run rustfmt check
-        run: cargo check --release
+        run: just fmt
 
       - name: Build Installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
