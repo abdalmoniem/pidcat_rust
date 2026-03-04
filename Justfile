@@ -11,6 +11,8 @@ alias rr := run-release
 alias i := install
 alias ri := reinstall
 
+TARGET_OS := os()
+
 [doc('List available recipes')]
 default:
     @just --list --unsorted
@@ -90,7 +92,10 @@ install: fmt lint
     echo
     echo $(installed_message) | ccze --raw-ansi 2>/dev/null || echo $(installed_message)
 
-    strip "$pidcat_exe" 2>/dev/null || echo "could not strip $pidcat_exe_basename"
+    if [ "$TARGET_OS" != "windows" ]; then
+        strip "$pidcat_exe" 2>/dev/null || echo "could not strip $pidcat_exe_basename"
+    fi
+
     file_info | ccze --raw-ansi 2>/dev/null || file_info
     ldd_info | ccze --raw-ansi 2>/dev/null || ldd_info
     du_info | ccze --raw-ansi 2>/dev/null || du_info
