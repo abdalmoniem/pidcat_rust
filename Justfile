@@ -67,8 +67,17 @@ run-release:
 [doc('Install the pidcat binary')]
 [group('install')]
 [script]
-install: fmt lint
-    cargo install --path .
+install: build-release
+    if [ "$TARGET_OS" != "windows" ]; then
+        cargo install --path .
+    else
+        rm -rf build/setup/Output/*
+        iscc build/setup/setup.iss
+
+        windows_setup_path=$(ls build/setup/Output/*.exe | tail -1)
+        powershell -NoLogo -NoProfile -Command \
+                "exit \$(Start-Process -Wait -PassThru -FilePath '$windows_setup_path' -ArgumentList '/VERYSILENT').ExitCode"
+    fi
 
     pidcat_exe="$(which pidcat)"
     pidcat_exe_basename="$(basename "$pidcat_exe")"
