@@ -11,7 +11,7 @@ on:
         value: ${{ jobs.build-installer.outputs.artifact_name }}
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["**"]
   schedule:
     - cron: "00 00 * * 5"
 
@@ -40,7 +40,7 @@ jobs:
 
       - name: Setup Just
         uses: extractions/setup-just@v3
-                    
+
       - name: Build
         run: just build-release
 
