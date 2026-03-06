@@ -2,13 +2,11 @@ use anyhow::Context;
 use anyhow::Error;
 use anyhow::Result;
 
-#[cfg(target_os = "windows")]
-use std::io::Error as IoError;
-
-#[cfg(target_os = "windows")]
-use std::io::ErrorKind as IoErrorKind;
-
 use std::path::PathBuf;
+use std::time::Instant;
+
+#[cfg(target_os = "windows")]
+use std::{fs::Metadata, fs::read_dir, io::Error as IoError, io::ErrorKind as IoErrorKind};
 
 use which::which;
 
@@ -31,141 +29,145 @@ fn cargo() -> Result<PathBuf> {
 }
 
 fn run(shell: &Shell, args: &[String]) -> Result<()> {
-    status(">> Running...");
+    let cmd = |cargo| {
+        status(">> Running...");
 
-    cargo()
-        .and_then(|cargo| {
-            cmd!(shell, "{cargo} run -- {args...}")
-                .quiet()
-                .run()
-                .map_err(Error::new)
-        })
-        .with_context(|| "failed to run!")
+        cmd!(shell, "{cargo} run -- {args...}")
+            .quiet()
+            .run()
+            .map_err(Error::new)
+    };
+
+    cargo().and_then(cmd).context("failed to run release!")
 }
 
 fn run_release(shell: &Shell, args: &[String]) -> Result<()> {
-    status(">> Running Release...");
+    let cmd = |cargo| {
+        status(">> Running Release...");
 
-    cargo()
-        .and_then(|cargo| {
-            cmd!(shell, "{cargo} run --release -- {args...}")
-                .quiet()
-                .run()
-                .map_err(Error::new)
-        })
-        .with_context(|| "failed to run release!")
+        cmd!(shell, "{cargo} run --release -- {args...}")
+            .quiet()
+            .run()
+            .map_err(Error::new)
+    };
+
+    cargo().and_then(cmd).context("failed to run release!")
 }
 
 fn clean(shell: &Shell) -> Result<()> {
-    status(">> Cleaning...");
+    let cmd = |(cargo, release)| {
+        match release {
+            true => status(">> Cleaning Release..."),
+            false => status(">> Cleaning..."),
+        }
+
+        let release_flag = if release { "--release" } else { "" };
+        cmd!(shell, "{cargo} clean {release_flag} --package pidcat")
+            .quiet()
+            .run()
+            .map_err(Error::new)
+    };
 
     cargo()
-        .and_then(|cargo| {
-            cmd!(shell, "{cargo} clean --package pidcat")
-                .quiet()
-                .run()
-                .map_err(Error::new)
-        })
-        .with_context(|| "failed to run clean!")?;
+        .map(|res| (res, false))
+        .and_then(cmd)
+        .context("failed to clean!")?;
 
     cargo()
-        .and_then(|cargo| {
-            cmd!(shell, "{cargo} clean --release --package pidcat")
-                .quiet()
-                .run()
-                .map_err(Error::new)
-        })
-        .with_context(|| "failed to clean!")
+        .map(|res| (res, true))
+        .and_then(cmd)
+        .context("failed to clean release!")
 }
 
 fn build(shell: &Shell) -> Result<()> {
-    status(">> Building...");
+    let cmd = |cargo| {
+        status(">> Building...");
 
-    cargo()
-        .and_then(|cargo| {
-            cmd!(shell, "{cargo} build")
-                .quiet()
-                .run()
-                .map_err(Error::new)
-        })
-        .with_context(|| "failed to build!")
+        cmd!(shell, "{cargo} build")
+            .quiet()
+            .run()
+            .map_err(Error::new)
+    };
+
+    cargo().and_then(cmd).context("failed to build release!")
 }
 
 fn build_release(shell: &Shell) -> Result<()> {
-    status(">> Building Release...");
+    let cmd = |cargo| {
+        status(">> Building Release...");
 
-    cargo()
-        .and_then(|cargo| {
-            cmd!(shell, "{cargo} build --release")
-                .quiet()
-                .run()
-                .map_err(Error::new)
-        })
-        .with_context(|| "failed to build release!")
+        cmd!(shell, "{cargo} build --release")
+            .quiet()
+            .run()
+            .map_err(Error::new)
+    };
+
+    cargo().and_then(cmd).context("failed to build release!")
 }
 
 #[cfg(target_os = "windows")]
 fn build_installer(shell: &Shell, iscc_path: Option<PathBuf>) -> Result<()> {
+    let cmd = |iscc| {
+        cmd!(shell, "{iscc} build/setup/setup.iss")
+            .quiet()
+            .run()
+            .map_err(Error::new)
+    };
     status(">> Building Installer...");
 
     iscc_path
         .map_or(which("iscc"), Ok)
         .context("Couldn't find 'iscc' executable")
-        .and_then(|iscc| {
-            cmd!(shell, "{iscc} build/setup/setup.iss")
-                .quiet()
-                .run()
-                .map_err(Error::new)
-        })
-        .with_context(|| "failed to build installer!")
+        .and_then(cmd)
+        .context("failed to build installer!")
 }
 
 #[cfg(not(target_os = "windows"))]
 fn install(shell: &Shell) -> Result<()> {
-    status(">> Installing pidcat...");
+    let cmd = |cargo| {
+        status(">> Installing pidcat...");
 
-    cargo()
-        .and_then(|cargo| {
-            cmd!(shell, "{cargo} install --path .")
-                .quiet()
-                .run()
-                .map_err(Error::new)
-        })
-        .with_context(|| "failed to install!")
+        cmd!(shell, "{cargo} install --path .")
+            .quiet()
+            .run()
+            .map_err(Error::new)
+    };
+
+    cargo().and_then(cmd).context("failed to install!")
 }
 
 #[cfg(target_os = "windows")]
 fn install(shell: &Shell, silent: bool) -> Result<()> {
-    std::fs::read_dir("build/setup/output")?
+    let cmd = |installer_exe| {
+        status(&format!(">> Installing {installer_exe:?}..."));
+
+        let silent_arg = if silent { "/verysilent" } else { "" };
+        cmd!(shell, "{installer_exe} {silent_arg}")
+            .quiet()
+            .run()
+            .map_err(Error::new)
+    };
+
+    let not_found_err = IoError::new(IoErrorKind::NotFound, "no setup files found!");
+    let max_pred = |metadata: Metadata| metadata.modified().ok();
+
+    read_dir("build/setup/output")
+        .context("setup output dir not found!")?
         .flatten()
         .filter(|entry| entry.path().is_file())
-        .max_by_key(|entry| {
-            entry
-                .metadata()
-                .ok()
-                .and_then(|metadata| metadata.modified().ok())
-        })
-        .ok_or(IoError::new(
-            IoErrorKind::NotFound,
-            "no installation files found!",
-        ))
+        .max_by_key(|entry| entry.metadata().ok().and_then(max_pred))
+        .ok_or(not_found_err)
         .context("failed to locate installation file!")
         .map(|entry| entry.path())
-        .and_then(|installer_exe| {
-            status(&format!(">> Installing {installer_exe:?}..."));
-
-            let silent_arg = if silent { "/verysilent" } else { "" };
-            cmd!(shell, "{installer_exe} {silent_arg}")
-                .quiet()
-                .run()
-                .map_err(Error::new)
-        })
-        .with_context(|| "failed to install!")
+        .and_then(cmd)
+        .context("failed to install!")
 }
 
 fn main() -> Result<()> {
     let args = CliArgs::parse_args();
     let shell = Shell::new()?;
+
+    let instant = Instant::now();
 
     match args.command {
         Command::Run { args } => run(&shell, &args),
@@ -217,5 +219,10 @@ fn main() -> Result<()> {
         Command::Reinstall => clean(&shell)
             .and_then(|_| build_release(&shell))
             .and_then(|_| install(&shell)),
-    }
+    }?;
+
+    let elapsed = instant.elapsed();
+    println!(">> Command took: {elapsed:?}");
+
+    Ok(())
 }
