@@ -1,0 +1,5 @@
+parallel-compiler = true
+
+[alias]
+x = "xtask"
+xtask = "run --release --package xtask --"

@@ -6,9 +6,9 @@ use clap_complete::generate;
 use colored::Color;
 use colored::Colorize;
 
-use itertools::Itertools;
-
 use is_terminal::IsTerminal;
+
+use itertools::Itertools;
 
 use lazy_static::lazy_static;
 
@@ -26,7 +26,6 @@ use regex::Regex;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::panic::PanicHookInfo;
 
 use std::fs::File;
 
@@ -38,11 +37,13 @@ use std::io::Read;
 use std::io::stdin;
 
 use std::panic;
+use std::panic::PanicHookInfo;
 
 use std::process::Command;
 use std::process::Stdio;
 use std::process::exit;
 use std::process::id;
+
 use std::sync::Mutex;
 
 use strip_ansi_escapes::strip;
@@ -1395,6 +1396,7 @@ fn main() {
     let mut adb_child = None;
 
     let args = &mut CliArgs::parse_args();
+
     let stdin = stdin();
     let base_adb_command = &get_adb_command(args);
     let logcat_command = ["logcat", "-v", "brief"].map(|item| item.to_string());

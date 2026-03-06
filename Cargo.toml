@@ -6,6 +6,12 @@ build = "build/build.rs"
 description = "A colorized Android logcat viewer with advanced filtering capabilities."
 authors = ["AbdElMoniem ElHifnawy"]
 
+[workspace]
+members = [
+  ".",
+  "build/xtask",
+]
+
 [dependencies]
 ctrlc = "3.5.2"
 regex = "1.12.3"
