@@ -2,6 +2,7 @@ use anyhow::Context;
 use anyhow::Error;
 use anyhow::Result;
 
+use std::env::var_os;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -23,8 +24,8 @@ fn status(msg: &str) {
 }
 
 fn cargo() -> Result<PathBuf> {
-    std::env::var_os("CARGO")
-        .map_or(which("cargo"), |exe| Ok(PathBuf::from(exe)))
+    var_os("CARGO")
+        .map_or(which("cargo"), |cargo_exe| Ok(PathBuf::from(cargo_exe)))
         .context("Couldn't find 'cargo' executable")
 }
 
@@ -38,7 +39,7 @@ fn run(shell: &Shell, args: &[String]) -> Result<()> {
             .map_err(Error::new)
     };
 
-    cargo().and_then(cmd).context("failed to run release!")
+    cargo().and_then(cmd).context("failed to run!")
 }
 
 fn run_release(shell: &Shell, args: &[String]) -> Result<()> {
@@ -89,7 +90,7 @@ fn build(shell: &Shell) -> Result<()> {
             .map_err(Error::new)
     };
 
-    cargo().and_then(cmd).context("failed to build release!")
+    cargo().and_then(cmd).context("failed to build!")
 }
 
 fn build_release(shell: &Shell) -> Result<()> {
@@ -164,17 +165,20 @@ fn install(shell: &Shell, silent: bool) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let args = CliArgs::parse_args();
+    let command = CliArgs::parse_args().command;
     let shell = Shell::new()?;
 
     let instant = Instant::now();
 
-    match args.command {
+    match command {
         Command::Run { args } => run(&shell, &args),
         Command::RunRelease { args } => run_release(&shell, &args),
+
         Command::Clean => clean(&shell),
+
         Command::Build => build(&shell),
         Command::BuildRelease => build_release(&shell),
+
         Command::Rebuild { dev, release } => clean(&shell)
             .and_then(|_| match dev || !release {
                 true => build(&shell),
@@ -221,8 +225,7 @@ fn main() -> Result<()> {
             .and_then(|_| install(&shell)),
     }?;
 
-    let elapsed = instant.elapsed();
-    println!(">> Command took: {elapsed:?}");
+    println!(">> Command took: {elapsed:?}", elapsed = instant.elapsed());
 
     Ok(())
 }
