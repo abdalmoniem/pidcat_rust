@@ -30,85 +30,90 @@ lint:
 [doc('Clean the build directory')]
 [group('build')]
 clean:
-    @cargo clean
+    @cargo xtask clean --profile=both
 
 [doc('Build the pidcat binary')]
 [group('build')]
 build: fmt lint
-    @cargo build
+    @cargo xtask build --profile=dev
 
 [doc('Build the pidcat release binary')]
 [group('build')]
 build-release: fmt lint
-    @cargo build --release
+    @cargo xtask build --profile=release
+
+[doc('Run the pidcat binary')]
+[group('build')]
+run args:
+    @cargo xtask run -- $args
+
+[doc('Run the pidcat release binary')]
+[group('build')]
+run-release args:
+    @cargo xtask run --profile=release -- $args
 
 [doc('Run all tests')]
 [group('test')]
 test:
-    @cargo test --workspace -- --include-ignored
+    @cargo test --workspace
 
 [doc('Run all tests using cargo nextest')]
 [group('test')]
 nextest:
     @cargo nextest run --no-fail-fast --no-output-indent --workspace \
-                       --run-ignored=all --final-status-level=all \
-                       --no-tests=warn --status-level=all
+                       --final-status-level=all --no-tests=warn \
+                       --status-level=all
 
-[doc('Run the pidcat binary')]
-[group('build')]
-run:
-    @cargo run
-
-[doc('Run the pidcat release binary')]
-[group('build')]
-run-release:
-    @cargo run --release
-
-[doc('Install the pidcat binary')]
+[doc('Install the application by running the generated installer')]
 [group('install')]
 [script]
-install: build-release
+install:
     if [ "$TARGET_OS" != "windows" ]; then
-        cargo install --path .
+        cargo xtask install
     else
-        rm -rf build/setup/Output/*
-        iscc build/setup/setup.iss
-
-        windows_setup_path=$(ls build/setup/Output/*.exe | tail -1)
-        powershell -NoLogo -NoProfile -Command \
-                "exit \$(Start-Process -Wait -PassThru -FilePath '$windows_setup_path' -ArgumentList '/VERYSILENT').ExitCode"
+        cargo xtask install --silent
     fi
 
     pidcat_exe="$(which pidcat)"
     pidcat_exe_basename="$(basename "$pidcat_exe")"
 
-    installed_message() {
-        echo "installed pidcat to "$pidcat_exe""
-    }
-    
-    file_info() {
-        file "$pidcat_exe"
-    }
-
-    ldd_info() {
-        ldd "$pidcat_exe"
-    }
-
-    du_info() {
-        du -hs --time --time-style=+'%a, %d/%b/%Y - %r' "$pidcat_exe"
-    }
-
     echo
-    echo $(installed_message) | ccze --raw-ansi 2>/dev/null || echo $(installed_message)
+    if command -v ccze >/dev/null 2>&1; then
+        just installed_message "$pidcat_exe" | ccze --raw-ansi
+    else
+        just installed_message "$pidcat_exe"
+    fi
 
     if [ "$TARGET_OS" != "windows" ]; then
         strip "$pidcat_exe" 2>/dev/null || echo "could not strip $pidcat_exe_basename"
     fi
 
-    file_info | ccze --raw-ansi 2>/dev/null || file_info
-    ldd_info | ccze --raw-ansi 2>/dev/null || ldd_info
-    du_info | ccze --raw-ansi 2>/dev/null || du_info
+    if command -v ccze >/dev/null 2>&1; then
+        just file_info "$pidcat_exe" | ccze --raw-ansi
+        just ldd_info  "$pidcat_exe" | ccze --raw-ansi
+        just du_info   "$pidcat_exe" | ccze --raw-ansi
+    else
+        just file_info "$pidcat_exe"
+        just ldd_info  "$pidcat_exe"
+        just du_info   "$pidcat_exe"
+    fi
 
 [doc('Perform a full rebuild, create the installer, and install the application')]
 [group('install')]
-reinstall: clean install
+reinstall: clean build-release install
+
+[private]
+installed_message pidcat_exe:
+    @echo "installed pidcat to "$pidcat_exe""
+
+[private]
+file_info pidcat_exe:
+    @file "$pidcat_exe"
+
+[private]
+ldd_info pidcat_exe:
+    @ldd "$pidcat_exe"
+
+[private]
+du_info pidcat_exe:
+    @du -hs --time --time-style=+'%a, %d/%b/%Y - %r' "$pidcat_exe"
