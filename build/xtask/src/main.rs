@@ -2,6 +2,12 @@ use anyhow::Context;
 use anyhow::Error;
 use anyhow::Result;
 
+use clap::error::DefaultFormatter as ClapFormatter;
+use clap::error::Error as ClapError;
+use clap::error::ErrorKind as ClapErrorKind;
+
+use scope_functions::Run;
+
 use std::env::var_os;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -15,6 +21,7 @@ use xshell::Shell;
 use xshell::cmd;
 use xtask::CliArgs;
 use xtask::Command;
+use xtask::Profile;
 
 /// Set terminal title to [msg]
 fn status(msg: &str) {
@@ -23,89 +30,76 @@ fn status(msg: &str) {
     println!("{msg}");
 }
 
+/// Get the cargo executable from the CARGO
+/// system environment variables or look for
+/// it in the system PATH variable
 fn cargo() -> Result<PathBuf> {
     var_os("CARGO")
         .map_or(which("cargo"), |cargo_exe| Ok(PathBuf::from(cargo_exe)))
         .context("Couldn't find 'cargo' executable")
 }
 
-fn run(shell: &Shell, args: &[String]) -> Result<()> {
-    let cmd = |cargo| {
-        status(">> Running...");
+/// Clean the build artifacts for the pidcat package
+fn clean(shell: &Shell, profile: &Profile) -> Result<()> {
+    let clean_cmd = |cargo| {
+        let dev = matches!(profile, Profile::Development | Profile::Both);
+        let release = matches!(profile, Profile::Release | Profile::Both);
 
-        cmd!(shell, "{cargo} run -- {args...}")
-            .quiet()
-            .run()
-            .map_err(Error::new)
-    };
+        if dev {
+            status(">> Cleaning...");
 
-    cargo().and_then(cmd).context("failed to run!")
-}
-
-fn run_release(shell: &Shell, args: &[String]) -> Result<()> {
-    let cmd = |cargo| {
-        status(">> Running Release...");
-
-        cmd!(shell, "{cargo} run --release -- {args...}")
-            .quiet()
-            .run()
-            .map_err(Error::new)
-    };
-
-    cargo().and_then(cmd).context("failed to run release!")
-}
-
-fn clean(shell: &Shell) -> Result<()> {
-    let cmd = |(cargo, release)| {
-        match release {
-            true => status(">> Cleaning Release..."),
-            false => status(">> Cleaning..."),
+            cmd!(shell, "{cargo} clean --package pidcat")
+                .quiet()
+                .run()
+                .map_err(Error::new)?;
         }
 
-        let release_flag = if release { "--release" } else { "" };
-        cmd!(shell, "{cargo} clean {release_flag} --package pidcat")
-            .quiet()
-            .run()
-            .map_err(Error::new)
+        if release {
+            status(">> Cleaning Release...");
+
+            cmd!(shell, "{cargo} clean --release --package pidcat")
+                .quiet()
+                .run()
+                .map_err(Error::new)?;
+        }
+
+        Ok(())
     };
 
-    cargo()
-        .map(|res| (res, false))
-        .and_then(cmd)
-        .context("failed to clean!")?;
-
-    cargo()
-        .map(|res| (res, true))
-        .and_then(cmd)
-        .context("failed to clean release!")
+    cargo().and_then(clean_cmd).context("failed to clean!")
 }
 
-fn build(shell: &Shell) -> Result<()> {
-    let cmd = |cargo| {
-        status(">> Building...");
+/// Build PidCat
+fn build(shell: &Shell, profile: &Profile) -> Result<()> {
+    let build_cmd = |cargo| {
+        let dev = matches!(profile, Profile::Development | Profile::Both);
+        let release = matches!(profile, Profile::Release | Profile::Both);
 
-        cmd!(shell, "{cargo} build")
-            .quiet()
-            .run()
-            .map_err(Error::new)
+        if dev {
+            status(">> Building...");
+
+            cmd!(shell, "{cargo} build")
+                .quiet()
+                .run()
+                .map_err(Error::new)?;
+        }
+
+        if release {
+            status(">> Building Release...");
+
+            cmd!(shell, "{cargo} build --release")
+                .quiet()
+                .run()
+                .map_err(Error::new)?;
+        }
+
+        Ok(())
     };
 
-    cargo().and_then(cmd).context("failed to build!")
+    cargo().and_then(build_cmd).context("failed to build!")
 }
 
-fn build_release(shell: &Shell) -> Result<()> {
-    let cmd = |cargo| {
-        status(">> Building Release...");
-
-        cmd!(shell, "{cargo} build --release")
-            .quiet()
-            .run()
-            .map_err(Error::new)
-    };
-
-    cargo().and_then(cmd).context("failed to build release!")
-}
-
+/// Build the Inno Setup Installer for PidCat
 #[cfg(target_os = "windows")]
 fn build_installer(shell: &Shell, iscc_path: Option<PathBuf>) -> Result<()> {
     let cmd = |iscc| {
@@ -123,6 +117,38 @@ fn build_installer(shell: &Shell, iscc_path: Option<PathBuf>) -> Result<()> {
         .context("failed to build installer!")
 }
 
+/// Run PidCat
+fn run(shell: &Shell, profile: &Profile, args: &[String]) -> Result<()> {
+    let cmd = |cargo| {
+        let run_profile = match profile {
+            Profile::Development => "",
+            Profile::Release => "--release",
+            Profile::Both => {
+                unreachable!("can not run both 'dev' and 'release' profiles! how did we get here!")
+            }
+        };
+        cmd!(shell, "{cargo} run {run_profile} -- {args...}")
+            .quiet()
+            .run()
+            .map_err(Error::new)
+    };
+
+    let clap_err = ClapError::<ClapFormatter>::raw(
+        ClapErrorKind::InvalidValue,
+        "either 'dev' or 'release' is allowed",
+    );
+    let both_prof_err = Err(clap_err).context("can not run both 'dev' and 'release' profiles!");
+
+    match profile {
+        Profile::Development => status(">> Running..."),
+        Profile::Release => status(">> Running Release..."),
+        Profile::Both => return both_prof_err,
+    }
+
+    cargo().and_then(cmd).context("failed to run!")
+}
+
+/// Install PidCat using cargo install
 #[cfg(not(target_os = "windows"))]
 fn install(shell: &Shell) -> Result<()> {
     let cmd = |cargo| {
@@ -137,6 +163,7 @@ fn install(shell: &Shell) -> Result<()> {
     cargo().and_then(cmd).context("failed to install!")
 }
 
+/// Install PidCat using the Inno Setup Installer
 #[cfg(target_os = "windows")]
 fn install(shell: &Shell, silent: bool) -> Result<()> {
     let cmd = |installer_exe| {
@@ -164,6 +191,7 @@ fn install(shell: &Shell, silent: bool) -> Result<()> {
         .context("failed to install!")
 }
 
+/// Main entry point for the xtask
 fn main() -> Result<()> {
     let command = CliArgs::parse_args().command;
     let shell = Shell::new()?;
@@ -171,41 +199,21 @@ fn main() -> Result<()> {
     let instant = Instant::now();
 
     match command {
-        Command::Run { args } => run(&shell, &args),
-        Command::RunRelease { args } => run_release(&shell, &args),
+        Command::Clean { profile } => clean(&shell, &profile),
 
-        Command::Clean => clean(&shell),
+        Command::Build { profile } => build(&shell, &profile),
 
-        Command::Build => build(&shell),
-        Command::BuildRelease => build_release(&shell),
-
-        Command::Rebuild { dev, release } => clean(&shell)
-            .and_then(|_| match dev || !release {
-                true => build(&shell),
-                false => Ok(()),
-            })
-            .and_then(|_| match release {
-                true => build_release(&shell),
-                false => Ok(()),
-            }),
+        Command::Rebuild { profile } => clean(&shell, &profile)?.run(|_| build(&shell, &profile)),
 
         #[cfg(target_os = "windows")]
         Command::BuildInstaller { iscc_path } => build_installer(&shell, iscc_path),
 
         #[cfg(target_os = "windows")]
-        Command::BuildAll {
-            iscc_path,
-            dev,
-            release,
-        } => match dev || !release {
-            true => build(&shell),
-            false => Ok(()),
+        Command::BuildAll { profile, iscc_path } => {
+            build(&shell, &profile)?.run(|_| build_installer(&shell, iscc_path))
         }
-        .and_then(|_| match release {
-            true => build_release(&shell),
-            false => Ok(()),
-        })
-        .and_then(|_| build_installer(&shell, iscc_path)),
+
+        Command::Run { profile, args } => run(&shell, &profile, &args),
 
         #[cfg(target_os = "windows")]
         Command::Install { silent } => install(&shell, silent),
@@ -214,18 +222,20 @@ fn main() -> Result<()> {
         Command::Install => install(&shell),
 
         #[cfg(target_os = "windows")]
-        Command::Reinstall { iscc_path, silent } => clean(&shell)
-            .and_then(|_| build_release(&shell))
-            .and_then(|_| build_installer(&shell, iscc_path))
-            .and_then(|_| install(&shell, silent)),
+        Command::Reinstall { iscc_path, silent } => clean(&shell, &Profile::Release)?
+            .run(|_| build(&shell, &Profile::Release))?
+            .run(|_| build_installer(&shell, iscc_path))?
+            .run(|_| install(&shell, silent)),
 
         #[cfg(not(target_os = "windows"))]
-        Command::Reinstall => clean(&shell)
-            .and_then(|_| build_release(&shell))
-            .and_then(|_| install(&shell)),
-    }?;
+        Command::Reinstall => clean(&shell, &Profile::Release)?
+            .run(|_| build(&shell, &Profile::Release))?
+            .run(|_| install(&shell)),
+    }?
+    .run(|_| {
+        println!();
+        println!(">> Command took: {elapsed:?}", elapsed = instant.elapsed());
 
-    println!(">> Command took: {elapsed:?}", elapsed = instant.elapsed());
-
-    Ok(())
+        Ok(())
+    })
 }

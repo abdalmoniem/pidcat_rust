@@ -1,0 +1,16 @@
+[package]
+edition = "2024"
+name = "xshell"
+version = "0.2.8"
+authors = ["AbdElMoniem ElHifnawy <hifnawy_moniem@hotmail.com>"]
+description = "Utilities for quick shell scripting in Rust"
+
+[lib]
+name = "xshell"
+path = "src/lib.rs"
+
+[dependencies.xshell-macros]
+version = "=0.2.7"
+
+[dev-dependencies.anyhow]
+version = "1.0.56"

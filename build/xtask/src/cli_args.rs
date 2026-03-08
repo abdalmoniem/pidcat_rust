@@ -2,12 +2,17 @@ use clap::ColorChoice;
 use clap::CommandFactory;
 use clap::Parser;
 use clap::Subcommand;
+use clap::ValueEnum;
+use clap::builder::PossibleValue;
 use clap::builder::styling::AnsiColor;
 use clap::builder::styling::Styles;
 use clap::error::ErrorKind;
 
 use scope_functions::Run;
 
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result;
 #[cfg(target_os = "windows")]
 use std::path::PathBuf;
 
@@ -26,38 +31,28 @@ pub struct CliArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Run the pidcat binary
-    Run {
-        /// Arguments to pass to the binary
-        #[arg(last = true)]
-        args: Vec<String>,
+    /// Clean build artifcats
+    Clean {
+        /// The clean profile
+        #[arg(short = 'p', long = "profile", ignore_case = true)]
+        #[arg(value_name = "PROFILE", default_value_t = Profile::Development)]
+        profile: Profile,
     },
-
-    /// Run the pidcat release binary
-    RunRelease {
-        /// Arguments to pass to the binary
-        #[arg(last = true)]
-        args: Vec<String>,
-    },
-
-    /// Clean generated files
-    Clean,
 
     /// Build the pidcat binary
-    Build,
-
-    /// Build the pidcat release binary
-    BuildRelease,
+    Build {
+        /// The build profile
+        #[arg(short = 'p', long = "profile", ignore_case = true)]
+        #[arg(value_name = "PROFILE", default_value_t = Profile::Development)]
+        profile: Profile,
+    },
 
     /// Rebuild the executable package
     Rebuild {
-        /// Build dev binary
-        #[arg(short = 'd', long = "dev", default_value_t = false)]
-        dev: bool,
-
-        /// Build release binary
-        #[arg(short = 'r', long = "release", default_value_t = false)]
-        release: bool,
+        /// The build profile
+        #[arg(short = 'p', long = "profile", ignore_case = true)]
+        #[arg(value_name = "PROFILE", default_value_t = Profile::Development)]
+        profile: Profile,
     },
 
     #[cfg(target_os = "windows")]
@@ -71,17 +66,26 @@ pub enum Command {
     #[cfg(target_os = "windows")]
     /// Build both the executable and installer packages
     BuildAll {
-        /// Build dev binary
-        #[arg(short = 'd', long = "dev", default_value_t = false)]
-        dev: bool,
-
-        /// Build release binary
-        #[arg(short = 'r', long = "release", default_value_t = false)]
-        release: bool,
+        /// The build profile
+        #[arg(short = 'p', long = "profile", ignore_case = true)]
+        #[arg(value_name = "PROFILE", default_value_t = Profile::Development)]
+        profile: Profile,
 
         /// Path to Inno Setup Compiler (ISCC) executable
         #[arg(short = 'p', long = "iscc-path", value_name = "ISCC_PATH")]
         iscc_path: Option<PathBuf>,
+    },
+
+    /// Run the pidcat binary
+    Run {
+        /// The build profile
+        #[arg(short = 'p', long = "profile", ignore_case = true)]
+        #[arg(value_name = "PROFILE", default_value_t = Profile::Development)]
+        profile: Profile,
+
+        /// Arguments to pass to the binary
+        #[arg(last = true)]
+        args: Vec<String>,
     },
 
     #[cfg(target_os = "windows")]
@@ -111,6 +115,14 @@ pub enum Command {
     #[cfg(not(target_os = "windows"))]
     /// Perform a full rebuild, create the installer, and install the application
     Reinstall,
+}
+
+#[derive(Eq, Ord, Copy, Debug, Clone, PartialEq, PartialOrd, Default)]
+pub enum Profile {
+    #[default]
+    Development,
+    Release,
+    Both,
 }
 
 impl CliArgs {
@@ -174,5 +186,30 @@ impl CliArgs {
                 std::process::exit(0);
             }
         }
+    }
+}
+
+impl Display for Profile {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let letter = match self {
+            Self::Development => "Development",
+            Self::Release => "Release",
+            Self::Both => "Both",
+        };
+        write!(formatter, "{letter}")
+    }
+}
+
+impl ValueEnum for Profile {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::Development, Self::Release, Self::Both]
+    }
+
+    fn to_possible_value(&self) -> Option<PossibleValue> {
+        Some(match self {
+            Self::Development => PossibleValue::new("dev").alias("d"),
+            Self::Release => PossibleValue::new("release").alias("r"),
+            Self::Both => PossibleValue::new("both").alias("b"),
+        })
     }
 }

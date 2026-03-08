@@ -3,12 +3,12 @@ name = "xtask"
 version = "0.1.0"
 edition = "2024"
 description = "Builds the PidCat executable"
-authors = ["AbdElMoniem ElHifnawy"]
+authors = ["AbdElMoniem ElHifnawy <hifnawy_moniem@hotmail.com>"]
 
 [dependencies]
 which = "8.0.0"
-xshell = "0.2.7"
 colored = "3.1.1"
 anyhow = "1.0.102"
 scope-functions = "1.1.0"
+xshell = { path = "../xshell" }
 clap = { version = "4.5.60", features = ["derive"] }

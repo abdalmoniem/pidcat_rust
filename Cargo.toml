@@ -4,11 +4,12 @@ edition = "2024"
 version = "1.2.0"
 build = "build/build.rs"
 description = "A colorized Android logcat viewer with advanced filtering capabilities."
-authors = ["AbdElMoniem ElHifnawy"]
+authors = ["AbdElMoniem ElHifnawy <hifnawy_moniem@hotmail.com>"]
 
 [workspace]
 members = [
   ".",
+  "build/xshell",
   "build/xtask",
 ]
 

@@ -1,0 +1,1 @@
+This is a modified fork of [xshell](https://github.com/matklad/xshell) that allows commands to inherit stdin, stdout and stderr of the parent terminal
