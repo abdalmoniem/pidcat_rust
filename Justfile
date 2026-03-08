@@ -74,6 +74,24 @@ install:
         cargo xtask install --silent
     fi
 
+    just post_install
+
+
+[doc('Perform a full rebuild, create the installer, and install the application')]
+[group('install')]
+[script]
+reinstall:
+    if [ "$TARGET_OS" != "windows" ]; then
+        cargo xtask reinstall
+    else
+        cargo xtask reinstall --silent
+    fi
+
+    just post_install
+
+[private]
+[script]
+post_install:
     pidcat_exe="$(which pidcat)"
     pidcat_exe_basename="$(basename "$pidcat_exe")"
 
@@ -97,10 +115,6 @@ install:
         just ldd_info  "$pidcat_exe"
         just du_info   "$pidcat_exe"
     fi
-
-[doc('Perform a full rebuild, create the installer, and install the application')]
-[group('install')]
-reinstall: clean build-release install
 
 [private]
 installed_message pidcat_exe:
