@@ -34,7 +34,7 @@ impl<T> ValueOrPanic<T> for Option<T> {
             Some(value) => value,
             None => {
                 let msg_str = msg.to_string().red().bold();
-                panic!("{}", msg_str)
+                panic!("{msg_str}")
             }
         }
     }
@@ -55,7 +55,7 @@ impl<T> ValueOrPanic<T> for Option<T> {
             Some(value) => value,
             None => {
                 let msg_str = style(msg);
-                panic!("{}", msg_str)
+                panic!("{msg_str}")
             }
         }
     }

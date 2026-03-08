@@ -41,8 +41,7 @@ use std::panic::PanicHookInfo;
 
 use std::process::Command;
 use std::process::Stdio;
-use std::process::exit;
-use std::process::id;
+use std::process::{self};
 
 use std::sync::Mutex;
 
@@ -411,7 +410,7 @@ fn get_token_color(token: &str, state: &mut State) -> Color {
     let color = *state
         .known_tokens
         .get(token)
-        .unwrap_or_panic(&format!("Unknown tag '{}' in known tags", token));
+        .unwrap_or_panic(&format!("Unknown tag '{token}' in known tags"));
 
     // Move to end of list (LRU logic)
     if let Some(pos) = state.token_colors.iter().position(|&col| col == color) {
@@ -676,7 +675,7 @@ fn is_matching_tag(tag: &str, tags: &[String]) -> bool {
             let pattern = if m_tag.starts_with('^') {
                 m_tag
             } else {
-                &format!("^{}", m_tag)
+                &format!("^{m_tag}")
             };
 
             let mut cache = REGEX_CACHE
@@ -756,16 +755,16 @@ fn write_started_process(
             .to_string();
 
         let started_process_message = format!(
-            " Process {} created for {}\n",
-            &started_package.color(Color::Yellow),
-            &started_target.color(Color::Yellow)
+            " Process {started_package} created for {started_target}\n",
+            started_package = &started_package.color(Color::Yellow),
+            started_target = &started_target.color(Color::Yellow)
         );
 
         let pugid_message = format!(
-            " PID: {}   UID: {}   GIDs: {}",
-            &started_pid.color(Color::Yellow),
-            &started_uid.color(Color::Yellow),
-            &started_gids.color(Color::Yellow)
+            " PID: {started_pid}   UID: {started_uid}   GIDs: {started_gids}",
+            started_pid = &started_pid.color(Color::Yellow),
+            started_uid = &started_uid.color(Color::Yellow),
+            started_gids = &started_gids.color(Color::Yellow)
         );
 
         if is_matching_package(
@@ -887,9 +886,9 @@ fn write_dead_process(
         let spaces = spaces.color(Color::Red).on_color(Color::Red).to_string();
 
         let dead_process_message = format!(
-            " Process {} (PID: {}) ended\n",
-            &dead_process_name.color(Color::Yellow),
-            &dead_pid.color(Color::Yellow)
+            " Process {dead_process_name} (PID: {dead_pid})o ended\n",
+            dead_process_name = &dead_process_name.color(Color::Yellow),
+            dead_pid = &dead_pid.color(Color::Yellow)
         );
 
         if state.pids_map.contains_key(&dead_pid) {
@@ -961,7 +960,11 @@ fn write_pid(
 
         if display_owner.len() > pid_width {
             display_owner.truncate(pid_width - *ELLIPSIS_COUNT);
-            display_owner = format!("{}{}", &display_owner, *ELLIPSIS);
+            display_owner = format!(
+                "{display_owner}{ellipsis}",
+                display_owner = &display_owner,
+                ellipsis = *ELLIPSIS
+            );
         }
 
         let pid_display = format!("{:width$}", display_owner, width = pid_width);
@@ -1013,7 +1016,11 @@ fn write_package_name(
 
         if display_pkg.len() > package_width {
             display_pkg.truncate(package_width - *ELLIPSIS_COUNT);
-            display_pkg = format!("{}{}", &display_pkg, *ELLIPSIS);
+            display_pkg = format!(
+                "{display_pkg}{ellipsis}",
+                display_pkg = &display_pkg,
+                ellipsis = *ELLIPSIS
+            );
         }
 
         let pkg_display = format!("{:width$}", display_pkg, width = package_width);
@@ -1062,7 +1069,11 @@ fn write_tag(
 
             if display_tag.len() > tag_width {
                 display_tag.truncate(tag_width - *ELLIPSIS_COUNT);
-                display_tag = format!("{}{}", &display_tag, *ELLIPSIS);
+                display_tag = format!(
+                    "{display_tag}{ellipsis}",
+                    display_tag = &display_tag,
+                    ellipsis = *ELLIPSIS
+                );
             }
 
             let tag_color = get_token_color(tag, state);
@@ -1149,10 +1160,10 @@ fn apply_message_rules(args: &CliArgs, message: &str) -> String {
         message = STRICT_MODE
             .replace(&message, |caps: &regex::Captures| {
                 format!(
-                    "{}{}{}",
-                    &caps[1],
-                    caps[2].color(Color::Red),
-                    caps[3].color(Color::Yellow)
+                    "{message}{duration}{unit}",
+                    message = &caps[1],
+                    duration = caps[2].color(Color::Red),
+                    unit = caps[3].color(Color::Yellow)
                 )
             })
             .to_string();
@@ -1162,11 +1173,11 @@ fn apply_message_rules(args: &CliArgs, message: &str) -> String {
         message = GC_COLOR
             .replace(&message, |caps: &regex::Captures| {
                 format!(
-                    "{}{}{}{}",
-                    &caps[1],
-                    caps[2].color(Color::Green),
-                    &caps[3],
-                    caps[4].color(Color::Yellow)
+                    "{freed}{free}{paused}{unit}",
+                    freed = &caps[1],
+                    free = caps[2].color(Color::Green),
+                    paused = &caps[3],
+                    unit = caps[4].color(Color::Yellow)
                 )
             })
             .to_string();
@@ -1359,20 +1370,20 @@ fn panic_hook(info: &PanicHookInfo) {
     };
 
     let err_msg = format!(
-        "{err_msg} => {}:{}:{}",
-        err_loc.file(),
-        err_loc.line(),
-        err_loc.column()
+        "{err_msg} => {file}:{line}:{column}",
+        file = err_loc.file(),
+        line = err_loc.line(),
+        column = err_loc.column()
     )
     .red()
     .bold();
 
     let thread_err_msg = format!(
-        "thread 'main' ({}) panicked at {}:{}:{}",
-        id(),
-        err_loc.file(),
-        err_loc.line(),
-        err_loc.column()
+        "thread 'main' ({pid}) panicked at {file}:{line}:{column}",
+        pid = process::id(),
+        file = err_loc.file(),
+        line = err_loc.line(),
+        column = err_loc.column()
     )
     .red()
     .bold();
@@ -1386,7 +1397,7 @@ fn ctrlc_handler() {
     let message = "Stopped by user.".cyan().bold();
 
     println!("{bin_name} {message}");
-    exit(0);
+    process::exit(0);
 }
 
 fn main() {
@@ -1416,7 +1427,7 @@ fn main() {
         let mut cmd = CliArgs::command();
         let bin_name = cmd.get_name().to_string();
         generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
-        std::process::exit(0);
+        process::exit(0);
     }
 
     if args.ignore_system_tags {
@@ -1487,7 +1498,7 @@ fn main() {
 
         eprintln!("{err_hdr}");
         eprintln!("{err_msg}");
-        exit(err_code);
+        process::exit(err_code);
     }
 
     match get_adb_devices(base_adb_command) {
@@ -1511,13 +1522,15 @@ fn main() {
             if stdin.is_terminal() {
                 eprintln!("{err_hdr}");
                 eprintln!("{err_msg}");
-                exit(err_code);
+                process::exit(err_code);
             }
         }
     }
 
     if !args.keep_logcat && stdin.is_terminal() {
-        let message = format!("Clearing logcat{}", *ELLIPSIS).cyan().bold();
+        let message = format!("Clearing logcat{ellipsis}", ellipsis = *ELLIPSIS)
+            .cyan()
+            .bold();
         println!("{message}");
 
         let clear_cmd = [
@@ -1621,15 +1634,18 @@ fn main() {
         let packages_str = packages_vec.join(", ");
 
         format!(
-            "Capturing logcat messages from packages: [{packages_str}]{}",
-            *ELLIPSIS
+            "Capturing logcat messages from packages: [{packages_str}]{ellipsis}",
+            ellipsis = *ELLIPSIS
         )
         .cyan()
         .bold()
     } else {
-        format!("Capturing all logcat messages{}", *ELLIPSIS)
-            .cyan()
-            .bold()
+        format!(
+            "Capturing all logcat messages{ellipsis}",
+            ellipsis = *ELLIPSIS
+        )
+        .cyan()
+        .bold()
     };
 
     println!("{message}");
@@ -1642,8 +1658,8 @@ fn main() {
                 Ok(exit_status) => {
                     if let Some(status) = exit_status {
                         let message = format!(
-                            "Child process {} exited with status: {status}",
-                            adb_child.id()
+                            "Child process {pid} exited with status: {status}",
+                            pid = adb_child.id()
                         )
                         .cyan()
                         .bold();
@@ -1654,9 +1670,8 @@ fn main() {
                 }
                 Err(err) => {
                     let message = format!(
-                        "Failed to wait for child process {}: {}",
-                        adb_child.id(),
-                        err
+                        "Failed to wait for child process {pid}: {err}",
+                        pid = adb_child.id()
                     )
                     .red()
                     .bold();
@@ -1684,7 +1699,7 @@ fn main() {
                     .red()
                     .bold();
 
-                let err_msg = format!("Error reading stream:\n{}", err).red().bold();
+                let err_msg = format!("Error reading stream:\n{err}").red().bold();
                 eprintln!("{err_msg}");
             }
 
@@ -1698,12 +1713,15 @@ fn main() {
     }
 
     if let LogSource::Process(mut adb_child) = log_source {
-        let kill_fail_message = format!("Failed to kill child process {}", adb_child.id())
+        let kill_fail_message = format!("Failed to kill child process {pid}", pid = adb_child.id())
             .red()
             .bold();
-        let wait_fail_message = format!("Failed to wait for child process {}", adb_child.id())
-            .red()
-            .bold();
+        let wait_fail_message = format!(
+            "Failed to wait for child process {pid}",
+            pid = adb_child.id()
+        )
+        .red()
+        .bold();
 
         adb_child.kill().unwrap_or_panic(&kill_fail_message);
         adb_child.wait().unwrap_or_panic(&wait_fail_message);

@@ -16,6 +16,8 @@ use std::fmt::Result;
 #[cfg(target_os = "windows")]
 use std::path::PathBuf;
 
+use std::process;
+
 #[derive(Debug, Parser)]
 #[command(color = ColorChoice::Auto)]
 #[command(name = CliArgs::get_name())]
@@ -175,15 +177,16 @@ impl CliArgs {
         match Self::try_parse() {
             Ok(args) => args,
             Err(err) => {
-                if err.kind() == ErrorKind::MissingSubcommand {
-                    Self::command()
+                match err.kind() == ErrorKind::MissingSubcommand {
+                    true => Self::command()
                         .render_long_help()
-                        .run(|help| println!("{ansi_help}", ansi_help = help.ansi()));
-                } else {
-                    err.exit();
+                        .run(|help| help.ansi().to_string())
+                        .run(|help| println!("{help}")),
+
+                    false => err.exit(),
                 }
 
-                std::process::exit(0);
+                process::exit(0);
             }
         }
     }

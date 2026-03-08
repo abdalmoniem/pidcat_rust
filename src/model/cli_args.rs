@@ -69,7 +69,7 @@ pub struct CliArgs {
         long = "completions",
         value_name = "SHELL",
         help_heading = ABOUT_OPTIONS,
-        help = format!("Generate shell completions for {}", "[SHELL]".cyan().bold()),
+        help = format!("Generate shell completions for {metavar}", metavar = "[SHELL]".cyan().bold()),
     )]
     pub completions: Option<Shell>,
 
@@ -115,7 +115,7 @@ pub struct CliArgs {
         default_value = None,
         value_name = "DEVICE_SERIAL",
         help_heading = DEVICE_OPTIONS,
-        help = format!("Use {} for log input", "[DEVICE_SERIAL]".cyan().bold()),
+        help = format!("Use {metavar} for log input", metavar = "[DEVICE_SERIAL]".cyan().bold()),
     )]
     pub device_serial: Option<String>,
 
@@ -216,7 +216,7 @@ pub struct CliArgs {
         value_name = "REGEX",
         default_value = None,
         help_heading = FILTERING_OPTIONS,
-        help = format!("Filter output messages using the specified {}", "[REGEX]".cyan().bold()),
+        help = format!("Filter output messages using the specified {metavar}", metavar = "[REGEX]".cyan().bold()),
     )]
     pub regex: Option<String>,
 
@@ -320,7 +320,7 @@ pub struct CliArgs {
         default_value = None,
         value_name = "FILE_PATH",
         help_heading = OUTPUT_OPTIONS,
-        help = format!("Save output to {}", "[FILE_PATH]".cyan().bold()),
+        help = format!("Save output to {metavar}", metavar = "[FILE_PATH]".cyan().bold()),
     )]
     pub output_path: Option<String>,
 }
@@ -344,7 +344,7 @@ impl CliArgs {
         let version = Self::get_version();
         let description = env!("CARGO_PKG_DESCRIPTION");
 
-        format!("{} {}\n{}", bin_name, version, description)
+        format!("{bin_name} {version}\n{description}")
     }
 
     fn get_name() -> &'static str {
@@ -360,7 +360,7 @@ impl CliArgs {
     fn get_version() -> &'static str {
         let version = env!("CARGO_PKG_VERSION");
 
-        format!("v{}", version).leak()
+        format!("v{version}").leak()
     }
 
     fn get_long_version() -> &'static str {
@@ -368,7 +368,7 @@ impl CliArgs {
         let author = env!("CARGO_PKG_AUTHORS");
         let description = env!("CARGO_PKG_DESCRIPTION");
 
-        format!("{}\n{}\nAuthor: {}", version, description, author).leak()
+        format!("{version}\n{description}\nAuthor: {author}").leak()
     }
 
     pub fn parse_args() -> Self {

@@ -79,9 +79,9 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &*self.kind {
             ErrorKind::CurrentDir { err, path } => {
-                let suffix = path
-                    .as_ref()
-                    .map_or(String::new(), |path| format!(" `{}`", path.display()));
+                let suffix = path.as_ref().map_or(String::new(), |path| {
+                    format!(" `{path}`", path = path.display())
+                });
                 write!(f, "failed to get current directory{suffix}: {err}")
             }
             ErrorKind::Var { err, var } => {

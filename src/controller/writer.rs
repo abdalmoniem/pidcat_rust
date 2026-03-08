@@ -67,12 +67,12 @@ impl Writer {
     }
 
     pub fn write(&mut self, text: &str) {
-        let err_msg = format!("Failed to write to {}", self.target);
+        let err_msg = format!("Failed to write to {target}", target = self.target);
         self.target.write(text.as_bytes()).unwrap_or_panic(&err_msg);
     }
 
     pub fn flush(&mut self) {
-        let err_msg = format!("Failed to flush {}", self.target);
+        let err_msg = format!("Failed to flush {target}", target = self.target);
         self.target.flush().unwrap_or_panic(&err_msg);
     }
 }

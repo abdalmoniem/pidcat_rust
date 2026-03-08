@@ -627,7 +627,7 @@ impl Shell {
         let mut n_try = 0u32;
         loop {
             let cnt = CNT.fetch_add(1, Ordering::Relaxed);
-            let path = base.join(format!("xshell-tmp-dir-{}", cnt));
+            let path = base.join(format!("xshell-tmp-dir-{cnt}"));
             match fs::create_dir(&path) {
                 Ok(()) => return Ok(TempDir { path }),
                 Err(err) if n_try == 1024 => return Err(Error::new_create_dir(err, path)),
@@ -797,14 +797,14 @@ impl fmt::Display for CmdData {
             return write!(f, "<secret>");
         }
 
-        write!(f, "{}", self.prog.display())?;
+        write!(f, "{prog}", prog = self.prog.display())?;
         for arg in &self.args {
             // TODO: this is potentially not copy-paste safe.
             let arg = arg.to_string_lossy();
             if arg.chars().any(|it| it.is_ascii_whitespace()) {
-                write!(f, " \"{}\"", arg.escape_default())?
+                write!(f, " \"{arg}\"", arg = arg.escape_default())?
             } else {
-                write!(f, " {}", arg)?
+                write!(f, " {arg}", arg = arg)?
             };
         }
         Ok(())
@@ -987,7 +987,7 @@ impl<'a> Cmd<'a> {
     /// behaviors can be overridden by using various builder methods of the [`Cmd`].
     pub fn run(&self) -> Result<()> {
         if !self.data.quiet {
-            eprintln!("$ {}", self);
+            eprintln!("$ {self}");
         }
         self.output_impl(false, false).map(|_| ())
     }

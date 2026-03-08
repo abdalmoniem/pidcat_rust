@@ -47,7 +47,7 @@ impl Display for LogLevel {
             Self::ERROR => "E",
             Self::FATAL => "F",
         };
-        write!(formatter, "{}", letter)
+        write!(formatter, "{letter}")
     }
 }
 

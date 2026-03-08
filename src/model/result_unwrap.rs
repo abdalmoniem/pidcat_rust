@@ -39,7 +39,7 @@ where
                 let msg_str = msg.to_string().red().bold();
                 let err_str = format!("{:?}", err).red().bold();
 
-                panic!("{}\n{}", msg_str, err_str)
+                panic!("{msg_str}\n{err_str}")
             }
         }
     }
@@ -62,7 +62,7 @@ where
                 let msg_str = style(msg);
                 let err_str = style(&format!("{:?}", err));
 
-                panic!("{}\n{}", msg_str, err_str)
+                panic!("{msg_str}\n{err_str}")
             }
         }
     }

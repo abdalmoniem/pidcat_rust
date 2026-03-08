@@ -79,11 +79,11 @@ fn main() {
         };
 
         error!(
-            "thread 'main' ({}) panicked at {}:{}:{}",
-            process::id(),
-            err_loc.file(),
-            err_loc.line(),
-            err_loc.column()
+            "thread 'main' ({pid}) panicked at {file}:{line}:{column}",
+            pid = process::id(),
+            file = err_loc.file(),
+            line = err_loc.line(),
+            column = err_loc.column()
         );
 
         error!("{err_msg}");
@@ -95,7 +95,7 @@ fn main() {
     const VERSION: &str = env!("CARGO_PKG_VERSION");
     const SETUP_PATH: &str = "build/setup/setup.iss";
 
-    info!("CARGO_PKG_VERSION: {}", VERSION);
+    info!("CARGO_PKG_VERSION: {VERSION}");
 
     match read_to_string(SETUP_PATH) {
         Ok(content) => {
@@ -107,7 +107,7 @@ fn main() {
             let mut match_index = None;
 
             let defined_version = "#define AppVersion";
-            let new_line = format!("{} \"{}\"", defined_version, VERSION);
+            let new_line = format!("{defined_version} \"{VERSION}\"");
 
             for (index, line) in lines.iter().enumerate() {
                 if line.contains(defined_version) {
@@ -127,37 +127,29 @@ fn main() {
                 && updated
             {
                 if let Err(err) = write(SETUP_PATH, lines.join("\r\n")) {
-                    panic!("Failed to write updated setup file: {}", err);
+                    panic!("Failed to write updated setup file: {err}");
                 }
 
-                info!(
-                    "Updated AppVersion to {} in {}:{}",
-                    VERSION,
-                    SETUP_PATH,
-                    match_index + 1
-                );
+                let match_index = match_index + 1;
+                info!("Updated AppVersion to {VERSION} in {SETUP_PATH}:{match_index}");
             } else if let Some(match_index) = match_index {
-                note!(
-                    "AppVersion is already set to {} in {}:{}",
-                    VERSION,
-                    SETUP_PATH,
-                    match_index + 1
-                );
+                let match_index = match_index + 1;
+                note!("AppVersion is already set to {VERSION} in {SETUP_PATH}:{match_index}");
             } else {
                 let err = Error::from(ErrorKind::NotFound);
-                let err_message = format!("'AppVersion' was NOT defined in {}", SETUP_PATH);
+                let err_message = format!("'AppVersion' was NOT defined in {SETUP_PATH}");
 
-                panic!("{}: {}", err_message, err);
+                panic!("{err_message}: {err}");
             }
         }
 
-        Err(err) => panic!("Failed to read setup file: {}", err),
+        Err(err) => panic!("Failed to read setup file: {err}"),
     }
 
     let manifest_result =
         embed_resource::compile("resources.rc", embed_resource::NONE).manifest_optional();
 
     if let Err(err) = manifest_result {
-        warn!("Failed to embed resources: {}", err);
+        warn!("Failed to embed resources: {err}");
     }
 }
