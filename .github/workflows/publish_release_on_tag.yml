@@ -30,25 +30,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get Previous Tag
-        id: get-previous-tag
+      - name: Get Git Cliff Body Template
+        id: git-cliff-body-template
         run: |
-          $tag = git describe --tags --abbrev=0 HEAD~1 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            $tag = git rev-list --max-parents=0 HEAD
-          }
+          $content = cat -raw cliff_body_ci.tera
 
-          echo "previous_tag=$tag" >> $env:GITHUB_OUTPUT
+          "content<<EOF" >> $env:GITHUB_OUTPUT
+          $content >> $env:GITHUB_OUTPUT
+          "EOF" >> $env:GITHUB_OUTPUT
 
       - name: Generate Changelog
         id: generate-changelog
-        uses: mikepenz/release-changelog-builder-action@v6.0.1
+        uses: orhun/git-cliff-action@v4
+        env:
+          BODY_CONTENT: ${{ steps.git-cliff-body-template.outputs.content }}
         with:
-          mode: "COMMIT"
-          fromTag: ${{ steps.get-previous-tag.outputs.previous_tag }}
-          toTag: ${{ github.ref_name }}
-          token: ${{ secrets.RELEASE_GITHUB_TOKEN }}
-          configuration: "changelog_config.json"
+          config: cliff.toml
+          args: --latest --strip=all --body="$BODY_CONTENT"
 
       - name: Download Artifact
         id: download-artifact
@@ -73,6 +71,6 @@ jobs:
           make_latest: true
           overwrite: true
           promote: true
-          body: ${{ steps.generate-changelog.outputs.changelog }}
+          body: ${{ steps.generate-changelog.outputs.content }}
           release_name: ${{ github.ref_name }}
           repo_token: ${{ secrets.RELEASE_GITHUB_TOKEN }}

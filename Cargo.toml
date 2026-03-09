@@ -1,7 +1,7 @@
 [package]
 name = "pidcat"
 edition = "2024"
-version = "1.2.0"
+version = "1.2.1"
 build = "build/build.rs"
 description = "A colorized Android logcat viewer with advanced filtering capabilities."
 authors = ["AbdElMoniem ElHifnawy <hifnawy_moniem@hotmail.com>"]

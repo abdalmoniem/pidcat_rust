@@ -89,6 +89,34 @@ reinstall:
 
     just post_install
 
+[doc('shows changelog for tag')]
+[arg('tag', help='the tag to show changelog for')]
+[group('changelog')]
+tag_changelog tag:
+    @git-cliff --body="$(cat cliff_body.tera)" "$(git describe --tags --abbrev=0 $tag^ 2>/dev/null || git rev-list --max-parents=0 HEAD)..$tag"
+
+[doc('shows changelog for all tagged commits')]
+[group('changelog')]
+tags_changelog:
+    @git-cliff --body="$(cat cliff_body.tera)" "$(git rev-list --max-parents=0 HEAD)..$(git describe --tags --abbrev=0)"
+
+[doc('shows changelog for untagged commits')]
+[group('changelog')]
+unreleased_changelog:
+    @git-cliff --body="$(cat cliff_body.tera)" "$(git describe --tags --abbrev=0)..HEAD"
+
+[doc('shows changelog for all commits')]
+[group('changelog')]
+all_changelog:
+    @git-cliff --body="$(cat cliff_body.tera)"
+
+[doc('updates CHANGELOG.md with changelog from all tagged commits')]
+[group('changelog')]
+update_changelog:
+    @git-cliff --body="$(cat cliff_body.tera)" "$(git rev-list --max-parents=0 HEAD)..$(git describe --tags --abbrev=0)" | tee CHANGELOG.md
+    @echo
+    @echo "changelog written to '$(realpath CHANGELOG.md)'!"
+
 [private]
 [script]
 post_install:
