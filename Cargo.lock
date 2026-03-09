@@ -370,6 +370,7 @@ dependencies = [
  "itertools",
  "lazy_static",
  "regex",
+ "scope-functions",
  "strip-ansi-escapes",
  "terminal_size",
 ]

@@ -1,4 +1,6 @@
 use build_print::custom_println;
+use scope_functions::Apply;
+use scope_functions::Run;
 
 use std::fs::read_to_string;
 use std::fs::write;
@@ -15,7 +17,7 @@ use std::process;
 /// **`INFO:`** in **`green`**.
 macro_rules! info {
     ($($arg:tt)+) => {
-        custom_println!("INFO:", green, $($arg)+);
+        custom_println!("INFO:", green, $($arg)+)
     }
 }
 
@@ -25,7 +27,7 @@ macro_rules! info {
 /// **`WARNING:`** in **`yellow`**.
 macro_rules! warn {
     ($($arg:tt)+) => {
-        custom_println!("WARN:", yellow, $($arg)+);
+        custom_println!("WARN:", yellow, $($arg)+)
     }
 }
 
@@ -35,7 +37,7 @@ macro_rules! warn {
 /// **`ERROR:`** in **`red`**.
 macro_rules! error {
     ($($arg:tt)+) => {
-        custom_println!("ERROR:", red, $($arg)+);
+        custom_println!("ERROR:", red, $($arg)+)
     }
 }
 
@@ -45,7 +47,7 @@ macro_rules! error {
 /// **`NOTE:`** in **`cyan`**.
 macro_rules! note {
     ($($arg:tt)+) => {
-        custom_println!("NOTE:", cyan, $($arg)+);
+        custom_println!("NOTE:", cyan, $($arg)+)
     }
 }
 
@@ -89,11 +91,14 @@ fn main() {
         error!("{err_msg}");
     }));
 
-    println!("cargo:rerun-if-changed=Cargo.toml");
-    println!("cargo:rerun-if-changed=resources.rc");
-
     const VERSION: &str = env!("CARGO_PKG_VERSION");
+    const CARGO_TOML: &str = "Cargo.toml";
+    const RESOURCES_RC: &str = "resources.rc";
     const SETUP_PATH: &str = "build/setup/setup.iss";
+
+    println!("cargo:rerun-if-changed={CARGO_TOML}");
+    println!("cargo:rerun-if-changed={RESOURCES_RC}");
+    println!("cargo:rerun-if-changed={SETUP_PATH}");
 
     info!("CARGO_PKG_VERSION: {VERSION}");
 
@@ -103,53 +108,42 @@ fn main() {
                 .lines()
                 .map(|str| str.to_string())
                 .collect::<Vec<_>>();
-            let mut updated = false;
-            let mut match_index = None;
 
-            let defined_version = "#define AppVersion";
-            let new_line = format!("{defined_version} \"{VERSION}\"");
+            let ver_def = "#define AppVersion";
+            let new_ver = format!("{ver_def} \"{VERSION}\"");
 
-            for (index, line) in lines.iter().enumerate() {
-                if line.contains(defined_version) {
-                    match_index = Some(index);
-                    break;
-                }
-            }
+            let index = match lines.iter().position(|line| line.contains(ver_def)) {
+                Some(index) => index,
+                None => Error::from(ErrorKind::NotFound)
+                    .run(|err| panic!("'AppVersion' was NOT defined in {SETUP_PATH}: {err}")),
+            };
 
-            if let Some(index) = match_index
-                && lines[index].trim() != new_line
-            {
-                lines[index] = new_line;
-                updated = true;
-            }
+            let line_number = index + 1;
 
-            if let Some(match_index) = match_index
-                && updated
-            {
-                if let Err(err) = write(SETUP_PATH, lines.join("\r\n")) {
-                    panic!("Failed to write updated setup file: {err}");
-                }
+            let updated_msg =
+                format!("Updated AppVersion to {VERSION} in {SETUP_PATH}:{line_number}");
+            let already_updated_msg =
+                format!("AppVersion is already set to {VERSION} in {SETUP_PATH}:{line_number}");
 
-                let match_index = match_index + 1;
-                info!("Updated AppVersion to {VERSION} in {SETUP_PATH}:{match_index}");
-            } else if let Some(match_index) = match_index {
-                let match_index = match_index + 1;
-                note!("AppVersion is already set to {VERSION} in {SETUP_PATH}:{match_index}");
-            } else {
-                let err = Error::from(ErrorKind::NotFound);
-                let err_message = format!("'AppVersion' was NOT defined in {SETUP_PATH}");
-
-                panic!("{err_message}: {err}");
+            match lines[index].trim() != new_ver {
+                true => lines
+                    .apply_mut(|lines| lines[index] = new_ver)
+                    .run(|lines| write(SETUP_PATH, lines.join("\r\n")))
+                    .run(|res| match res {
+                        Ok(_) => info!("{updated_msg}"),
+                        Err(err) => panic!("Failed to write updated setup file: {err}"),
+                    }),
+                false => note!("{already_updated_msg}"),
             }
         }
 
         Err(err) => panic!("Failed to read setup file: {err}"),
     }
 
-    let manifest_result =
-        embed_resource::compile("resources.rc", embed_resource::NONE).manifest_optional();
-
-    if let Err(err) = manifest_result {
-        warn!("Failed to embed resources: {err}");
-    }
+    embed_resource::compile(RESOURCES_RC, embed_resource::NONE)
+        .manifest_optional()
+        .run(|res| match res {
+            Ok(_) => info!("Manifest data embedded succesfully!"),
+            Err(err) => warn!("Failed to embed resources: {err}"),
+        });
 }
