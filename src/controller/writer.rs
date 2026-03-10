@@ -4,6 +4,7 @@ use std::fmt::Result as FmtResult;
 
 use std::fs::File;
 
+use std::io::BufWriter;
 use std::io::Result;
 use std::io::Stdout;
 use std::io::Write;
@@ -13,8 +14,8 @@ use crate::ValueOrPanic;
 
 #[derive(Debug)]
 enum WriterTarget {
-    Console(Stdout),
-    File(File),
+    Console(BufWriter<Stdout>),
+    File(BufWriter<File>),
 }
 
 impl Display for WriterTarget {
@@ -54,7 +55,7 @@ impl Writer {
         Self {
             width,
             show_colors,
-            target: WriterTarget::Console(stdout()),
+            target: WriterTarget::Console(BufWriter::new(stdout())),
         }
     }
 
@@ -62,7 +63,7 @@ impl Writer {
         Self {
             width: -1,
             show_colors: false,
-            target: WriterTarget::File(file),
+            target: WriterTarget::File(BufWriter::new(file)),
         }
     }
 
