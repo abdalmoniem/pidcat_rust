@@ -732,7 +732,6 @@ fn write_token(
         };
 
         writer.write(&token);
-        writer.flush();
     }
 
     local_header
@@ -1357,6 +1356,8 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         level_foreground,
         level_background,
     );
+
+    writers.iter_mut().for_each(Writer::flush);
 }
 
 fn panic_hook(info: &PanicHookInfo) {

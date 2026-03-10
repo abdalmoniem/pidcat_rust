@@ -5,6 +5,7 @@ alias l := lint
 alias c := clean
 alias b := build
 alias br := build-release
+alias bi := build-installer
 alias t := test
 alias r := run
 alias rr := run-release
@@ -41,6 +42,18 @@ build: fmt lint
 [group('build')]
 build-release: fmt lint
     @cargo xtask build --profile=release
+
+[doc('Build the installer using Inno Setup Compiler')]
+[group('build')]
+build-installer:
+    @cargo xtask build-installer
+
+[arg('profile', help='the pidcat binary build profile')]
+[doc('Perform a full rebuild and create the installer')]
+[group('build')]
+[windows]
+build-all profile:
+    @cargo xtask build-all --profile=$profile
 
 [doc('Run the pidcat binary')]
 [group('build')]
