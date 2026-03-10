@@ -97,7 +97,7 @@ tag_changelog tag:
 [doc('shows changelog for all tagged commits')]
 [group('changelog')]
 tags_changelog:
-    @git-cliff --body="$(cat cliff_body.tera)" "$(git rev-list --max-parents=0 HEAD)..$(git describe --tags --abbrev=0)"
+    @git-cliff --body="$(cat cliff_body.tera)" --tag "$(git describe --tags --abbrev=0)"
 
 [doc('shows changelog for untagged commits')]
 [group('changelog')]
@@ -112,7 +112,7 @@ all_changelog:
 [doc('updates CHANGELOG.md with changelog from all tagged commits')]
 [group('changelog')]
 update_changelog:
-    @git-cliff --body="$(cat cliff_body.tera)" "$(git rev-list --max-parents=0 HEAD)..$(git describe --tags --abbrev=0)" | tee CHANGELOG.md
+    @git-cliff --body="$(cat cliff_body.tera)" --tag "$(git describe --tags --abbrev=0)" | tee CHANGELOG.md
     @echo
     @echo "changelog written to '$(realpath CHANGELOG.md)'!"
 

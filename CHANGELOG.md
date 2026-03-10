@@ -1,75 +1,74 @@
-
 # [1.2.1] - Mon, 09/Mar/2026
 
 ## ♻️ Refactors
-- Code refactoring
-- **(xtask)** Code refactoring
-- **(xtask)** Code refactoring
-- Code refactoring and improvements
-- **(build.rs)** Refactor `build.rs`
+- (a14eb9) Code refactoring
+- (e52aea) **(xtask)** Code refactoring
+- (de1a42) **(xtask)** Code refactoring
+- (db6890) Code refactoring and improvements
+- (6f061e) **(build.rs)** Refactor `build.rs`
 
 ## 🎨 Code Style
-- Fix cargo format issues
+- (0bd7dc) Fix cargo format issues
 
 ## 🛠️ Maintenance
-- Add Justfile
-- Use Just to build the executable in github actions
-- **(Justfile)** Remove strip from windows targets
-- **(Justfile)** Invoke inno-setup installer on windows targets
-- **(xtask)** Add xtask workspace to manage the build/install system
-- **(build_installer)** Allow ci on non-main branches
-- **(changelogs)** Add CHANGELOG.md
-- **(xshell)** Add custom xshell fork
-- **(Justfile)** Update Justfile to use xtask
-- **(Justfile)** Change reinstall recipe to use xtask
-- New app icon
+- (dde6eb) Add Justfile
+- (12bcce) Use Just to build the executable in github actions
+- (a552e2) **(Justfile)** Remove strip from windows targets
+- (0fc452) **(Justfile)** Invoke inno-setup installer on windows targets
+- (cc43c4) **(xtask)** Add xtask workspace to manage the build/install system
+- (36ba78) **(build_installer)** Allow ci on non-main branches
+- (291ce1) **(changelogs)** Add CHANGELOG.md
+- (09b9ee) **(xshell)** Add custom xshell fork
+- (ebd784) **(Justfile)** Update Justfile to use xtask
+- (d2ea77) **(Justfile)** Change reinstall recipe to use xtask
+- (b70e68) New app icon
 ---
 # [1.2.0] - Wed, 25/Feb/2026
 
 ## 🚀 Features
-- Add shell completions
+- (73dced) Add shell completions
 
 ## 🐛 Bug Fixes
-- Panic due to adb server not started
+- (0b4075) Panic due to adb server not started
 
 ## ♻️ Refactors
-- Renamed makefile.toml to Makefile.toml
+- (c64875) Renamed makefile.toml to Makefile.toml
 
 ## 🛠️ Maintenance
-- Add helix editor config
-- Add git-cliff configuration
+- (cf4054) Add helix editor config
+- (c1c6cf) Add git-cliff configuration
 ---
 # [1.1.3] - Fri, 23/Jan/2026
 
 ## 🚀 Features
-- Re-introduce reading logs from file
+- (aa53f3) Re-introduce reading logs from file
 
 ## 🐛 Bug Fixes
-- Fixed ansi color codes showing in output files
-- Writer not using write function from WriterTarget
-- Fix token color skipping
+- (ab55c6) Fixed ansi color codes showing in output files
+- (62c417) Writer not using write function from WriterTarget
+- (5ad4c5) Fix token color skipping
 
 ## ⚡ Performance Improvements
-- Optimize `write_log_line` performance
+- (597101) Optimize `write_log_line` performance
 
 ## ♻️ Refactors
-- Code refactoring and bug fixes
-- Code refactoring
-- Code refactoring and bug fixes
+- (607b03) Code refactoring and bug fixes
+- (ada9d5) Code refactoring
+- (a4f288) Code refactoring and bug fixes
 
 ## 🛠️ Maintenance
-- Use github outputs in publish_release_on_tag.yml
-- Improve build system
+- (985781) Use github outputs in publish_release_on_tag.yml
+- (607f5b) Improve build system
 ---
 # [1.0.0] - Sun, 11/Jan/2026
 
 ## ♻️ Refactors
-- Add custom Result trait
-- Code refactoring and bug fixes
+- (40f0e8) Add custom Result trait
+- (816fac) Code refactoring and bug fixes
 
 ## 📚 Documentation
-- Add LICENSE.md and README.md
+- (6cdf56) Add LICENSE.md and README.md
 
 ## 🛠️ Maintenance
-- Integrate github workflows
+- (ee43e8) Integrate github workflows
 ---
