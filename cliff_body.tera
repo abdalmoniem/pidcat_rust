@@ -5,10 +5,12 @@
 {%- else -%}
     # [unreleased]
 {%- endif %}
+{%- set repo_url = "https://github.com/" ~ remote.github.owner ~ "/" ~ remote.github.repo -%}
 {% for group, commits in commits | group_by(attribute="group") %}
     ## {{ group | striptags | trim | upper_first }}
     {%- for commit in commits %}
-        - ({{ commit.id | truncate(length=6, end="") }}) {% if commit.scope %}**({{ commit.scope }})** {% endif -%}
+        {% set sha = commit.id | truncate(length=6, end="") -%}
+        - ([{{ sha }}]({{ repo_url }}/commit/{{ sha }})) {% if commit.scope %}**({{ commit.scope }})** {% endif -%}
           {% if commit.breaking %}[**breaking**] {% endif -%}
           {{ commit.message | upper_first }}
     {%- endfor %}

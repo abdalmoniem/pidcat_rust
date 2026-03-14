@@ -24,6 +24,8 @@ use pidcat::Writer;
 
 use regex::Regex;
 
+use scope_functions::Run;
+
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -40,14 +42,19 @@ use std::panic;
 use std::panic::PanicHookInfo;
 
 use std::process::Command;
+use std::process::Output;
 use std::process::Stdio;
 use std::process::{self};
 
 use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
 
 use strip_ansi_escapes::strip;
 
 lazy_static! {
+    static ref IS_RUNNING: AtomicBool = AtomicBool::new(false);
+
     /// ELLIPSIS is a unicode ellipsis character.
     /// It is used to represent truncated lines.
     static ref ELLIPSIS: String = String::from("…");
@@ -90,7 +97,7 @@ lazy_static! {
             .unwrap_or_panic("Invalid Regex for PID_LEAVE");
 
     static ref PID_DEATH: Regex =
-        Regex::new(r"^Process ([a-zA-Z0-9._:]+) \(pid (\d+)\) has died.?$")
+        Regex::new(r"^Process ([a-zA-Z0-9._:]+) \(pid (\d+)\) has died.*$")
             .unwrap_or_panic("Invalid Regex for PID_DEATH");
 
     static ref STRICT_MODE: Regex =
@@ -192,13 +199,13 @@ lazy_static! {
 fn get_console_width() -> i16 {
     terminal_size::terminal_size()
         .map(|(terminal_size::Width(width), _)| width as i16)
-        .unwrap_or(80)
+        .unwrap_or(80i16)
 }
 
 fn get_ansi_segments(text: &str) -> Vec<AnsiSegment> {
     let mut segments = Vec::default();
     let mut chars = text.chars().peekable();
-    let mut visible_pos = 0;
+    let mut pos = 0usize;
 
     while let Some(ch) = chars.next() {
         if ch == '\x1b' && chars.peek() == Some(&'[') {
@@ -219,9 +226,9 @@ fn get_ansi_segments(text: &str) -> Vec<AnsiSegment> {
                 }
             }
 
-            segments.push(AnsiSegment { visible_pos, code });
+            segments.push(AnsiSegment { pos, code });
         } else {
-            visible_pos += 1;
+            pos += 1usize;
         }
     }
 
@@ -232,7 +239,7 @@ fn get_active_codes_at_pos(segments: &[AnsiSegment], pos: usize) -> Vec<String> 
     let mut active = Vec::default();
 
     for seg in segments {
-        if seg.visible_pos >= pos {
+        if seg.pos >= pos {
             break;
         }
 
@@ -260,10 +267,10 @@ fn insert_ansi_codes_in_range(
         result.push_str(code);
     }
 
-    let mut segment_idx = 0;
+    let mut segment_idx = 0usize;
 
-    while segment_idx < segments.len() && segments[segment_idx].visible_pos < start_pos {
-        segment_idx += 1;
+    while segment_idx < segments.len() && segments[segment_idx].pos < start_pos {
+        segment_idx += 1usize;
     }
 
     for (index, char) in chars.iter().enumerate() {
@@ -272,17 +279,17 @@ fn insert_ansi_codes_in_range(
         while segment_idx < segments.len() {
             let seg = &segments[segment_idx];
 
-            if seg.visible_pos >= end_pos {
+            if seg.pos >= end_pos {
                 break;
             }
 
-            if seg.visible_pos == absolute_pos {
+            if seg.pos == absolute_pos {
                 result.push_str(&seg.code);
-                segment_idx += 1;
-            } else if seg.visible_pos > absolute_pos {
+                segment_idx += 1usize;
+            } else if seg.pos > absolute_pos {
                 break;
             } else {
-                segment_idx += 1;
+                segment_idx += 1usize;
             }
         }
 
@@ -300,14 +307,14 @@ fn get_wrapped_indent(
     level_foreground: Color,
     level_background: Color,
 ) -> String {
-    if width == -1 {
+    if width == -1i16 {
         return message.to_string();
     }
 
     let message = message.replace('\t', "    ");
     let wrap_width = (width as usize).saturating_sub(header_width);
 
-    if wrap_width == 0 {
+    if wrap_width == 0usize {
         return message;
     }
 
@@ -323,7 +330,7 @@ fn get_wrapped_indent(
     let ansi_segments = get_ansi_segments(&message);
     let chars = plain_message.chars().collect::<Vec<_>>();
 
-    let mut current = 0;
+    let mut current = 0usize;
     let mut message_buffer = String::default();
 
     while current < chars.len() {
@@ -331,7 +338,7 @@ fn get_wrapped_indent(
         let segment: String = chars[current..next_index].iter().collect();
 
         // Get active codes at the start of this segment (for continuation lines)
-        let active_codes = if current > 0 {
+        let active_codes = if current > 0usize {
             get_active_codes_at_pos(&ansi_segments, current)
         } else {
             Vec::default()
@@ -353,8 +360,8 @@ fn get_wrapped_indent(
 
             message_buffer.push('\n');
 
-            let indent_len = header_width.saturating_sub(5);
-            let spaces = if level_foreground == level_background {
+            let indent_len = header_width.saturating_sub(4usize);
+            let spaces = if level_foreground == level_background && show_colors {
                 " ".repeat(indent_len)
                     .color(level_foreground)
                     .on_color(level_background)
@@ -367,19 +374,18 @@ fn get_wrapped_indent(
             let future_index = next_index + wrap_width;
             let is_last_line = future_index >= chars.len();
             let connector = if level_foreground == level_background {
-                "    "
+                "   "
             } else if !is_last_line {
                 " ╠═"
             } else {
                 " ╚═"
             };
 
-            let colored_connector = connector
-                .color(level_foreground)
-                .on_color(level_background)
-                .to_string();
-
             if show_colors {
+                let colored_connector = connector
+                    .color(level_foreground)
+                    .on_color(level_background)
+                    .to_string();
                 message_buffer.push_str(&colored_connector);
             } else {
                 message_buffer.push_str(connector);
@@ -399,11 +405,10 @@ fn get_wrapped_indent(
 fn get_token_color(token: &str, state: &mut State) -> Color {
     if !state.known_tokens.contains_key(token) {
         if !state.token_colors.is_empty() {
-            let color = state.token_colors[0];
+            let color = state.token_colors[0usize];
             state.known_tokens.insert(token.to_string(), color);
-            state.token_colors.rotate_left(0);
         } else {
-            return Color::White;
+            return Color::BrightWhite;
         }
     }
 
@@ -415,9 +420,8 @@ fn get_token_color(token: &str, state: &mut State) -> Color {
     // Move to end of list (LRU logic)
     if let Some(pos) = state.token_colors.iter().position(|&col| col == color) {
         state.token_colors.remove(pos);
-        state.token_colors.rotate_left(0);
+        state.token_colors.push(color);
     }
-    state.token_colors.push(color);
 
     color
 }
@@ -438,31 +442,16 @@ fn get_adb_command(args: &CliArgs) -> Vec<String> {
     base_adb_command
 }
 
-fn start_adb_server(base_adb_command: &[String]) -> Result<(), Error> {
-    let output = Command::new(&base_adb_command[0])
-        .args(&base_adb_command[1..])
+fn start_adb_server(base_adb_command: &[String]) -> Result<Output, Error> {
+    Command::new(&base_adb_command[0usize])
+        .args(&base_adb_command[1usize..])
         .arg("start-server")
-        .output()?;
-
-    let stdout = output
-        .stdout
-        .split(|&byte| byte == b'\n')
-        .map(|line| String::from_utf8_lossy(line).trim().to_string())
-        .take_while(|line| !line.is_empty())
-        .join("\n")
-        .cyan()
-        .bold();
-
-    if !stdout.is_empty() {
-        println!("{stdout}");
-    }
-
-    Ok(())
+        .output()
 }
 
 fn get_adb_devices(base_adb_command: &[String]) -> Option<Vec<AdbDevice>> {
-    let output = Command::new(&base_adb_command[0])
-        .args(&base_adb_command[1..])
+    let output = Command::new(&base_adb_command[0usize])
+        .args(&base_adb_command[1usize..])
         .arg("devices")
         .output();
 
@@ -472,7 +461,7 @@ fn get_adb_devices(base_adb_command: &[String]) -> Option<Vec<AdbDevice>> {
             let devices = output
                 .stdout
                 .split(|&byte| byte == b'\n')
-                .skip(1)
+                .skip(1usize)
                 .map(|line| String::from_utf8_lossy(line).trim().to_string())
                 .filter(|line| !line.is_empty())
                 .map(|device| {
@@ -503,9 +492,9 @@ fn get_adb_devices(base_adb_command: &[String]) -> Option<Vec<AdbDevice>> {
 }
 
 fn get_current_app_package(base_adb_command: &[String]) -> Option<Vec<String>> {
-    let mut cmd = Command::new(&base_adb_command[0]);
-    if base_adb_command.len() > 1 {
-        cmd.args(&base_adb_command[1..]);
+    let mut cmd = Command::new(&base_adb_command[0usize]);
+    if base_adb_command.len() > 1usize {
+        cmd.args(&base_adb_command[1usize..]);
     }
 
     let output = cmd
@@ -521,7 +510,7 @@ fn get_current_app_package(base_adb_command: &[String]) -> Option<Vec<String>> {
 
     let packages: Vec<String> = VISIBLE_PACKAGES
         .captures_iter(visible_activities)
-        .filter_map(|cap| cap.get(1).map(|mat| mat.as_str().to_string()))
+        .filter_map(|cap| cap.get(1usize).map(|mat| mat.as_str().to_string()))
         .collect();
 
     if packages.is_empty() {
@@ -537,10 +526,10 @@ fn get_processes(
     args: &CliArgs,
 ) -> HashMap<String, String> {
     let mut pids_map = HashMap::default();
-    let mut cmd = Command::new(&base_adb_command[0]);
+    let mut cmd = Command::new(&base_adb_command[0usize]);
 
-    if base_adb_command.len() > 1 {
-        cmd.args(&base_adb_command[1..]);
+    if base_adb_command.len() > 1usize {
+        cmd.args(&base_adb_command[1usize..]);
     }
 
     let output = cmd.args(["shell", "ps"]).stdout(Stdio::piped()).output();
@@ -550,10 +539,10 @@ fn get_processes(
         for line in stdout.lines().map_while(Result::ok) {
             if let Some(caps) = PID_LINE.captures(&line) {
                 let pid = caps
-                    .get(1)
+                    .get(1usize)
                     .map_or(String::default(), |mat| mat.as_str().to_string());
                 let process = caps
-                    .get(2)
+                    .get(2usize)
                     .map_or(String::default(), |mat| mat.as_str().to_string());
 
                 let is_target_package = catchall_package.contains(&process);
@@ -571,76 +560,57 @@ fn get_processes(
 fn get_started_process(line: &str) -> Option<(String, String, String, String, String)> {
     if let Some(caps) = PID_START.captures(line) {
         return Some((
-            caps[1].to_string(), // started_pid
-            String::default(),   // started_uid
-            String::default(),   // started_gids
-            caps[2].to_string(), // started_package
-            caps[3].to_string(), // started_target
+            caps[1usize].to_string(), // started_pid
+            String::default(),        // started_uid
+            String::default(),        // started_gids
+            caps[2usize].to_string(), // started_package
+            caps[3usize].to_string(), // started_target
         ));
     }
 
     if let Some(caps) = PID_START_UGID.captures(line) {
         return Some((
-            caps[3].to_string(), // started_pid
-            caps[4].to_string(), // started_uid
-            caps[5].to_string(), // started_gids
-            caps[1].to_string(), // started_package
-            caps[2].to_string(), // started_target
+            caps[3usize].to_string(), // started_pid
+            caps[4usize].to_string(), // started_uid
+            caps[5usize].to_string(), // started_gids
+            caps[1usize].to_string(), // started_package
+            caps[2usize].to_string(), // started_target
         ));
     }
 
     if let Some(caps) = PID_START_DALVIK.captures(line) {
         return Some((
-            caps[1].to_string(), // started_pid
-            caps[3].to_string(), // started_uid
-            String::default(),   // started_gids
-            caps[2].to_string(), // started_package
-            String::default(),   // started_target
+            caps[1usize].to_string(), // started_pid
+            caps[3usize].to_string(), // started_uid
+            String::default(),        // started_gids
+            caps[2usize].to_string(), // started_package
+            String::default(),        // started_target
         ));
     }
 
     None
 }
 
-fn get_dead_process(
-    tag: &str,
-    message: &str,
-    pids_set: &HashSet<String>,
-    named_processes: &[String],
-    catchall_package: &[String],
-) -> Option<(String, String)> {
-    if tag != "ActivityManager" {
-        return None;
+fn get_dead_process(line: &str) -> Option<(String, String)> {
+    if let Some(caps) = PID_KILL.captures(line) {
+        let pid = caps[1usize].to_string();
+        let package_line = caps[2usize].to_string();
+
+        return Some((pid, package_line));
     }
 
-    if let Some(caps) = PID_KILL.captures(message) {
-        let pid = caps[1].to_string();
-        let package_line = caps[2].to_string();
-        if is_matching_package(&package_line, named_processes, catchall_package)
-            && pids_set.contains(&pid)
-        {
-            return Some((pid, package_line));
-        }
+    if let Some(caps) = PID_LEAVE.captures(line) {
+        let package_line = caps[1usize].to_string();
+        let pid = caps[2usize].to_string();
+
+        return Some((pid, package_line));
     }
 
-    if let Some(caps) = PID_LEAVE.captures(message) {
-        let package_line = caps[1].to_string();
-        let pid = caps[2].to_string();
-        if is_matching_package(&package_line, named_processes, catchall_package)
-            && pids_set.contains(&pid)
-        {
-            return Some((pid, package_line));
-        }
-    }
+    if let Some(caps) = PID_DEATH.captures(line) {
+        let package_line = caps[1usize].to_string();
+        let pid = caps[2usize].to_string();
 
-    if let Some(caps) = PID_DEATH.captures(message) {
-        let package_line = caps[1].to_string();
-        let pid = caps[2].to_string();
-        if is_matching_package(&package_line, named_processes, catchall_package)
-            && pids_set.contains(&pid)
-        {
-            return Some((pid, package_line));
-        }
+        return Some((pid, package_line));
     }
 
     None
@@ -707,13 +677,11 @@ fn write_token(
 ) -> usize {
     let local_header = header_width;
     for writer in writers.iter_mut() {
-        let buffer = if wrap && writer.width != -1 {
-            writer.width = get_console_width();
-
+        let buffer = if wrap && let Some(width) = writer.width {
             get_wrapped_indent(
                 token,
                 writer.show_colors,
-                writer.width,
+                width,
                 header_width,
                 level_foreground,
                 level_background,
@@ -741,35 +709,63 @@ fn write_started_process(
     line: &str,
     state: &mut State,
     writers: &mut [Writer],
+    pid_width: usize,
     header_width: usize,
 ) -> bool {
-    let spaces = " ".repeat(header_width.saturating_sub(1));
+    let banner_width = header_width.saturating_sub(1usize);
+    let spaces = " ".repeat(banner_width);
 
     if let Some(procs) = get_started_process(line) {
         let (started_pid, started_uid, started_gids, started_package, started_target) = procs;
 
+        let started_package = if !started_package.is_empty() {
+            started_package
+        } else {
+            "-".repeat(pid_width)
+        };
+        let started_target = if !started_target.is_empty() {
+            started_target
+        } else {
+            "-".repeat(pid_width)
+        };
+        let started_pid = if !started_pid.is_empty() {
+            started_pid
+        } else {
+            "-".repeat(pid_width)
+        };
+        let started_uid = if !started_uid.is_empty() {
+            started_uid
+        } else {
+            "-".repeat(pid_width)
+        };
+        let started_gids = if !started_gids.is_empty() {
+            started_gids
+        } else {
+            "-".repeat(pid_width)
+        };
+
         let spaces = spaces
-            .color(Color::Green)
-            .on_color(Color::Green)
+            .color(Color::BrightGreen)
+            .on_color(Color::BrightGreen)
             .to_string();
 
-        let started_process_message = format!(
-            " Process {started_package} created for {started_target}\n",
-            started_package = &started_package.color(Color::Yellow),
-            started_target = &started_target.color(Color::Yellow)
+        let started_process_msg = format!(
+            "Process {started_package} created for {started_target}\n",
+            started_package = &started_package.color(Color::BrightYellow),
+            started_target = &started_target.color(Color::BrightYellow)
         );
 
-        let pugid_message = format!(
-            " PID: {started_pid}   UID: {started_uid}   GIDs: {started_gids}",
-            started_pid = &started_pid.color(Color::Yellow),
-            started_uid = &started_uid.color(Color::Yellow),
-            started_gids = &started_gids.color(Color::Yellow)
+        let pugid_msg = format!(
+            "PID: {started_pid}   UID: {started_uid}   GIDs: {started_gids}\n",
+            started_pid = &started_pid.color(Color::BrightYellow),
+            started_uid = &started_uid.color(Color::BrightYellow),
+            started_gids = &started_gids.color(Color::BrightYellow)
         );
 
         if is_matching_package(
             &started_package,
             &state.named_processes,
-            &state.catchall_package,
+            &state.catchall_packages,
         ) {
             state
                 .pids_map
@@ -777,39 +773,30 @@ fn write_started_process(
             state.app_pid = Some(started_pid.clone());
 
             write_token(
-                &spaces,
+                &format!("{spaces}\n{spaces}"),
                 writers,
                 false,
                 header_width,
-                Color::Green,
-                Color::Green,
+                Color::BrightGreen,
+                Color::BrightGreen,
             );
 
             write_token(
-                "\n",
+                " ",
                 writers,
                 false,
                 header_width,
-                Color::Green,
-                Color::Green,
+                Color::BrightGreen,
+                Color::BrightGreen,
             );
 
             write_token(
-                &spaces,
-                writers,
-                false,
-                header_width,
-                Color::Green,
-                Color::Green,
-            );
-
-            write_token(
-                &started_process_message,
+                &started_process_msg,
                 writers,
                 true,
                 header_width,
-                Color::Green,
-                Color::Green,
+                Color::BrightGreen,
+                Color::BrightGreen,
             );
 
             write_token(
@@ -817,44 +804,35 @@ fn write_started_process(
                 writers,
                 false,
                 header_width,
-                Color::Green,
-                Color::Green,
+                Color::BrightGreen,
+                Color::BrightGreen,
             );
 
             write_token(
-                &pugid_message,
+                " ",
+                writers,
+                false,
+                header_width,
+                Color::BrightGreen,
+                Color::BrightGreen,
+            );
+
+            write_token(
+                &pugid_msg,
                 writers,
                 true,
                 header_width,
-                Color::Green,
-                Color::Green,
+                Color::BrightGreen,
+                Color::BrightGreen,
             );
 
             write_token(
-                "\n",
+                &format!("{spaces}\n"),
                 writers,
                 false,
                 header_width,
-                Color::Green,
-                Color::Green,
-            );
-
-            write_token(
-                &spaces,
-                writers,
-                false,
-                header_width,
-                Color::Green,
-                Color::Green,
-            );
-
-            write_token(
-                "\n",
-                writers,
-                false,
-                header_width,
-                Color::Green,
-                Color::Green,
+                Color::BrightGreen,
+                Color::BrightGreen,
             );
 
             state.last_tag = None;
@@ -867,27 +845,36 @@ fn write_started_process(
 }
 
 fn write_dead_process(
-    tag: &str,
     message: &str,
     state: &mut State,
     writers: &mut [Writer],
+    pid_width: usize,
     header_width: usize,
 ) -> bool {
-    let spaces = " ".repeat(header_width.saturating_sub(1));
+    let banner_width = header_width.saturating_sub(1usize);
+    let spaces = " ".repeat(banner_width);
 
-    if let Some((dead_pid, dead_process_name)) = get_dead_process(
-        tag,
-        message,
-        &state.pids_map.keys().cloned().collect(),
-        &state.named_processes,
-        &state.catchall_package,
-    ) {
-        let spaces = spaces.color(Color::Red).on_color(Color::Red).to_string();
+    if let Some((dead_pid, dead_process_name)) = get_dead_process(message) {
+        let spaces = spaces
+            .color(Color::BrightRed)
+            .on_color(Color::BrightRed)
+            .to_string();
 
-        let dead_process_message = format!(
-            " Process {dead_process_name} (PID: {dead_pid})o ended\n",
-            dead_process_name = &dead_process_name.color(Color::Yellow),
-            dead_pid = &dead_pid.color(Color::Yellow)
+        let dead_pid = if !dead_pid.is_empty() {
+            dead_pid
+        } else {
+            "-".repeat(pid_width)
+        };
+        let dead_process_name = if !dead_process_name.is_empty() {
+            dead_process_name
+        } else {
+            "-".repeat(pid_width)
+        };
+
+        let dead_process_msg = format!(
+            "Process {dead_process_name} (PID: {dead_pid}) ended\n",
+            dead_process_name = &dead_process_name.color(Color::BrightYellow),
+            dead_pid = &dead_pid.color(Color::BrightYellow)
         );
 
         if state.pids_map.contains_key(&dead_pid) {
@@ -895,44 +882,40 @@ fn write_dead_process(
         }
 
         write_token(
-            &spaces,
+            &format!("{spaces}\n{spaces}"),
             writers,
             false,
             header_width,
-            Color::Red,
-            Color::Red,
+            Color::BrightRed,
+            Color::BrightRed,
         );
 
-        write_token("\n", writers, false, header_width, Color::Red, Color::Red);
-
         write_token(
-            &spaces,
+            " ",
             writers,
             false,
             header_width,
-            Color::Red,
-            Color::Red,
+            Color::BrightGreen,
+            Color::BrightGreen,
         );
 
         write_token(
-            &dead_process_message,
+            &dead_process_msg,
             writers,
             true,
             header_width,
-            Color::Red,
-            Color::Red,
+            Color::BrightRed,
+            Color::BrightRed,
         );
 
         write_token(
-            &spaces,
+            &format!("{spaces}\n"),
             writers,
             false,
             header_width,
-            Color::Red,
-            Color::Red,
+            Color::BrightRed,
+            Color::BrightRed,
         );
-
-        write_token("\n", writers, false, header_width, Color::Red, Color::Red);
 
         state.last_tag = None;
 
@@ -989,7 +972,7 @@ fn write_pid(
             level_foreground,
             level_background,
         );
-        *header_width += pid_width + 1;
+        *header_width += pid_width + 1usize;
     }
 }
 
@@ -1045,7 +1028,7 @@ fn write_package_name(
             level_foreground,
             level_background,
         );
-        *header_width += package_width + 1;
+        *header_width += package_width + 1usize;
     }
 }
 
@@ -1060,7 +1043,7 @@ fn write_tag(
 ) {
     let tag_width = args.tag_width as usize;
 
-    if tag_width > 0 {
+    if tag_width > 0usize {
         if Some(tag.to_string()) != state.last_tag || args.always_show_tags {
             state.last_tag = Some(tag.to_string());
 
@@ -1114,7 +1097,7 @@ fn write_tag(
             level_foreground,
             level_background,
         );
-        *header_width += tag_width + 1;
+        *header_width += tag_width + 1usize;
     }
 }
 
@@ -1160,9 +1143,9 @@ fn apply_message_rules(args: &CliArgs, message: &str) -> String {
             .replace(&message, |caps: &regex::Captures| {
                 format!(
                     "{message}{duration}{unit}",
-                    message = &caps[1],
-                    duration = caps[2].color(Color::Red),
-                    unit = caps[3].color(Color::Yellow)
+                    message = &caps[1usize],
+                    duration = caps[2usize].color(Color::BrightRed),
+                    unit = caps[3usize].color(Color::BrightYellow)
                 )
             })
             .to_string();
@@ -1173,10 +1156,10 @@ fn apply_message_rules(args: &CliArgs, message: &str) -> String {
             .replace(&message, |caps: &regex::Captures| {
                 format!(
                     "{freed}{free}{paused}{unit}",
-                    freed = &caps[1],
-                    free = caps[2].color(Color::Green),
-                    paused = &caps[3],
-                    unit = caps[4].color(Color::Yellow)
+                    freed = &caps[1usize],
+                    free = caps[2usize].color(Color::BrightGreen),
+                    paused = &caps[3usize],
+                    unit = caps[4usize].color(Color::BrightYellow)
                 )
             })
             .to_string();
@@ -1211,8 +1194,8 @@ fn write_message(
 }
 
 fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [Writer]) {
-    let base_level_size = 1 + 1 + 3;
-    let header_width = &mut 0;
+    let base_header_width = 3usize + 1usize; // tag width + space
+    let header_width = &mut 0usize;
 
     if NATIVE_TAGS_LINE.is_match(line) {
         return;
@@ -1224,23 +1207,23 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
     };
 
     let owner = log_line
-        .get(3)
+        .get(3usize)
         .map_or(String::default(), |mat| mat.as_str().to_string())
         .trim()
         .to_string();
 
     let tag = log_line
-        .get(2)
+        .get(2usize)
         .map_or(String::default(), |mat| mat.as_str().to_string())
         .trim()
         .to_string();
 
     let level = log_line
-        .get(1)
+        .get(1usize)
         .map_or(LogLevel::default(), |mat| LogLevel::from(mat.as_str()));
 
     let mut message = log_line
-        .get(4)
+        .get(4usize)
         .map_or(String::default(), |mat| mat.as_str().to_string())
         .trim()
         .to_string();
@@ -1248,33 +1231,41 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
     let level_foreground = Color::Black;
 
     let level_background = match level {
+        LogLevel::VERBOSE => Color::BrightCyan,
         LogLevel::DEBUG => Color::BrightBlue,
         LogLevel::INFO => Color::BrightGreen,
         LogLevel::WARN => Color::BrightYellow,
         LogLevel::ERROR => Color::TrueColor {
-            r: 255,
-            g: 100,
-            b: 0,
+            r: 255u8,
+            g: 100u8,
+            b: 0u8,
         }, // DarkOrange
         LogLevel::FATAL => Color::BrightRed,
-        LogLevel::VERBOSE => Color::BrightCyan,
     };
 
     if args.show_pid {
-        *header_width += args.pid_width as usize
+        *header_width += args.pid_width as usize + 1usize
     }
 
     if args.show_package {
-        *header_width += args.package_width as usize
+        *header_width += args.package_width as usize + 1usize
     }
 
-    *header_width += (2 + args.tag_width + base_level_size) as usize;
+    *header_width += base_header_width + args.tag_width as usize + 1usize;
 
-    if write_started_process(line, state, writers, *header_width) {
+    if write_started_process(line, state, writers, args.pid_width as usize, *header_width) {
+        writers.iter_mut().for_each(Writer::flush);
         return;
     }
 
-    if write_dead_process(&tag, &message, state, writers, *header_width) {
+    if write_dead_process(
+        &message,
+        state,
+        writers,
+        args.pid_width as usize,
+        *header_width,
+    ) {
+        writers.iter_mut().for_each(Writer::flush);
         return;
     }
 
@@ -1304,7 +1295,7 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         message = message.trim_start().to_string();
     }
 
-    *header_width = 0;
+    *header_width = 0usize;
 
     write_pid(
         state,
@@ -1345,7 +1336,7 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         level_background,
     );
 
-    *header_width += base_level_size as usize;
+    *header_width += base_header_width;
 
     message = apply_message_rules(args, &message);
 
@@ -1360,7 +1351,14 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
     writers.iter_mut().for_each(Writer::flush);
 }
 
-fn panic_hook(info: &PanicHookInfo) {
+fn colored(msg: &str, show_colors: bool, color: Color) -> String {
+    msg.run(|msg| match show_colors {
+        true => msg.color(color).bold().to_string(),
+        false => msg.to_string(),
+    })
+}
+
+fn panic_hook(info: &PanicHookInfo, show_colors: bool) {
     let err_loc = info.location().unwrap_or(panic::Location::caller());
     let err_msg = match info.payload().downcast_ref::<&str>() {
         Some(str) => *str,
@@ -1376,8 +1374,7 @@ fn panic_hook(info: &PanicHookInfo) {
         line = err_loc.line(),
         column = err_loc.column()
     )
-    .red()
-    .bold();
+    .run(|msg| colored(msg, show_colors, Color::BrightRed));
 
     let thread_err_msg = format!(
         "thread 'main' ({pid}) panicked at {file}:{line}:{column}",
@@ -1386,28 +1383,20 @@ fn panic_hook(info: &PanicHookInfo) {
         line = err_loc.line(),
         column = err_loc.column()
     )
-    .red()
-    .bold();
+    .run(|msg| colored(msg, show_colors, Color::BrightRed));
 
     eprintln!("{thread_err_msg}");
     eprintln!("{err_msg}");
 }
 
-fn ctrlc_handler() {
-    let bin_name = env!("CARGO_BIN_NAME").cyan().bold();
-    let message = "Stopped by user.".cyan().bold();
-
-    println!("{bin_name} {message}");
-    process::exit(0);
-}
-
 fn main() {
-    panic::set_hook(Box::new(panic_hook));
-    ctrlc::set_handler(ctrlc_handler).unwrap_or_panic("Failed to set CTRL+C handler");
-
     let mut adb_child = None;
-
     let args = &mut CliArgs::parse_args();
+    let show_colors = !args.no_color;
+
+    panic::set_hook(Box::new(move |info| panic_hook(info, show_colors)));
+    ctrlc::set_handler(move || IS_RUNNING.store(false, Relaxed))
+        .unwrap_or_panic("Failed to set CTRL+C handler");
 
     let stdin = stdin();
     let base_adb_command = &get_adb_command(args);
@@ -1427,8 +1416,10 @@ fn main() {
     if let Some(shell) = args.completions {
         let mut cmd = CliArgs::command();
         let bin_name = cmd.get_name().to_string();
+
         generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
-        process::exit(0);
+
+        process::exit(0i32);
     }
 
     if args.ignore_system_tags {
@@ -1439,6 +1430,7 @@ fn main() {
                 existing.append(&mut system_tags);
                 Some(existing.to_vec())
             }
+
             None => Some(system_tags),
         }
     }
@@ -1486,63 +1478,87 @@ fn main() {
         adb_command.extend(["-e".to_string(), regex]);
     }
 
-    let message = "Starting ADB server...".cyan().bold();
-    println!("{message}");
+    if stdin.is_terminal() {
+        let msg = "Starting ADB server...".run(|msg| colored(msg, show_colors, Color::BrightCyan));
+        println!("{msg}");
 
-    if let Err(err) = start_adb_server(base_adb_command) {
-        let err_code = err.raw_os_error().unwrap_or(1);
-        let err_hdr = format!("ERROR: {err}").red().bold();
-        let err_msg =
-            "Could not start ADB server, check that ADB is added to env PATH and try again!"
-                .red()
-                .bold();
-
-        eprintln!("{err_hdr}");
-        eprintln!("{err_msg}");
-        process::exit(err_code);
-    }
-
-    match get_adb_devices(base_adb_command) {
-        // TODO: implement device selection
-        Some(devices) => {
-            for (index, device) in devices.iter().enumerate() {
-                let message = format!("Found Device #{index}: {device:?}").cyan().bold();
-                println!("{message}");
+        match start_adb_server(base_adb_command) {
+            Ok(output) => match !output.stdout.is_empty() {
+                true => output.stdout,
+                false => output.stderr,
             }
+            .split(|&byte| byte == b'\n')
+            .map(|line| String::from_utf8_lossy(line).trim().to_string())
+            .take_while(|line| !line.is_empty())
+            .join("\n")
+            .run(|msg| colored(msg, show_colors, Color::BrightCyan))
+            .run(|output| {
+                if !output.is_empty() {
+                    println!("{output}");
+                }
+            }),
+
+            Err(err) => err.run(|err| {
+                let err_code = err.raw_os_error().unwrap_or(1i32);
+                let err_hdr =
+                    format!("ERROR: {err}").run(|msg| colored(msg, show_colors, Color::BrightRed));
+                let err_msg =
+                    "Could not start ADB server, check that ADB is added to env PATH and try again!"
+                        .run(|msg| colored(msg, show_colors, Color::BrightRed));
+
+                eprintln!("{err_hdr}");
+                eprintln!("{err_msg}");
+                process::exit(err_code);
+            }),
         }
 
-        None => {
-            let err = Error::from(ErrorKind::NotConnected);
-            let err_code = err.raw_os_error().unwrap_or(1);
-            let err = err.to_string().red().bold();
-            let err_hdr = format!("ERROR: {err}").red().bold();
-            let err_msg = "ADB cannot find any attached devices, attach a device and try again!"
-                .red()
-                .bold();
+        match get_adb_devices(base_adb_command) {
+            // TODO: implement device selection
+            Some(devices) => {
+                for (index, device) in devices.iter().enumerate() {
+                    let msg = format!("Found Device #{index}: {device:?}")
+                        .run(|msg| colored(msg, show_colors, Color::BrightCyan));
 
-            if stdin.is_terminal() {
+                    println!("{msg}");
+                }
+            }
+
+            None => {
+                let err = Error::from(ErrorKind::NotConnected);
+                let err_code = err.raw_os_error().unwrap_or(1i32);
+                let err = err
+                    .to_string()
+                    .run(|msg| colored(msg, show_colors, Color::BrightRed));
+                let err_hdr =
+                    format!("ERROR: {err}").run(|msg| colored(msg, show_colors, Color::BrightRed));
+                let err_msg =
+                    "ADB cannot find any attached devices, attach a device and try again!"
+                        .run(|msg| colored(msg, show_colors, Color::BrightRed));
                 eprintln!("{err_hdr}");
                 eprintln!("{err_msg}");
                 process::exit(err_code);
             }
         }
+
+        if !args.keep_logcat {
+            let msg = format!("Clearing logcat{ellipsis}", ellipsis = *ELLIPSIS)
+                .run(|msg| colored(msg, show_colors, Color::BrightCyan));
+
+            println!("{msg}");
+
+            let clear_cmd = [
+                base_adb_command.clone(),
+                vec!["logcat".to_string(), "-c".to_string()],
+            ]
+            .concat();
+            Command::new(&clear_cmd[0usize])
+                .args(&clear_cmd[1usize..])
+                .output()
+                .unwrap_or_panic("Could not clear logcat");
+        }
     }
 
-    if !args.keep_logcat && stdin.is_terminal() {
-        let message = format!("Clearing logcat{ellipsis}", ellipsis = *ELLIPSIS)
-            .cyan()
-            .bold();
-        println!("{message}");
-
-        let clear_cmd = [
-            base_adb_command.clone(),
-            vec!["logcat".to_string(), "-c".to_string()],
-        ]
-        .concat();
-        let _ = Command::new(&clear_cmd[0]).args(&clear_cmd[1..]).output();
-    }
-
-    let catchall_package = &packages
+    let catchall_packages = &packages
         .iter()
         .filter(|package| !package.contains(':'))
         .cloned()
@@ -1558,9 +1574,12 @@ fn main() {
         args.all = true;
     }
 
-    let pids_map = get_processes(base_adb_command, catchall_package, args);
+    let pids_map = match stdin.is_terminal() {
+        true => get_processes(base_adb_command, catchall_packages, args),
+        false => HashMap::new(),
+    };
 
-    let tag_colors = vec![
+    let token_colors = vec![
         Color::BrightRed,
         Color::BrightBlue,
         Color::BrightCyan,
@@ -1569,32 +1588,21 @@ fn main() {
         Color::BrightMagenta,
     ];
 
-    let known_tags = HashMap::from([
-        ("jdwp".to_string(), Color::White),
-        ("DEBUG".to_string(), Color::Yellow),
-        ("Process".to_string(), Color::White),
-        ("dalvikvm".to_string(), Color::White),
-        ("StrictMode".to_string(), Color::White),
-        ("AndroidRuntime".to_string(), Color::Cyan),
-        ("ActivityThread".to_string(), Color::White),
-        ("ActivityManager".to_string(), Color::White),
-    ]);
-
     let mut state = State {
         pids_map,
         last_tag: None,
         app_pid: None,
         log_level: args.log_level,
         named_processes,
-        catchall_package: catchall_package.clone(),
-        token_colors: tag_colors,
-        known_tokens: known_tags,
+        catchall_packages: catchall_packages.clone(),
+        token_colors,
+        known_tokens: HashMap::new(),
     };
 
     if stdin.is_terminal() {
         adb_child = Some(
-            Command::new(&adb_command[0])
-                .args(&adb_command[1..])
+            Command::new(&adb_command[0usize])
+                .args(&adb_command[1usize..])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .spawn()
@@ -1602,10 +1610,9 @@ fn main() {
         );
     }
 
-    let mut log_source = if let Some(adb_child) = adb_child {
-        LogSource::Process(adb_child)
-    } else {
-        LogSource::Stdin
+    let mut log_source = match adb_child {
+        Some(adb_child) => LogSource::Process(adb_child),
+        None => LogSource::Stdin,
     };
 
     let (stdout_source, stderr_source) = match log_source {
@@ -1630,54 +1637,54 @@ fn main() {
     let mut stdout = BufReader::new(stdout_source);
     let mut stderr = stderr_source.map(BufReader::new);
 
-    let message = if !packages.is_empty() {
-        let packages_vec = packages.iter().cloned().collect::<Vec<_>>();
-        let packages_str = packages_vec.join(", ");
-
-        format!(
-            "Capturing logcat messages from packages: [{packages_str}]{ellipsis}",
-            ellipsis = *ELLIPSIS
-        )
-        .cyan()
-        .bold()
-    } else {
-        format!(
+    let msg = match !packages.is_empty() {
+        true => packages
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ")
+            .run(|packages_str| {
+                format!(
+                    "Capturing logcat messages from packages: [{packages_str}]{ellipsis}",
+                    ellipsis = *ELLIPSIS
+                )
+            }),
+        false => format!(
             "Capturing all logcat messages{ellipsis}",
             ellipsis = *ELLIPSIS
-        )
-        .cyan()
-        .bold()
-    };
+        ),
+    }
+    .run(|msg| colored(msg, show_colors, Color::BrightCyan));
 
-    println!("{message}");
+    println!("{msg}");
 
-    loop {
+    IS_RUNNING.store(true, Relaxed);
+    while IS_RUNNING.load(Relaxed) {
         if let LogSource::Process(ref mut adb_child) = log_source {
             let exit_status = adb_child.try_wait();
 
             match exit_status {
                 Ok(exit_status) => {
                     if let Some(status) = exit_status {
-                        let message = format!(
+                        let msg = format!(
                             "Child process {pid} exited with status: {status}",
                             pid = adb_child.id()
                         )
-                        .cyan()
-                        .bold();
+                        .run(|msg| colored(msg, show_colors, Color::BrightCyan));
 
-                        println!("{message}");
+                        println!("{msg}");
                         break;
                     }
                 }
+
                 Err(err) => {
-                    let message = format!(
+                    let err_msg = format!(
                         "Failed to wait for child process {pid}: {err}",
                         pid = adb_child.id()
                     )
-                    .red()
-                    .bold();
+                    .run(|msg| colored(msg, show_colors, Color::BrightRed));
 
-                    eprintln!("{message}");
+                    eprintln!("{err_msg}");
                     break;
                 }
             }
@@ -1690,17 +1697,18 @@ fn main() {
             .read_until(b'\n', stdout_buffer)
             .unwrap_or_panic("Error reading stream");
 
-        if stdout_bytes_read == 0 {
+        if stdout_bytes_read == 0usize {
             if let Some(ref mut stderr) = stderr
                 && let Ok(stderr_bytes_read) = stderr.read_to_end(stderr_buffer)
-                && stderr_bytes_read > 0
+                && stderr_bytes_read > 0usize
             {
                 let err = String::from_utf8_lossy(stderr_buffer)
                     .trim_end_matches(['\r', '\n'])
-                    .red()
-                    .bold();
+                    .run(|msg| colored(msg, show_colors, Color::BrightRed));
 
-                let err_msg = format!("Error reading stream:\n{err}").red().bold();
+                let err_msg = format!("Error reading stream:\n{err}")
+                    .run(|msg| colored(msg, show_colors, Color::BrightRed));
+
                 eprintln!("{err_msg}");
             }
 
@@ -1710,21 +1718,32 @@ fn main() {
         let line = String::from_utf8_lossy(stdout_buffer)
             .trim_end_matches(['\r', '\n'])
             .to_string();
+
+        writers
+            .iter_mut()
+            .filter(|writer| writer.width.is_some())
+            .for_each(|writer| writer.width = Some(get_console_width()));
         write_log_line(&line, &mut state, args, writers);
     }
 
     if let LogSource::Process(mut adb_child) = log_source {
-        let kill_fail_message = format!("Failed to kill child process {pid}", pid = adb_child.id())
-            .red()
-            .bold();
-        let wait_fail_message = format!(
+        let kill_fail_msg = format!("Failed to kill child process {pid}", pid = adb_child.id())
+            .run(|msg| colored(msg, show_colors, Color::BrightRed));
+        let wait_fail_msg = format!(
             "Failed to wait for child process {pid}",
             pid = adb_child.id()
         )
-        .red()
-        .bold();
+        .run(|msg| colored(msg, show_colors, Color::BrightRed));
 
-        adb_child.kill().unwrap_or_panic(&kill_fail_message);
-        adb_child.wait().unwrap_or_panic(&wait_fail_message);
+        adb_child.kill().unwrap_or_panic(&kill_fail_msg);
+        adb_child.wait().unwrap_or_panic(&wait_fail_msg);
+    }
+
+    if !IS_RUNNING.load(Relaxed) {
+        let bin_name = env!("CARGO_BIN_NAME");
+        let msg = format!("{bin_name} stopped by user.")
+            .run(|msg| colored(msg, show_colors, Color::BrightCyan));
+
+        println!("{msg}");
     }
 }

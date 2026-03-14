@@ -45,7 +45,7 @@ impl Write for WriterTarget {
 
 #[derive(Debug)]
 pub struct Writer {
-    pub width: i16,
+    pub width: Option<i16>,
     pub show_colors: bool,
     target: WriterTarget,
 }
@@ -53,7 +53,7 @@ pub struct Writer {
 impl Writer {
     pub fn new_console(width: i16, show_colors: bool) -> Self {
         Self {
-            width,
+            width: Some(width),
             show_colors,
             target: WriterTarget::Console(BufWriter::new(stdout())),
         }
@@ -61,7 +61,7 @@ impl Writer {
 
     pub fn new_file(file: File) -> Self {
         Self {
-            width: -1,
+            width: None,
             show_colors: false,
             target: WriterTarget::File(BufWriter::new(file)),
         }

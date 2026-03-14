@@ -19,6 +19,7 @@ const FILTERING_OPTIONS: &str = "Filtering Options";
 const FORMATTING_OPTIONS: &str = "Formatting Options";
 const COLORING_OPTIONS: &str = "Color Options";
 const OUTPUT_OPTIONS: &str = "Output Options";
+const DEBUG_OPTIONS: &str = "Debug Options";
 
 #[derive(Debug, Parser)]
 #[command(disable_help_flag = true)]
@@ -31,298 +32,258 @@ const OUTPUT_OPTIONS: &str = "Output Options";
 #[command(styles = CliArgs::get_cli_styles())]
 #[command(long_version = CliArgs::get_long_version())]
 pub struct CliArgs {
-    #[arg(
-        required = false,
-        value_name = "PACKAGE",
-        help_heading = POSITIONAL_ARGUMENTS,
-        help = concat!(
-            "Application package name(s)",
-            "\nThis can be specified multiple times"
-        ),
-    )]
+    #[arg(required = false)]
+    #[arg(value_name = "PACKAGE")]
+    #[arg(help_heading = POSITIONAL_ARGUMENTS)]
+    #[arg(help = "Application package name(s)\nThis can be specified multiple times")]
     pub packages: Vec<String>,
 
-    #[arg(
-        short = 'h',
-        long = "help",
-        required = false,
-        value_name = None,
-        action = ArgAction::Help,
-        help_heading = ABOUT_OPTIONS,
-        help = "Show this help message and exit",
-    )]
+    #[arg(short = 'h')]
+    #[arg(long = "help")]
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(action = ArgAction::Help)]
+    #[arg(help_heading = ABOUT_OPTIONS)]
+    #[arg(help = "Show this help message and exit")]
     pub help: Option<bool>,
 
-    #[arg(
-        short = 'v',
-        long = "version",
-        required = false,
-        value_name = None,
-        action = ArgAction::Version,
-        help_heading = ABOUT_OPTIONS,
-        help = "Print the version number and exit",
-    )]
+    #[arg(short = 'v')]
+    #[arg(long = "version")]
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(action = ArgAction::Version)]
+    #[arg(help_heading = ABOUT_OPTIONS)]
+    #[arg(help = "Print the version number and exit")]
     pub version: Option<bool>,
 
-    #[arg(
-        required = false,
-        long = "completions",
-        value_name = "SHELL",
-        help_heading = ABOUT_OPTIONS,
-        help = format!("Generate shell completions for {metavar}", metavar = "[SHELL]".cyan().bold()),
-    )]
+    #[arg(required = false)]
+    #[arg(long = "completions")]
+    #[arg(value_name = "SHELL")]
+    #[arg(help_heading = ABOUT_OPTIONS)]
+    #[arg(help = format!("Generate shell completions for {metavar}", metavar = "[SHELL]".cyan().bold()))]
     pub completions: Option<Shell>,
 
-    #[arg(
-        short = 'A',
-        long = "adb",
-        required = false,
-        default_value = None,
-        value_name = "ADB_PATH",
-        help_heading = ABOUT_OPTIONS,
-        help = "Path to adb executable (if not in PATH)",
-    )]
+    #[arg(short = 'A')]
+    #[arg(long = "adb")]
+    #[arg(required = false)]
+    #[arg(default_value = None)]
+    #[arg(value_name = "ADB_PATH")]
+    #[arg(help_heading = ABOUT_OPTIONS)]
+    #[arg(help = "Path to adb executable (if not in PATH)")]
     pub adb_path: Option<String>,
 
-    #[arg(
-        short = 'd',
-        long = "device",
-        required = false,
-        value_name = None,
-        default_value_t = false,
-        action = ArgAction::SetTrue,
-        help_heading = DEVICE_OPTIONS,
-        help = "Use first device for log input",
-    )]
+    #[arg(short = 'd')]
+    #[arg(long = "device")]
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(default_value_t = false)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = DEVICE_OPTIONS)]
+    #[arg(help = "Use first device for log input")]
     pub use_device: bool,
 
-    #[arg(
-        short = 'e',
-        required = false,
-        long = "emulator",
-        value_name = None,
-        default_value_t = false,
-        action = ArgAction::SetTrue,
-        help_heading = DEVICE_OPTIONS,
-        help = "Use first emulator for log input",
-    )]
+    #[arg(short = 'e')]
+    #[arg(required = false)]
+    #[arg(long = "emulator")]
+    #[arg(value_name = None)]
+    #[arg(default_value_t = false)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = DEVICE_OPTIONS)]
+    #[arg(help = "Use first emulator for log input")]
     pub use_emulator: bool,
 
-    #[arg(
-        short = 's',
-        long = "serial",
-        required = false,
-        default_value = None,
-        value_name = "DEVICE_SERIAL",
-        help_heading = DEVICE_OPTIONS,
-        help = format!("Use {metavar} for log input", metavar = "[DEVICE_SERIAL]".cyan().bold()),
-    )]
+    #[arg(short = 's')]
+    #[arg(long = "serial")]
+    #[arg(required = false)]
+    #[arg(default_value = None)]
+    #[arg(value_name = "DEVICE_SERIAL")]
+    #[arg(help_heading = DEVICE_OPTIONS)]
+    #[arg(help = format!("Use {metavar} for log input", metavar = "[DEVICE_SERIAL]".cyan().bold()))]
     pub device_serial: Option<String>,
 
-    #[arg(
-        short = 'a',
-        long = "all",
-        required = false,
-        value_name = None,
-        default_value_t = false,
-        action = ArgAction::SetTrue,
-        help_heading = FILTERING_OPTIONS,
-        help = "Print log messages from all packages",
-    )]
+    #[arg(short = 'a')]
+    #[arg(long = "all")]
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(default_value_t = false)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = FILTERING_OPTIONS)]
+    #[arg(help = "Print log messages from all packages")]
     pub all: bool,
 
-    #[arg(
-        short = 'k',
-        long = "keep",
-        required = false,
-        value_name = None,
-        default_value_t = false,
-        action = ArgAction::SetTrue,
-        help_heading = FILTERING_OPTIONS,
-        help = "Keep the entire log before running",
-    )]
+    #[arg(short = 'k')]
+    #[arg(long = "keep")]
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(default_value_t = false)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = FILTERING_OPTIONS)]
+    #[arg(help = "Keep the entire log before running")]
     pub keep_logcat: bool,
 
-    #[arg(
-        short = 'c',
-        long = "current",
-        required = false,
-        value_name = None,
-        default_value_t = false,
-        action = ArgAction::SetTrue,
-        help_heading = FILTERING_OPTIONS,
-        help = "Filter logcat by current running app(s)",
-    )]
+    #[arg(short = 'c')]
+    #[arg(long = "current")]
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(default_value_t = false)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = FILTERING_OPTIONS)]
+    #[arg(help = "Filter logcat by current running app(s)")]
     pub current_app: bool,
 
-    #[arg(
-        short = 'I',
-        long = "ignore-system-tags",
-        required = false,
-        value_name = None,
-        default_value_t = false,
-        help_heading = FILTERING_OPTIONS,
-        action = ArgAction::SetTrue,
-        help = concat!(
+    #[arg(short = 'I')]
+    #[arg(long = "ignore-system-tags")]
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(default_value_t = false)]
+    #[arg(help_heading = FILTERING_OPTIONS)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help = concat!(
             "Filter output by ignoring known system tags",
             "\nUse --ignore-tag to ignore additional tags if needed"
         ),
     )]
     pub ignore_system_tags: bool,
 
-    #[arg(
-        short = 't',
-        long = "tag",
-        required = false,
-        value_name = "TAG",
-        default_value = None,
-        help_heading = FILTERING_OPTIONS,
-        help = concat!(
+    #[arg(short = 't')]
+    #[arg(long = "tag")]
+    #[arg(required = false)]
+    #[arg(value_name = "TAG")]
+    #[arg(default_value = None)]
+    #[arg(help_heading = FILTERING_OPTIONS)]
+    #[arg(help = concat!(
             "Filter output by specified tag(s)",
             "\nThis can be specified multiple times, or as a comma separated list"
         ),
     )]
     pub tag: Option<Vec<String>>,
 
-    #[arg(
-        short = 'i',
-        required = false,
-        long = "ignore-tag",
-        default_value = None,
-        value_name = "IGNORED_TAG",
-        help_heading = FILTERING_OPTIONS,
-        help = concat!(
-                "Filter output by ignoring specified tag(s)",
-                "\nThis can be specified multiple times, or as a comma separated list"
-            ),
+    #[arg(short = 'i')]
+    #[arg(required = false)]
+    #[arg(long = "ignore-tag")]
+    #[arg(default_value = None)]
+    #[arg(value_name = "IGNORED_TAG")]
+    #[arg(help_heading = FILTERING_OPTIONS)]
+    #[arg(help = concat!(
+            "Filter output by ignoring specified tag(s)",
+            "\nThis can be specified multiple times, or as a comma separated list"
+        ),
     )]
     pub ignore_tag: Option<Vec<String>>,
 
-    #[arg(
-        short = 'l',
-        long = "log-level",
-        ignore_case = true,
-        value_name = "LEVEL",
-        help_heading = FILTERING_OPTIONS,
-        default_value_t = LogLevel::VERBOSE,
-        help = "Filter messages lower than minimum log level",
-    )]
+    #[arg(short = 'l')]
+    #[arg(long = "log-level")]
+    #[arg(ignore_case = true)]
+    #[arg(value_name = "LEVEL")]
+    #[arg(help_heading = FILTERING_OPTIONS)]
+    #[arg(default_value_t = LogLevel::VERBOSE)]
+    #[arg(help = "Filter messages lower than minimum log level")]
     pub log_level: LogLevel,
 
-    #[arg(
-        short = 'r',
-        long = "regex",
-        required = false,
-        value_name = "REGEX",
-        default_value = None,
-        help_heading = FILTERING_OPTIONS,
-        help = format!("Filter output messages using the specified {metavar}", metavar = "[REGEX]".cyan().bold()),
-    )]
+    #[arg(short = 'r')]
+    #[arg(long = "regex")]
+    #[arg(required = false)]
+    #[arg(value_name = "REGEX")]
+    #[arg(default_value = None)]
+    #[arg(help_heading = FILTERING_OPTIONS)]
+    #[arg(help = format!("Filter output messages using the specified {metavar}", metavar = "[REGEX]".cyan().bold()))]
     pub regex: Option<String>,
 
-    #[arg(
-        short = 'P',
-        required = false,
-        long = "show-pid",
-        value_name = None,
-        default_value_t = false,
-        help = "Show PID in output",
-        action = ArgAction::SetTrue,
-        help_heading = FORMATTING_OPTIONS,
-    )]
+    #[arg(short = 'P')]
+    #[arg(required = false)]
+    #[arg(long = "show-pid")]
+    #[arg(value_name = None)]
+    #[arg(default_value_t = false)]
+    #[arg(help = "Show PID in output")]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = FORMATTING_OPTIONS)]
     pub show_pid: bool,
 
-    #[arg(
-        short = 'p',
-        required = false,
-        value_name = None,
-        long = "show-package",
-        default_value_t = false,
-        action = ArgAction::SetTrue,
-        help_heading = FORMATTING_OPTIONS,
-        help = "Show package name in output",
-    )]
+    #[arg(short = 'p')]
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(long = "show-package")]
+    #[arg(default_value_t = false)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = FORMATTING_OPTIONS)]
+    #[arg(help = "Show package name in output")]
     pub show_package: bool,
 
-    #[arg(
-        short = 'S',
-        required = false,
-        value_name = None,
-        default_value_t = false,
-        long = "always-show-tags",
-        action = ArgAction::SetTrue,
-        help = "Always show the tag name",
-        help_heading = FORMATTING_OPTIONS,
-    )]
+    #[arg(short = 'S')]
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(default_value_t = false)]
+    #[arg(long = "always-show-tags")]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help = "Always show the tag name")]
+    #[arg(help_heading = FORMATTING_OPTIONS)]
     pub always_show_tags: bool,
 
-    #[arg(
-        short = 'x',
-        required = false,
-        value_name = "X",
-        long = "pid-width",
-        default_value_t = 5,
-        help = "Width of PID column",
-        help_heading = FORMATTING_OPTIONS,
-    )]
+    #[arg(short = 'x')]
+    #[arg(required = false)]
+    #[arg(long = "pid-width")]
+    #[arg(default_value_t = 5u8)]
+    #[arg(value_name = "WIDTH")]
+    #[arg(help = "Width of PID column")]
+    #[arg(help_heading = FORMATTING_OPTIONS)]
     pub pid_width: u8,
 
-    #[arg(
-        short = 'n',
-        required = false,
-        value_name = "N",
-        default_value_t = 20,
-        long = "package-width",
-        help_heading = FORMATTING_OPTIONS,
-        help = "Width of package/process name column",
-    )]
+    #[arg(short = 'n')]
+    #[arg(required = false)]
+    #[arg(value_name = "WIDTH")]
+    #[arg(default_value_t = 20u8)]
+    #[arg(long = "package-width")]
+    #[arg(help_heading = FORMATTING_OPTIONS)]
+    #[arg(help = "Width of package/process name column")]
     pub package_width: u8,
 
-    #[arg(
-        short = 'm',
-        required = false,
-        value_name = "M",
-        long = "tag-width",
-        default_value_t = 20,
-        help = "Width of tag column",
-        help_heading = FORMATTING_OPTIONS,
-    )]
+    #[arg(short = 'm')]
+    #[arg(required = false)]
+    #[arg(value_name = "WIDTH")]
+    #[arg(long = "tag-width")]
+    #[arg(default_value_t = 20u8)]
+    #[arg(help = "Width of tag column")]
+    #[arg(help_heading = FORMATTING_OPTIONS)]
     pub tag_width: u8,
 
-    #[arg(
-        short = 'g',
-        required = false,
-        value_name = None,
-        long = "gc-color",
-        default_value_t = false,
-        action = ArgAction::SetTrue,
-        help_heading = COLORING_OPTIONS,
-        help = "Enable garbage collector messages colors",
-    )]
+    #[arg(short = 'g')]
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(long = "gc-color")]
+    #[arg(default_value_t = false)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = COLORING_OPTIONS)]
+    #[arg(help = "Enable garbage collector messages colors")]
     pub gc_color: bool,
 
-    #[arg(
-        short = 'N',
-        required = false,
-        value_name = None,
-        long = "no-color",
-        default_value_t = false,
-        action = ArgAction::SetTrue,
-        help = "Disable message colors",
-        help_heading = COLORING_OPTIONS,
-    )]
+    #[arg(short = 'N')]
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(long = "no-color")]
+    #[arg(default_value_t = false)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help = "Disable message colors")]
+    #[arg(help_heading = COLORING_OPTIONS)]
     pub no_color: bool,
 
-    #[arg(
-        short = 'o',
-        long = "output",
-        required = false,
-        default_value = None,
-        value_name = "FILE_PATH",
-        help_heading = OUTPUT_OPTIONS,
-        help = format!("Save output to {metavar}", metavar = "[FILE_PATH]".cyan().bold()),
-    )]
+    #[arg(short = 'o')]
+    #[arg(long = "output")]
+    #[arg(required = false)]
+    #[arg(default_value = None)]
+    #[arg(value_name = "FILE_PATH")]
+    #[arg(help_heading = OUTPUT_OPTIONS)]
+    #[arg(help = format!("Save output to {metavar}", metavar = "[FILE_PATH]".cyan().bold()))]
     pub output_path: Option<String>,
+
+    #[arg(short = 'D')]
+    #[arg(hide = true)]
+    #[arg(long = "debug")]
+    #[arg(required = false)]
+    #[arg(default_value = None)]
+    #[arg(value_name = "MILLISECONDS")]
+    #[arg(help_heading = DEBUG_OPTIONS)]
+    #[arg(help = "Print tokens in rolling manner")]
+    pub debug: Option<u64>,
 }
 
 impl CliArgs {

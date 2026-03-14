@@ -186,7 +186,7 @@ impl CliArgs {
                     false => err.exit(),
                 }
 
-                process::exit(0);
+                process::exit(0i32);
             }
         }
     }
