@@ -118,7 +118,7 @@ fn main() {
                     .run(|err| panic!("'AppVersion' was NOT defined in {SETUP_PATH}: {err}")),
             };
 
-            let line_number = index + 1;
+            let line_number = index + 1usize;
 
             let updated_msg =
                 format!("Updated AppVersion to {VERSION} in {SETUP_PATH}:{line_number}");

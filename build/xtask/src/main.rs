@@ -148,21 +148,6 @@ fn run(shell: &Shell, profile: &Profile, args: &[String]) -> Result<()> {
     cargo().and_then(cmd).context("failed to run!")
 }
 
-/// Install PidCat using cargo install
-#[cfg(not(target_os = "windows"))]
-fn install(shell: &Shell) -> Result<()> {
-    let cmd = |cargo| {
-        status(">> Installing pidcat...");
-
-        cmd!(shell, "{cargo} install --path .")
-            .quiet()
-            .run()
-            .map_err(Error::new)
-    };
-
-    cargo().and_then(cmd).context("failed to install!")
-}
-
 /// Install PidCat using the Inno Setup Installer
 #[cfg(target_os = "windows")]
 fn install(shell: &Shell, silent: bool) -> Result<()> {
@@ -189,6 +174,21 @@ fn install(shell: &Shell, silent: bool) -> Result<()> {
         .map(|entry| entry.path())
         .and_then(cmd)
         .context("failed to install!")
+}
+
+/// Install PidCat using cargo install
+#[cfg(not(target_os = "windows"))]
+fn install(shell: &Shell) -> Result<()> {
+    let cmd = |cargo| {
+        status(">> Installing pidcat...");
+
+        cmd!(shell, "{cargo} install --locked --path .")
+            .quiet()
+            .run()
+            .map_err(Error::new)
+    };
+
+    cargo().and_then(cmd).context("failed to install!")
 }
 
 /// Main entry point for the xtask

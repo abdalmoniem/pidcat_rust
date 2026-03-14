@@ -9,12 +9,12 @@ use std::fmt::Result;
 #[derive(Eq, Ord, Copy, Debug, Clone, PartialEq, PartialOrd, Default)]
 pub enum LogLevel {
     #[default]
-    VERBOSE = 0,
-    DEBUG = 1,
-    INFO = 2,
-    WARN = 3,
-    ERROR = 4,
-    FATAL = 5,
+    VERBOSE = 0isize,
+    DEBUG = 1isize,
+    INFO = 2isize,
+    WARN = 3isize,
+    ERROR = 4isize,
+    FATAL = 5isize,
 }
 
 impl From<&str> for LogLevel {
