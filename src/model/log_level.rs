@@ -6,7 +6,7 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fmt::Result;
 
-#[derive(Eq, Ord, Copy, Debug, Clone, PartialEq, PartialOrd, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub enum LogLevel {
     #[default]
     VERBOSE = 0isize,
@@ -65,12 +65,12 @@ impl ValueEnum for LogLevel {
 
     fn to_possible_value(&self) -> Option<PossibleValue> {
         Some(match self {
-            Self::VERBOSE => PossibleValue::new("V").alias("verbose"),
-            Self::DEBUG => PossibleValue::new("D").alias("debug"),
-            Self::INFO => PossibleValue::new("I").alias("info"),
-            Self::WARN => PossibleValue::new("W").alias("warn"),
-            Self::ERROR => PossibleValue::new("E").alias("error"),
-            Self::FATAL => PossibleValue::new("F").alias("fatal"),
+            Self::VERBOSE => PossibleValue::new("V").alias("verbose").help("verbose"),
+            Self::DEBUG => PossibleValue::new("D").alias("debug").help("debug"),
+            Self::INFO => PossibleValue::new("I").alias("info").help("info"),
+            Self::WARN => PossibleValue::new("W").alias("warn").help("warn"),
+            Self::ERROR => PossibleValue::new("E").alias("error").help("error"),
+            Self::FATAL => PossibleValue::new("F").alias("fatal").help("fatal"),
         })
     }
 }

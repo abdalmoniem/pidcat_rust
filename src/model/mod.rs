@@ -2,6 +2,7 @@ pub mod adb_device;
 pub mod adb_state;
 pub mod ansi_segment;
 pub mod cli_args;
+pub mod log_format;
 pub mod log_level;
 pub mod log_source;
 pub mod option_unwrap;
