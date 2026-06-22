@@ -69,9 +69,6 @@ lazy_static! {
     static ref NATIVE_TAGS_LINE: Regex =
         Regex::new(r".*nativeGetEnabledTags.*").unwrap_or_panic("Invalid Regex for NATIVE_TAGS_LINE");
 
-    static ref LOG_LINE: Regex =
-        Regex::new(r"^([A-Z])/(.+?)\( *(\d+)\): (.*?)$").unwrap_or_panic("Invalid Regex for LOG_LINE");
-
     static ref PID_LINE: Regex =
         Regex::new(r"^\w+\s+(\w+)\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+\s+\w\s(.*?)$")
             .unwrap_or_panic("Invalid Regex for PID_LINE");
@@ -1201,29 +1198,47 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         return;
     }
 
-    let log_line = match LOG_LINE.captures(line) {
+    let log_line_regex = args.log_format.regex();
+
+    let log_line = match log_line_regex.captures(line) {
         Some(cap) => cap,
         None => return,
     };
 
-    let owner = log_line
-        .get(3usize)
+    let pid = log_line
+        .get(
+            args.log_format
+                .pid_index()
+                .unwrap_or_panic("log format pid index is not set"),
+        )
         .map_or(String::default(), |mat| mat.as_str().to_string())
         .trim()
         .to_string();
 
     let tag = log_line
-        .get(2usize)
+        .get(
+            args.log_format
+                .tag_index()
+                .unwrap_or_panic("log format tag index is not set"),
+        )
         .map_or(String::default(), |mat| mat.as_str().to_string())
         .trim()
         .to_string();
 
     let level = log_line
-        .get(1usize)
+        .get(
+            args.log_format
+                .level_index()
+                .unwrap_or_panic("log format level index is not set"),
+        )
         .map_or(LogLevel::default(), |mat| LogLevel::from(mat.as_str()));
 
     let mut message = log_line
-        .get(4usize)
+        .get(
+            args.log_format
+                .msg_index()
+                .unwrap_or_panic("log format msg index is not set"),
+        )
         .map_or(String::default(), |mat| mat.as_str().to_string())
         .trim()
         .to_string();
@@ -1269,7 +1284,7 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         return;
     }
 
-    if !args.all && !state.pids_map.contains_key(&owner) {
+    if !args.all && !state.pids_map.contains_key(&pid) {
         return;
     }
 
@@ -1302,13 +1317,13 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         args,
         writers,
         header_width,
-        &owner,
+        &pid,
         level_foreground,
         level_background,
     );
 
     write_package_name(
-        &owner,
+        &pid,
         args,
         state,
         writers,

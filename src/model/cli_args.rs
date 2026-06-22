@@ -9,6 +9,9 @@ use clap_complete::Shell;
 
 use colored::Colorize;
 
+use crate::LogFormat;
+use crate::LogFormatKind;
+use crate::LogFormatParser;
 use crate::LogLevel;
 use crate::ValueOrPanic;
 
@@ -19,7 +22,6 @@ const FILTERING_OPTIONS: &str = "Filtering Options";
 const FORMATTING_OPTIONS: &str = "Formatting Options";
 const COLORING_OPTIONS: &str = "Color Options";
 const OUTPUT_OPTIONS: &str = "Output Options";
-const DEBUG_OPTIONS: &str = "Debug Options";
 
 #[derive(Debug, Parser)]
 #[command(disable_help_flag = true)]
@@ -189,6 +191,16 @@ pub struct CliArgs {
     #[arg(help = format!("Filter output messages using the specified {metavar}", metavar = "[REGEX]".cyan().bold()))]
     pub regex: Option<String>,
 
+    #[arg(short = 'f')]
+    #[arg(long = "log-format")]
+    #[arg(ignore_case = true)]
+    #[arg(value_name = "FORMAT")]
+    #[arg(help_heading = FORMATTING_OPTIONS)]
+    #[arg(default_value_t = LogFormat::new(LogFormatKind::Brief))]
+    #[arg(help = "Input log format from adb")]
+    #[arg(value_parser = LogFormatParser)]
+    pub log_format: LogFormat,
+
     #[arg(short = 'P')]
     #[arg(required = false)]
     #[arg(long = "show-pid")]
@@ -274,16 +286,6 @@ pub struct CliArgs {
     #[arg(help_heading = OUTPUT_OPTIONS)]
     #[arg(help = format!("Save output to {metavar}", metavar = "[FILE_PATH]".cyan().bold()))]
     pub output_path: Option<String>,
-
-    #[arg(short = 'D')]
-    #[arg(hide = true)]
-    #[arg(long = "debug")]
-    #[arg(required = false)]
-    #[arg(default_value = None)]
-    #[arg(value_name = "MILLISECONDS")]
-    #[arg(help_heading = DEBUG_OPTIONS)]
-    #[arg(help = "Print tokens in rolling manner")]
-    pub debug: Option<u64>,
 }
 
 impl CliArgs {
