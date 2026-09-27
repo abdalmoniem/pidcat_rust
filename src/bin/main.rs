@@ -748,15 +748,15 @@ fn write_started_process(
 
         let started_process_msg = format!(
             "Process {started_package} created for {started_target}\n",
-            started_package = &started_package.color(Color::BrightYellow),
-            started_target = &started_target.color(Color::BrightYellow)
+            started_package = started_package.color(Color::BrightYellow),
+            started_target = started_target.color(Color::BrightYellow)
         );
 
         let pugid_msg = format!(
             "PID: {started_pid}   UID: {started_uid}   GIDs: {started_gids}\n",
-            started_pid = &started_pid.color(Color::BrightYellow),
-            started_uid = &started_uid.color(Color::BrightYellow),
-            started_gids = &started_gids.color(Color::BrightYellow)
+            started_pid = started_pid.color(Color::BrightYellow),
+            started_uid = started_uid.color(Color::BrightYellow),
+            started_gids = started_gids.color(Color::BrightYellow)
         );
 
         if is_matching_package(
@@ -870,8 +870,8 @@ fn write_dead_process(
 
         let dead_process_msg = format!(
             "Process {dead_process_name} (PID: {dead_pid}) ended\n",
-            dead_process_name = &dead_process_name.color(Color::BrightYellow),
-            dead_pid = &dead_pid.color(Color::BrightYellow)
+            dead_process_name = dead_process_name.color(Color::BrightYellow),
+            dead_pid = dead_pid.color(Color::BrightYellow)
         );
 
         if state.pids_map.contains_key(&dead_pid) {
@@ -941,7 +941,7 @@ fn write_pid(
             display_owner.truncate(pid_width - *ELLIPSIS_COUNT);
             display_owner = format!(
                 "{display_owner}{ellipsis}",
-                display_owner = &display_owner,
+                display_owner = display_owner,
                 ellipsis = *ELLIPSIS
             );
         }
@@ -997,7 +997,7 @@ fn write_package_name(
             display_pkg.truncate(package_width - *ELLIPSIS_COUNT);
             display_pkg = format!(
                 "{display_pkg}{ellipsis}",
-                display_pkg = &display_pkg,
+                display_pkg = display_pkg,
                 ellipsis = *ELLIPSIS
             );
         }
@@ -1050,7 +1050,7 @@ fn write_tag(
                 display_tag.truncate(tag_width - *ELLIPSIS_COUNT);
                 display_tag = format!(
                     "{display_tag}{ellipsis}",
-                    display_tag = &display_tag,
+                    display_tag = display_tag,
                     ellipsis = *ELLIPSIS
                 );
             }
