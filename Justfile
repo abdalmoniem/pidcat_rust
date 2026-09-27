@@ -5,7 +5,6 @@ alias l := lint
 alias c := clean
 alias b := build
 alias br := build-release
-alias bi := build-installer
 alias t := test
 alias r := run
 alias rr := run-release
@@ -45,6 +44,7 @@ build-release: fmt lint
 
 [doc('Build the installer using Inno Setup Compiler')]
 [group('build')]
+[windows]
 build-installer:
     @cargo xtask build-installer
 
