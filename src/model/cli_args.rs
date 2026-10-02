@@ -44,7 +44,7 @@ pub struct CliArgs {
     #[arg(long = "help")]
     #[arg(required = false)]
     #[arg(value_name = None)]
-    #[arg(action = ArgAction::Help)]
+    #[arg(action = ArgAction::HelpShort)]
     #[arg(help_heading = ABOUT_OPTIONS)]
     #[arg(help = "Show this help message and exit")]
     pub help: Option<bool>,
