@@ -70,8 +70,14 @@ lazy_static! {
         Regex::new(r".*nativeGetEnabledTags.*").unwrap_or_panic("Invalid Regex for NATIVE_TAGS_LINE");
 
     static ref PID_LINE: Regex =
-        Regex::new(r"^\w+\s+(\w+)\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+\s+\w\s(.*?)$")
+        Regex::new(r"^(\S+)\s+(\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(.*?)$")
             .unwrap_or_panic("Invalid Regex for PID_LINE");
+
+    static ref UID_LINE: Regex =
+        Regex::new(r"^\s*userId=(\d+)\s*$").unwrap_or_panic("Invalid Regex for UID_LINE");
+
+    static ref PACKAGE_UID_LINE: Regex =
+        Regex::new(r"^package:(\S+)\s+uid:(\d+)\s*$").unwrap_or_panic("Invalid Regex for PACKAGE_UID_LINE");
 
     static ref PID_START: Regex =
         Regex::new(r"^.*: Start proc (\d+):([a-zA-Z0-9._:]+)/[a-z0-9]+ for .*? \{(.*?)\}$")
@@ -119,6 +125,7 @@ lazy_static! {
     static ref SYSTEM_TAGS: &'static [&'static str] =
         &[
             r"Tile",
+            r"View",
             r"HWUI",
             r"skia",
             r"libc",
@@ -142,6 +149,9 @@ lazy_static! {
             r"ViewRootImpl",
             r"nativeloader",
             r"WindowManager",
+            r"InputTransport",
+            r"ViewRootImpl.*?",
+            r"OpenGLRenderer",
             r"OverlayHandler",
             r"ActivityThread",
             r"SurfaceControl",
@@ -170,6 +180,7 @@ lazy_static! {
             r"BufferQueueConsumer",
             r"BufferQueueProducer",
             r"OplusCursorFeedback",
+            r"AccessibilityManager",
             r"FirebaseInitProvider",
             r"OplusActivityManager",
             r"CompatChangeReporter",
@@ -521,8 +532,10 @@ fn get_processes(
     base_adb_command: &[String],
     catchall_package: &[String],
     args: &CliArgs,
-) -> HashMap<String, String> {
+) -> (HashMap<String, String>, HashMap<String, String>) {
     let mut pids_map = HashMap::default();
+    let mut uids_map = HashMap::default();
+    let mut packages: HashSet<String> = HashSet::default();
     let mut cmd = Command::new(&base_adb_command[0usize]);
 
     if base_adb_command.len() > 1usize {
@@ -536,22 +549,79 @@ fn get_processes(
         for line in stdout.lines().map_while(Result::ok) {
             if let Some(caps) = PID_LINE.captures(&line) {
                 let pid = caps
-                    .get(1usize)
+                    .get(2usize)
                     .map_or(String::default(), |mat| mat.as_str().to_string());
                 let process = caps
-                    .get(2usize)
+                    .get(3usize)
                     .map_or(String::default(), |mat| mat.as_str().to_string());
 
                 let is_target_package = catchall_package.contains(&process);
 
                 if args.all || is_target_package {
-                    pids_map.insert(pid, process);
+                    pids_map.insert(pid, process.clone());
+                }
+
+                if is_target_package && packages.insert(process.clone()) {
+                    let package = process.split(':').next().unwrap_or(&process);
+                    let mut cmd = Command::new(&base_adb_command[0usize]);
+
+                    if base_adb_command.len() > 1usize {
+                        cmd.args(&base_adb_command[1usize..]);
+                    }
+
+                    let output = cmd
+                        .args(["shell", "dumpsys", "package", package])
+                        .stdout(Stdio::piped())
+                        .output();
+
+                    if let Ok(out) = output {
+                        let stdout = BufReader::new(&out.stdout[..]);
+                        for line in stdout.lines().map_while(Result::ok) {
+                            if let Some(caps) = UID_LINE.captures(&line) {
+                                let uid = caps
+                                    .get(1usize)
+                                    .map_or(String::default(), |mat| mat.as_str().to_string());
+                                uids_map.insert(uid, process.clone());
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    pids_map
+    if args.all {
+        let mut cmd = Command::new(&base_adb_command[0usize]);
+
+        if base_adb_command.len() > 1usize {
+            cmd.args(&base_adb_command[1usize..]);
+        }
+
+        let output = cmd
+            .args([
+                "shell", "cmd", "package", "list", "packages", "--user", "0", "-U",
+            ])
+            .stdout(Stdio::piped())
+            .output();
+
+        if let Ok(out) = output {
+            let stdout = BufReader::new(&out.stdout[..]);
+            for line in stdout.lines().map_while(Result::ok) {
+                if let Some(caps) = PACKAGE_UID_LINE.captures(&line) {
+                    let package = caps
+                        .get(1usize)
+                        .map_or(String::default(), |mat| mat.as_str().to_string());
+                    let uid = caps
+                        .get(2usize)
+                        .map_or(String::default(), |mat| mat.as_str().to_string());
+                    uids_map.insert(uid, package);
+                }
+            }
+        }
+    }
+
+    (pids_map, uids_map)
 }
 
 fn get_started_process(line: &str) -> Option<(String, String, String, String, String)> {
@@ -706,7 +776,7 @@ fn write_started_process(
     line: &str,
     state: &mut State,
     writers: &mut [Writer],
-    pid_width: usize,
+    puid_width: usize,
     header_width: usize,
 ) -> bool {
     let banner_width = header_width.saturating_sub(1usize);
@@ -715,30 +785,25 @@ fn write_started_process(
     if let Some(procs) = get_started_process(line) {
         let (started_pid, started_uid, started_gids, started_package, started_target) = procs;
 
-        let started_package = if !started_package.is_empty() {
-            started_package
-        } else {
-            "-".repeat(pid_width)
+        let started_package = match !started_package.is_empty() {
+            true => started_package,
+            false => "-".repeat(puid_width),
         };
-        let started_target = if !started_target.is_empty() {
-            started_target
-        } else {
-            "-".repeat(pid_width)
+        let started_target = match !started_target.is_empty() {
+            true => started_target,
+            false => "-".repeat(puid_width),
         };
-        let started_pid = if !started_pid.is_empty() {
-            started_pid
-        } else {
-            "-".repeat(pid_width)
+        let started_pid = match !started_pid.is_empty() {
+            true => started_pid,
+            false => "-".repeat(puid_width),
         };
-        let started_uid = if !started_uid.is_empty() {
-            started_uid
-        } else {
-            "-".repeat(pid_width)
+        let started_uid = match !started_uid.is_empty() {
+            true => started_uid,
+            false => "-".repeat(puid_width),
         };
-        let started_gids = if !started_gids.is_empty() {
-            started_gids
-        } else {
-            "-".repeat(pid_width)
+        let started_gids = match !started_gids.is_empty() {
+            true => started_gids,
+            false => "-".repeat(puid_width),
         };
 
         let spaces = spaces
@@ -767,6 +832,11 @@ fn write_started_process(
             state
                 .pids_map
                 .insert(started_pid.clone(), started_package.clone());
+            if !started_uid.is_empty() {
+                state
+                    .uids_map
+                    .insert(started_uid.clone(), started_package.clone());
+            }
             state.app_pid = Some(started_pid.clone());
 
             write_token(
@@ -845,7 +915,7 @@ fn write_dead_process(
     message: &str,
     state: &mut State,
     writers: &mut [Writer],
-    pid_width: usize,
+    puid_width: usize,
     header_width: usize,
 ) -> bool {
     let banner_width = header_width.saturating_sub(1usize);
@@ -860,12 +930,12 @@ fn write_dead_process(
         let dead_pid = if !dead_pid.is_empty() {
             dead_pid
         } else {
-            "-".repeat(pid_width)
+            "-".repeat(puid_width)
         };
         let dead_process_name = if !dead_process_name.is_empty() {
             dead_process_name
         } else {
-            "-".repeat(pid_width)
+            "-".repeat(puid_width)
         };
 
         let dead_process_msg = format!(
@@ -922,7 +992,7 @@ fn write_dead_process(
     false
 }
 
-fn write_pid(
+fn write_owner(
     state: &mut State,
     args: &CliArgs,
     writers: &mut [Writer],
@@ -931,14 +1001,14 @@ fn write_pid(
     level_foreground: Color,
     level_background: Color,
 ) {
-    let pid_width = args.pid_width as usize;
+    let puid_width = args.puid_width as usize;
 
     if args.show_pid && !&owner.is_empty() {
         let mut display_owner = owner.to_string();
         let pid_color = get_token_color(owner, state);
 
-        if display_owner.len() > pid_width {
-            display_owner.truncate(pid_width - *ELLIPSIS_COUNT);
+        if display_owner.len() > puid_width {
+            display_owner.truncate(puid_width - *ELLIPSIS_COUNT);
             display_owner = format!(
                 "{display_owner}{ellipsis}",
                 display_owner = display_owner,
@@ -946,7 +1016,7 @@ fn write_pid(
             );
         }
 
-        let pid_display = format!("{:width$}", display_owner, width = pid_width);
+        let pid_display = format!("{:width$}", display_owner, width = puid_width);
 
         let pid_display = if args.no_color {
             pid_display
@@ -969,7 +1039,7 @@ fn write_pid(
             level_foreground,
             level_background,
         );
-        *header_width += pid_width + 1usize;
+        *header_width += puid_width + 1usize;
     }
 }
 
@@ -985,11 +1055,14 @@ fn write_package_name(
     let package_width = args.package_width as usize;
 
     if args.show_package && !&owner.is_empty() {
-        let package_name = state
-            .pids_map
-            .get(owner)
-            .cloned()
-            .unwrap_or(format!("UNKNOWN({owner})"));
+        let package_name = if state.uids_map.contains_key(owner) {
+            &state.uids_map
+        } else {
+            &state.pids_map
+        }
+        .get(owner)
+        .cloned()
+        .unwrap_or(format!("UNKNOWN({owner})"));
         let mut display_pkg = package_name.clone();
         let pkg_color = get_token_color(&package_name, state);
 
@@ -1056,7 +1129,7 @@ fn write_tag(
             }
 
             let tag_color = get_token_color(tag, state);
-            let tag_display = if args.show_pid || args.show_package {
+            let tag_display = if args.show_pid || args.show_uid || args.show_package {
                 format!("{:>width$}", display_tag, width = tag_width)
             } else {
                 format!("{:width$}", display_tag, width = tag_width)
@@ -1215,6 +1288,16 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         .trim()
         .to_string();
 
+    let uid = log_line
+        .get(
+            args.log_format
+                .uid_index()
+                .unwrap_or_panic("log format uid index is not set"),
+        )
+        .map_or(String::default(), |mat| mat.as_str().to_string())
+        .trim()
+        .to_string();
+
     let tag = log_line
         .get(
             args.log_format
@@ -1259,7 +1342,11 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
     };
 
     if args.show_pid {
-        *header_width += args.pid_width as usize + 1usize
+        *header_width += args.puid_width as usize + 1usize
+    }
+
+    if args.show_uid {
+        *header_width += uid.len() + 1usize
     }
 
     if args.show_package {
@@ -1268,7 +1355,13 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
 
     *header_width += base_header_width + args.tag_width as usize + 1usize;
 
-    if write_started_process(line, state, writers, args.pid_width as usize, *header_width) {
+    if write_started_process(
+        line,
+        state,
+        writers,
+        args.puid_width as usize,
+        *header_width,
+    ) {
         writers.iter_mut().for_each(Writer::flush);
         return;
     }
@@ -1277,14 +1370,24 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         &message,
         state,
         writers,
-        args.pid_width as usize,
+        args.puid_width as usize,
         *header_width,
     ) {
         writers.iter_mut().for_each(Writer::flush);
         return;
     }
 
-    if !args.all && !state.pids_map.contains_key(&pid) {
+    let identify_by_uid = !uid.is_empty() && state.uids_map.contains_key(&uid);
+    let owner = match identify_by_uid {
+        true => &uid,
+        false => &pid,
+    };
+    let package_map = match identify_by_uid {
+        true => &state.uids_map,
+        false => &state.pids_map,
+    };
+
+    if !args.all && !package_map.contains_key(owner) {
         return;
     }
 
@@ -1312,7 +1415,7 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
 
     *header_width = 0usize;
 
-    write_pid(
+    write_owner(
         state,
         args,
         writers,
@@ -1322,8 +1425,18 @@ fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [
         level_background,
     );
 
+    write_owner(
+        state,
+        args,
+        writers,
+        header_width,
+        &uid,
+        level_foreground,
+        level_background,
+    );
+
     write_package_name(
-        &pid,
+        owner,
         args,
         state,
         writers,
@@ -1415,7 +1528,7 @@ fn main() {
 
     let stdin = stdin();
     let base_adb_command = &get_adb_command(args);
-    let logcat_command = ["logcat", "-v", "brief"].map(|item| item.to_string());
+    let logcat_command = ["logcat", "-v", "brief,uid"].map(|item| item.to_string());
     let adb_command = &mut base_adb_command.clone();
     let console_width = get_console_width();
     let stdout_writer = Writer::new_console(console_width, !args.no_color);
@@ -1589,10 +1702,7 @@ fn main() {
         args.all = true;
     }
 
-    let pids_map = match stdin.is_terminal() {
-        true => get_processes(base_adb_command, catchall_packages, args),
-        false => HashMap::new(),
-    };
+    let (pids_map, uids_map) = get_processes(base_adb_command, catchall_packages, args);
 
     let token_colors = vec![
         Color::BrightRed,
@@ -1605,6 +1715,7 @@ fn main() {
 
     let mut state = State {
         pids_map,
+        uids_map,
         last_tag: None,
         app_pid: None,
         log_level: args.log_level,

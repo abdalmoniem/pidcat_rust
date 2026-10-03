@@ -164,43 +164,50 @@ pidcat com.example.app -t "^Network.*"
 - ## Command Line Options
 
 ```bash
-positional arguments:
-  package(s)            Application package name(s)
-                        This can be specified multiple times
+Positional Arguments:
+  [PACKAGE]...  Application package name(s)
+                This can be specified multiple times
 
-options:
-  -h, --help            Show this help message and exit.
-  -v, --version         Print the version number and exit
-  -a, --all             Print log messages from all packages, default: False
-  -k, --keep            Keep the entire log before running, default: False
-  -d, --device          Use first device for log input, default: False
-  -e, --emulator        Use first emulator for log input, default: False
-  -g, --color-gc        Color garbage collection, default: False
-  -N, --no-color        Disable colors, default: False
-  -P, --show-pid        Show package name in output, default: False
-  -p, --show-package    Show package name in output, default: False
-  -S, --always-show-tags
-                        Always show the tag name, default: False
-  -c, --current         Filter logcat by current running app(s), default: False
-  -I, --ignore-system-tags
-                        Filter output by ignoring known system tags, default: False
-                        Use --ignore-tag to ignore additional tags if needed
-  -t, --tag TAG         Filter output by specified tag(s)
-                        This can be specified multiple times, or as a comma separated list
-  -i, --ignore-tag IGNORED_TAG
-                        Filter output by ignoring specified tag(s)
-                        This can be specified multiple times, or as a comma separated list
-  -l, --log-level LEVEL [V|D|I|W|E|F|v|d|i|w|e|f]
-                        Filter messages lower than minimum log level, default: V
-  -r, --regex REGEX     Filter output messages using the specified REGEX
-  -x, --pid-width X     Width of PID column, default: 6
-  -n, --package-width N
-                        Width of package/process name column, default: 20
-  -m, --tag-width M     Width of tag column, default: 20
-  -s, --serial DEVICE_SERIAL
-                        Device serial number
-  -o, --output FILE_PATH
-                        Output filename
+Options:
+  -h, --help                 Show this help message and exit
+  -v, --version              Print the version number and exit
+      --completions <SHELL>  Generate shell completions for [SHELL] [possible values: bash, elvish, fish, powershell, zsh]
+  -A, --adb <ADB_PATH>       Path to adb executable (if not in PATH)
+
+Device Options:
+  -d, --device                  Use first device for log input
+  -e, --emulator                Use first emulator for log input
+  -s, --serial <DEVICE_SERIAL>  Use [DEVICE_SERIAL] for log input
+
+Filtering Options:
+  -a, --all                       Print log messages from all packages
+  -k, --keep                      Keep the entire log before running
+  -c, --current                   Filter logcat by current running app(s)
+  -I, --ignore-system-tags        Filter output by ignoring known system tags
+                                  Use --ignore-tag to ignore additional tags if needed
+  -t, --tag <TAG>                 Filter output by specified tag(s)
+                                  This can be specified multiple times, or as a comma separated list
+  -i, --ignore-tag <IGNORED_TAG>  Filter output by ignoring specified tag(s)
+                                  This can be specified multiple times, or as a comma separated list
+  -l, --log-level <LEVEL>         Filter messages lower than minimum log level [default: V] [possible values: V, D, I, W, E, F]
+  -r, --regex <REGEX>             Filter output messages using the specified [REGEX]
+
+Formatting Options:
+  -f, --log-format <FORMAT>    Input log format from adb [default: brief] [possible values: B, L, P, R, T, Th, Tht, Ti]
+  -P, --show-pid               Show PID in output
+  -U, --show-uid               Show UID in output
+  -p, --show-package           Show package name in output
+  -S, --always-show-tags       Always show the tag name
+  -x, --puid-width <WIDTH>     Width of PID/UID column [default: 5]
+  -m, --package-width <WIDTH>  Width of package/process name column [default: 20]
+  -n, --tag-width <WIDTH>      Width of tag column [default: 20]
+
+Color Options:
+  -g, --gc-color  Enable garbage collector messages colors
+  -N, --no-color  Disable message colors
+
+Output Options:
+  -o, --output <FILE_PATH>  Save output to [FILE_PATH]
 ```
 
 ---

@@ -211,6 +211,16 @@ pub struct CliArgs {
     #[arg(help_heading = FORMATTING_OPTIONS)]
     pub show_pid: bool,
 
+    #[arg(short = 'U')]
+    #[arg(required = false)]
+    #[arg(long = "show-uid")]
+    #[arg(value_name = None)]
+    #[arg(default_value_t = false)]
+    #[arg(help = "Show UID in output")]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = FORMATTING_OPTIONS)]
+    pub show_uid: bool,
+
     #[arg(short = 'p')]
     #[arg(required = false)]
     #[arg(value_name = None)]
@@ -233,14 +243,14 @@ pub struct CliArgs {
 
     #[arg(short = 'x')]
     #[arg(required = false)]
-    #[arg(long = "pid-width")]
+    #[arg(long = "puid-width")]
     #[arg(default_value_t = 5u8)]
     #[arg(value_name = "WIDTH")]
-    #[arg(help = "Width of PID column")]
+    #[arg(help = "Width of PID/UID column")]
     #[arg(help_heading = FORMATTING_OPTIONS)]
-    pub pid_width: u8,
+    pub puid_width: u8,
 
-    #[arg(short = 'n')]
+    #[arg(short = 'm')]
     #[arg(required = false)]
     #[arg(value_name = "WIDTH")]
     #[arg(default_value_t = 20u8)]
@@ -249,7 +259,7 @@ pub struct CliArgs {
     #[arg(help = "Width of package/process name column")]
     pub package_width: u8,
 
-    #[arg(short = 'm')]
+    #[arg(short = 'n')]
     #[arg(required = false)]
     #[arg(value_name = "WIDTH")]
     #[arg(long = "tag-width")]
