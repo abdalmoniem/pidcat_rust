@@ -36,6 +36,7 @@ pub struct LogFormatMatchConfig {
     pub level_index: Option<usize>,
     pub tag_index: Option<usize>,
     pub pid_index: Option<usize>,
+    pub uid_index: Option<usize>,
     pub tid_index: Option<usize>,
     pub msg_index: Option<usize>,
 }
@@ -84,14 +85,15 @@ impl LogFormat {
     pub fn new(kind: LogFormatKind) -> Self {
         let match_cfg = match kind {
             LogFormatKind::Brief => LogFormatMatchConfig {
-                regex: Regex::new(r"^([A-Z])/(.+?)\( *(\d+)\): (.*?)$").unwrap(),
+                regex: Regex::new(r"^([A-Z])/(.+?)\(\s*(?:(\S+):\s*)?(\d+)\): (.*?)$").unwrap(),
                 date_index: None,
                 time_index: None,
                 level_index: Some(1),
                 tag_index: Some(2),
-                pid_index: Some(3),
+                pid_index: Some(4),
+                uid_index: Some(3),
                 tid_index: None,
-                msg_index: Some(4),
+                msg_index: Some(5),
             },
             LogFormatKind::Long => unimplemented!("Long LogFormatKind not implemented yet!"),
             LogFormatKind::Process => unimplemented!("Process LogFormatKind not implemented yet!"),
@@ -100,15 +102,16 @@ impl LogFormat {
             LogFormatKind::Thread => unimplemented!("Thread LogFormatKind not implemented yet!"),
             LogFormatKind::ThreadTime => LogFormatMatchConfig {
                 regex: Regex::new(
-                    r"^(\d+-\d+)\s+((?:\d+:?)+(?:\.\d+)?)\s+(\d+)\s+(\d+)\s+([A-Z])\s+(.*?):\s+(.*?)$"
+                    r"^(\d+-\d+)\s+((?:\d+:?)+(?:\.\d+)?)\s+(?:(\S+)\s+)?(\d+)\s+(\d+)\s+([A-Z])\s+(.*?):\s+(.*?)$"
                 ).unwrap(),
                 date_index: Some(1),
                 time_index: Some(2),
-                level_index: Some(5),
-                tag_index: Some(6),
-                pid_index: Some(3),
-                tid_index: Some(4),
-                msg_index: Some(7),
+                level_index: Some(6),
+                tag_index: Some(7),
+                pid_index: Some(4),
+                uid_index: Some(3),
+                tid_index: Some(5),
+                msg_index: Some(8),
             },
             LogFormatKind::Time => unimplemented!("Time LogFormatKind not implemented yet!"),
         };
@@ -140,12 +143,26 @@ impl LogFormat {
         &self.match_cfg.pid_index
     }
 
+    pub fn uid_index(&self) -> &Option<usize> {
+        &self.match_cfg.uid_index
+    }
+
     pub fn tid_index(&self) -> &Option<usize> {
         &self.match_cfg.tid_index
     }
 
     pub fn msg_index(&self) -> &Option<usize> {
         &self.match_cfg.msg_index
+    }
+
+    /// ADB logcat `-v` format string, including `uid` when supported.
+    pub fn adb_verb(&self) -> String {
+        match self.kind {
+            LogFormatKind::Brief | LogFormatKind::ThreadTime => {
+                format!("{kind},uid", kind = self.kind)
+            }
+            kind => format!("{kind}"),
+        }
     }
 }
 

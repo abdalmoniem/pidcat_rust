@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use crate::LogLevel;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct State {
     pub pids_map: HashMap<String, String>,
+    pub uids_map: HashMap<String, String>,
     pub last_tag: Option<String>,
     pub app_pid: Option<String>,
     pub log_level: LogLevel,
