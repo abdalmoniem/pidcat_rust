@@ -16,6 +16,7 @@ use crate::ValueOrPanic;
 enum WriterTarget {
     Console(BufWriter<Stdout>),
     File(BufWriter<File>),
+    Buffer(Vec<u8>),
 }
 
 impl Display for WriterTarget {
@@ -23,6 +24,7 @@ impl Display for WriterTarget {
         match self {
             Self::Console(stdout) => write!(formatter, "{stdout:?}"),
             Self::File(file) => write!(formatter, "{file:?}"),
+            Self::Buffer(_) => write!(formatter, "Buffer"),
         }
     }
 }
@@ -32,6 +34,10 @@ impl Write for WriterTarget {
         match self {
             Self::Console(stdout) => stdout.write_all(buffer).map(|_| buffer.len()),
             Self::File(file) => file.write_all(buffer).map(|_| buffer.len()),
+            Self::Buffer(output) => {
+                output.extend_from_slice(buffer);
+                Ok(buffer.len())
+            }
         }
     }
 
@@ -39,6 +45,7 @@ impl Write for WriterTarget {
         match self {
             Self::Console(stdout) => stdout.flush(),
             Self::File(file) => file.flush(),
+            Self::Buffer(_) => Ok(()),
         }
     }
 }
@@ -64,6 +71,23 @@ impl Writer {
             width: None,
             show_colors: false,
             target: WriterTarget::File(BufWriter::new(file)),
+        }
+    }
+
+    pub fn new_buffer(width: i16, show_colors: bool) -> Self {
+        Self {
+            width: Some(width),
+            show_colors,
+            target: WriterTarget::Buffer(Vec::default()),
+        }
+    }
+
+    pub fn take_buffer(self) -> String {
+        match self.target {
+            WriterTarget::Buffer(buffer) => {
+                String::from_utf8(buffer).unwrap_or_panic("Buffer writer produced invalid UTF-8")
+            }
+            _ => panic!("Writer is not a buffer"),
         }
     }
 

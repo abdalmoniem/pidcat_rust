@@ -31,3 +31,18 @@ impl From<String> for AdbState {
         Self::from(str.as_str())
     }
 }
+
+impl AdbState {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Device => "device",
+            Self::Emulator => "emulator",
+            Self::Offline => "offline",
+            Self::UnAuthorized => "unauthorized",
+            Self::Recovery => "recovery",
+            Self::Sideload => "sideload",
+            Self::NoPermissions => "no permissions",
+            Self::NoDevice => "no device",
+        }
+    }
+}

@@ -51,6 +51,31 @@ impl Display for LogLevel {
     }
 }
 
+impl LogLevel {
+    pub fn parse_name(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "v" | "verbose" => Some(Self::VERBOSE),
+            "d" | "debug" => Some(Self::DEBUG),
+            "i" | "info" => Some(Self::INFO),
+            "w" | "warn" => Some(Self::WARN),
+            "e" | "error" => Some(Self::ERROR),
+            "f" | "fatal" => Some(Self::FATAL),
+            _ => None,
+        }
+    }
+
+    pub fn filter_name(self) -> &'static str {
+        match self {
+            Self::VERBOSE => "verbose",
+            Self::DEBUG => "debug",
+            Self::INFO => "info",
+            Self::WARN => "warn",
+            Self::ERROR => "error",
+            Self::FATAL => "fatal",
+        }
+    }
+}
+
 impl ValueEnum for LogLevel {
     fn value_variants<'a>() -> &'a [Self] {
         &[
