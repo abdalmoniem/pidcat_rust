@@ -3,6 +3,8 @@
 use std::collections::VecDeque;
 use std::io::stdin;
 use std::io::stdout;
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::atomic::Ordering::Relaxed;
@@ -15,7 +17,6 @@ use crossterm::event::DisableMouseCapture;
 use crossterm::event::EnableMouseCapture;
 use crossterm::event::Event;
 use crossterm::event::KeyCode;
-use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
 use crossterm::event::KeyModifiers;
 use crossterm::event::MouseEventKind;
@@ -50,6 +51,9 @@ use super::device_picker::filter_device_indices;
 use super::device_picker::is_selectable;
 use super::display_cache::DisplayCache;
 use super::file_source::default_browse_directory;
+use super::file_source::directory_input;
+use super::file_source::expand_path;
+use super::file_source::split_path_input;
 use super::file_source::validate_log_file;
 use super::help::HelpAction;
 use super::help::HelpRow;
@@ -63,7 +67,6 @@ use super::theme;
 use super::ui;
 
 use tui_file_explorer::ExplorerCommand;
-use tui_file_explorer::ExplorerOutcome;
 use tui_file_explorer::FileExplorer;
 use tui_file_explorer::SortMode;
 use tui_file_explorer::Theme;
@@ -111,6 +114,7 @@ pub struct TuiApp {
     pub device_palette: PaletteSearch,
     pub file_explorer: Option<FileExplorer>,
     pub file_open_error: Option<String>,
+    pub file_path_input: PaletteSearch,
     pub explorer_theme: Theme,
     pub catchall_packages: Vec<String>,
     pub tokio_handle: Option<tokio::runtime::Handle>,
@@ -161,6 +165,7 @@ impl TuiApp {
             device_palette: PaletteSearch::default(),
             file_explorer: None,
             file_open_error: None,
+            file_path_input: PaletteSearch::default(),
             explorer_theme: theme::explorer_theme(),
             catchall_packages: Vec::default(),
             tokio_handle: None,
@@ -376,13 +381,16 @@ impl TuiApp {
     fn open_file_dialog(&mut self) {
         self.exit_select_mode();
         self.file_open_error = None;
+        let start_directory = default_browse_directory();
+        self.file_path_input.reset();
         self.file_explorer = Some(
-            FileExplorer::builder(default_browse_directory())
+            FileExplorer::builder(start_directory.clone())
                 .show_hidden(true)
                 .show_sizes(true)
                 .sort_mode(SortMode::Name)
                 .build(),
         );
+        self.set_file_path_input(directory_input(&start_directory));
         self.overlay = Overlay::FileOpen;
     }
 
@@ -809,33 +817,126 @@ impl TuiApp {
     }
 
     fn handle_file_open_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
-        let Some(explorer) = &mut self.file_explorer else {
+        if self.file_explorer.is_none() {
             self.overlay = Overlay::None;
             return;
-        };
+        }
 
-        match explorer.handle_key(KeyEvent::new(key, modifiers)) {
-            ExplorerOutcome::Selected(path) => {
-                let path_str = path.to_string_lossy().to_string();
-                match validate_log_file(&path_str) {
-                    Ok(valid_path) => {
-                        self.overlay = Overlay::None;
-                        self.file_open_error = None;
-                        self.file_explorer = None;
-                        self.switch_to_file(valid_path);
-                    }
-                    Err(err) => {
-                        self.file_open_error = Some(err);
-                    }
-                }
+        let input = &mut self.file_path_input;
+        match key {
+            KeyCode::Esc => self.close_file_dialog(),
+            KeyCode::Enter => self.confirm_file_path(),
+            KeyCode::Tab => self.complete_file_path(),
+            KeyCode::Up => self.move_file_selection(ExplorerCommand::MoveUp),
+            KeyCode::Down => self.move_file_selection(ExplorerCommand::MoveDown),
+            KeyCode::PageUp => self.move_file_selection(ExplorerCommand::PageUp),
+            KeyCode::PageDown => self.move_file_selection(ExplorerCommand::PageDown),
+            KeyCode::Left => input.cursor = input.cursor.saturating_sub(1),
+            KeyCode::Right => input.cursor = (input.cursor + 1).min(input.query.chars().count()),
+            KeyCode::Home => input.cursor = 0,
+            KeyCode::End => input.cursor = input.query.chars().count(),
+            KeyCode::Backspace => {
+                input.delete_before_cursor();
+                self.sync_file_explorer_to_input();
             }
-            ExplorerOutcome::Dismissed => {
-                self.overlay = Overlay::None;
-                self.file_open_error = None;
-                self.file_explorer = None;
+            KeyCode::Delete => {
+                input.delete_at_cursor();
+                self.sync_file_explorer_to_input();
+            }
+            KeyCode::Char(ch) if !modifiers.contains(KeyModifiers::CONTROL) => {
+                input.insert_char(ch);
+                self.sync_file_explorer_to_input();
             }
             _ => {}
         }
+    }
+
+    fn move_file_selection(&mut self, command: ExplorerCommand) {
+        if let Some(explorer) = &mut self.file_explorer {
+            let _ = explorer.handle_command(command);
+        }
+    }
+
+    fn selected_file_entry(&self) -> Option<(PathBuf, bool)> {
+        self.file_explorer
+            .as_ref()
+            .and_then(|explorer| explorer.current_entry())
+            .map(|entry| (entry.path.clone(), entry.is_dir))
+    }
+
+    fn set_file_path_input(&mut self, value: String) {
+        self.file_path_input.cursor = value.chars().count();
+        self.file_path_input.query = value;
+        self.sync_file_explorer_to_input();
+    }
+
+    fn sync_file_explorer_to_input(&mut self) {
+        let Some(explorer) = &mut self.file_explorer else {
+            return;
+        };
+
+        let (directory, fragment) = split_path_input(&self.file_path_input.query);
+        if let Some(directory) = directory
+            && directory != explorer.current_dir
+        {
+            if !directory.is_dir() {
+                self.file_open_error =
+                    Some(format!("directory not found: {}", directory.display()));
+                return;
+            }
+            if let Err(err) = explorer.try_navigate_to(directory) {
+                self.file_open_error = Some(err.to_string());
+                return;
+            }
+        }
+
+        self.file_open_error = None;
+        explorer.search_query = fragment;
+        explorer.cursor = 0;
+        explorer.reload();
+    }
+
+    fn complete_file_path(&mut self) {
+        let Some((path, is_dir)) = self.selected_file_entry() else {
+            return;
+        };
+        let completed = if is_dir {
+            directory_input(&path)
+        } else {
+            path.to_string_lossy().to_string()
+        };
+        self.set_file_path_input(completed);
+    }
+
+    fn confirm_file_path(&mut self) {
+        let typed = expand_path(self.file_path_input.query.trim());
+        if Path::new(&typed).is_file() {
+            self.open_log_file(&typed);
+            return;
+        }
+
+        match self.selected_file_entry() {
+            Some((_, true)) => self.complete_file_path(),
+            Some((path, false)) => self.open_log_file(&path.to_string_lossy()),
+            None => self.open_log_file(&typed),
+        }
+    }
+
+    fn open_log_file(&mut self, path: &str) {
+        match validate_log_file(path) {
+            Ok(valid_path) => {
+                self.close_file_dialog();
+                self.switch_to_file(valid_path);
+            }
+            Err(err) => self.file_open_error = Some(err),
+        }
+    }
+
+    fn close_file_dialog(&mut self) {
+        self.overlay = Overlay::None;
+        self.file_open_error = None;
+        self.file_explorer = None;
+        self.file_path_input.reset();
     }
 }
 

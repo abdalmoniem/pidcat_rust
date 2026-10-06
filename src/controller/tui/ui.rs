@@ -438,11 +438,13 @@ fn help_row_line(row: &HelpRow, selected: bool) -> Line<'static> {
 }
 
 const FILE_HINTS: &[(&str, &str)] = &[
-    ("↑↓", " navigate"),
+    ("↑↓", " select"),
+    ("tab", " complete"),
     ("enter", " open"),
-    ("/", " search"),
     ("esc", " close"),
 ];
+
+const FILE_PATH_PLACEHOLDER: &str = "type a path...";
 
 fn render_file_explorer_overlay(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
     let Some(explorer) = &mut app.file_explorer else {
@@ -450,20 +452,33 @@ fn render_file_explorer_overlay(frame: &mut Frame, app: &mut TuiApp, area: Rect)
     };
 
     let inner = render_dialog(frame, area, "open log file", FILE_HINTS, false);
+    let error_height = if app.file_open_error.is_some() { 3 } else { 0 };
+    let chunks = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Length(error_height),
+        Constraint::Min(0),
+    ])
+    .split(inner);
+
+    let path_inner = render_labeled_panel(frame, chunks[0usize], Some("path"), true);
+    render_search_field(
+        frame,
+        path_inner,
+        &app.file_path_input,
+        FILE_PATH_PLACEHOLDER,
+    );
 
     if let Some(err) = app.file_open_error.as_deref() {
-        let chunks = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(inner);
-        let error_inner = render_labeled_panel(frame, chunks[0usize], Some("error"), false);
+        let error_inner = render_labeled_panel(frame, chunks[1usize], Some("error"), false);
         frame.render_widget(
             Paragraph::new(err)
-                .style(theme::error_style())
-                .style(theme::app_background_style()),
+                .style(theme::app_background_style())
+                .style(theme::error_style()),
             error_inner,
         );
-        render_themed(explorer, frame, chunks[1usize], &app.explorer_theme);
-    } else {
-        render_themed(explorer, frame, inner, &app.explorer_theme);
     }
+
+    render_themed(explorer, frame, chunks[2usize], &app.explorer_theme);
 }
 
 fn centered_rect_size(width: u16, height: u16, area: Rect) -> Rect {
