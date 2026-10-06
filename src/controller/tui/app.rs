@@ -119,6 +119,8 @@ pub struct TuiApp {
     pub need_device_picker: bool,
     pub display_cache: DisplayCache,
     pub filter_generation: u64,
+    pub shown_entry_count: usize,
+    pub total_entry_count: usize,
 }
 
 impl TuiApp {
@@ -167,6 +169,8 @@ impl TuiApp {
             need_device_picker: false,
             display_cache: DisplayCache::new(),
             filter_generation: 0,
+            shown_entry_count: 0,
+            total_entry_count: 0,
         }
     }
 
@@ -304,6 +308,10 @@ impl TuiApp {
     }
 
     fn drain_ingest(&mut self) {
+        if self.paused {
+            return;
+        }
+
         while let Some(batch) = self.ingest.try_recv_batch() {
             for item in batch {
                 self.state = item.state;

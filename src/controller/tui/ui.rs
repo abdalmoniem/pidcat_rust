@@ -32,6 +32,8 @@ use super::palette::input_field_line;
 use super::palette::render_search_field;
 use super::theme;
 
+use crate::controller::util::format_usize_separated;
+
 pub fn render(frame: &mut Frame, app: &mut TuiApp) {
     let chunks = Layout::vertical([
         Constraint::Length(3),
@@ -41,6 +43,7 @@ pub fn render(frame: &mut Frame, app: &mut TuiApp) {
     .split(frame.area());
 
     render_filter_bar(frame, app, chunks[0usize]);
+    refresh_log_view(app, chunks[2usize]);
     render_status_bar(frame, app, chunks[1usize]);
     render_log_table(frame, app, chunks[2usize]);
 
@@ -142,9 +145,6 @@ fn render_status_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
         .selected_device
         .as_deref()
         .and_then(|serial| device_state_label(&app.devices, serial));
-    let count = app.entries.len();
-    let visible = app.filtered_indices.len();
-
     let live_running =
         matches!(app.source_mode, SourceMode::Live) && !waiting_for_device && !app.paused;
     let status_style = if live_running {
@@ -172,7 +172,11 @@ fn render_status_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
     spans.extend([
         Span::styled("  │  ", theme::dim_style()),
         Span::styled(
-            format!("{visible}/{count} lines"),
+            format!(
+                "{}/{} entries",
+                format_usize_separated(app.shown_entry_count),
+                format_usize_separated(app.total_entry_count),
+            ),
             Style::default().fg(theme::SUBTEXT),
         ),
     ]);
@@ -189,15 +193,20 @@ fn render_status_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
     frame.render_widget(Paragraph::new(line).style(theme::status_style()), area);
 }
 
-fn render_log_table(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
+fn log_panel_inner_dims(area: Rect) -> (i16, usize) {
+    (
+        area.width.saturating_sub(2) as i16,
+        area.height.saturating_sub(2) as usize,
+    )
+}
+
+fn refresh_log_view(app: &mut TuiApp, log_area: Rect) {
     use super::display_cache::DISPLAY_BUILD_BUDGET;
 
-    let columns = crate::tui_log_border_columns(&app.args);
-    let hints = theme::main_shortcut_hints(app.select_mode);
-    let inner = render_log_table_panel(frame, area, &columns, hints);
-    let width = inner.width as i16;
-    let viewport_lines = inner.height as usize;
+    let (width, viewport_lines) = log_panel_inner_dims(log_area);
     app.viewport_lines = viewport_lines;
+
+    let build_budget = if app.paused { 0 } else { DISPLAY_BUILD_BUDGET };
 
     app.display_cache.ensure(
         &app.filtered_indices,
@@ -206,14 +215,17 @@ fn render_log_table(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
         &app.args,
         width,
         app.filter_generation,
-        DISPLAY_BUILD_BUDGET,
+        build_budget,
     );
 
-    let total_lines = app.display_cache.lines().len();
-    let max_scroll = total_lines.saturating_sub(viewport_lines);
+    let rendered_lines = app.display_cache.rendered_line_count();
+    app.shown_entry_count = app.display_cache.rendered_entry_count();
+    app.total_entry_count = app.entries.len();
+
+    let max_scroll = rendered_lines.saturating_sub(viewport_lines);
     app.max_scroll = max_scroll;
 
-    if app.auto_scroll {
+    if !app.paused && app.auto_scroll {
         if app.select_mode {
             app.selected_filtered_index = app.filtered_indices.len().saturating_sub(1);
         }
@@ -225,6 +237,14 @@ fn render_log_table(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
             app.ensure_selection_visible();
         }
     }
+}
+
+fn render_log_table(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
+    let columns = crate::tui_log_border_columns(&app.args);
+    let hints = theme::main_shortcut_hints(app.select_mode);
+    let inner = render_log_table_panel(frame, area, &columns, hints);
+    let viewport_lines = inner.height as usize;
+    let total_lines = app.display_cache.rendered_line_count();
 
     let visible_lines: Vec<Line> = app
         .display_cache

@@ -27,6 +27,18 @@ pub fn trim_log_line(raw: &str) -> String {
     raw.trim_end_matches(['\r', '\n']).to_string()
 }
 
+pub fn format_usize_separated(value: usize) -> String {
+    let digits = value.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, ch) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    out
+}
+
 pub fn split_csv_values(value: &str) -> Vec<String> {
     value
         .split(',')
