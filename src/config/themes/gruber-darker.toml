@@ -1,0 +1,46 @@
+# Gruber Darker by Alexey Kutepov (rexim)
+# https://github.com/rexim/gruber-darker-theme
+
+[palette]
+black = "#000000"
+bg0 = "#181818"
+bg5 = "#404040"
+fg0 = "#e4e4ef"
+fg3 = "#a89984"
+yellow = "#ffdd33"
+brown = "#cc8c3c"
+green = "#73c936"
+niagara = "#96a6c8"
+wisteria = "#9e95c7"
+red = "#f43841"
+aqua = "#8ec07c"
+cyan = "#8cd0d3"
+
+[ui]
+background = "bg0"
+text = "fg0"
+subtext = "fg3"
+accent = "yellow"
+secondary = "niagara"
+success = "green"
+warning = "brown"
+error = "red"
+match = "aqua"
+keys = "cyan"
+selection = "bg5"
+
+[log]
+level-fg = "black"
+verbose = "cyan"
+debug = "niagara"
+info = "green"
+warn = "yellow"
+error = "brown"
+fatal = "red"
+highlight = "yellow"
+process-start = "green"
+process-death = "red"
+gc-duration = "red"
+gc-free = "green"
+gc-unit = "yellow"
+tokens = ["#f43841", "#96a6c8", "#8cd0d3", "#73c936", "#ffdd33", "#9e95c7", "#8ec07c", "#cc8c3c"]

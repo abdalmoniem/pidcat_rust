@@ -172,17 +172,17 @@ fn render_status_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
     let mut spans = vec![Span::styled(status_icon, status_style)];
     if let Some(detail) = source_detail {
         spans.push(Span::styled("  │  ", theme::dim_style()));
-        spans.push(Span::styled(detail, Style::default().fg(theme::ACCENT)));
+        spans.push(Span::styled(detail, Style::default().fg(theme::accent())));
     }
     spans.push(Span::styled("  │  ", theme::dim_style()));
     spans.push(Span::styled(
         device_serial,
-        Style::default().fg(theme::MAUVE),
+        Style::default().fg(theme::secondary()),
     ));
     if let Some(state) = device_state {
         spans.push(Span::styled(
             format!(" ({state})"),
-            Style::default().fg(theme::SUBTEXT),
+            Style::default().fg(theme::subtext()),
         ));
     }
     spans.extend([
@@ -193,14 +193,14 @@ fn render_status_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
                 format_usize_separated(app.shown_entry_count),
                 format_usize_separated(app.total_entry_count),
             ),
-            Style::default().fg(theme::SUBTEXT),
+            Style::default().fg(theme::subtext()),
         ),
     ]);
     if let Some(feedback) = &app.status_feedback {
         spans.push(Span::styled("  │  ", theme::dim_style()));
         spans.push(Span::styled(
             feedback.clone(),
-            Style::default().fg(theme::GREEN),
+            Style::default().fg(theme::success()),
         ));
     }
 
@@ -309,8 +309,8 @@ fn highlight_selected_line(line: &Line<'static>) -> Line<'static> {
                 Span::styled(
                     span.content.clone(),
                     span.style
-                        .fg(span.style.fg.unwrap_or(theme::TEXT))
-                        .bg(theme::SEL_BG),
+                        .fg(span.style.fg.unwrap_or(theme::text()))
+                        .bg(theme::selection()),
                 )
             })
             .collect::<Vec<_>>(),

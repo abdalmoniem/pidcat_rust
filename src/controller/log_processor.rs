@@ -18,6 +18,7 @@ use crate::LogLevel;
 use crate::State;
 use crate::ValueOrPanic;
 use crate::Writer;
+use crate::active_theme;
 use crate::is_ignored_tag;
 use crate::passes_log_level;
 use crate::passes_package_ownership;
@@ -267,21 +268,17 @@ pub fn is_matching_tag(tag: &str, tags: &[String]) -> bool {
 }
 
 pub fn level_color(level: LogLevel) -> (Color, Color) {
-    let level_foreground = Color::Black;
+    let colors = &active_theme().log;
     let level_background = match level {
-        LogLevel::VERBOSE => Color::BrightCyan,
-        LogLevel::DEBUG => Color::BrightBlue,
-        LogLevel::INFO => Color::BrightGreen,
-        LogLevel::WARN => Color::BrightYellow,
-        LogLevel::ERROR => Color::TrueColor {
-            r: 255u8,
-            g: 100u8,
-            b: 0u8,
-        },
-        LogLevel::FATAL => Color::BrightRed,
+        LogLevel::VERBOSE => colors.verbose,
+        LogLevel::DEBUG => colors.debug,
+        LogLevel::INFO => colors.info,
+        LogLevel::WARN => colors.warn,
+        LogLevel::ERROR => colors.error,
+        LogLevel::FATAL => colors.fatal,
     };
 
-    (level_foreground, level_background)
+    (colors.level_fg.into(), level_background.into())
 }
 
 pub fn process_line(line: &str, state: &mut State, args: &CliArgs) -> Option<LogEntry> {
@@ -547,11 +544,13 @@ pub fn format_process_start_messages(
         "-".repeat(puid_width)
     };
 
+    let highlight: Color = active_theme().log.highlight.into();
+
     let started_process_msg = if colorize && !args.no_color {
         format!(
             "Process {started_package} created for {started_target}\n",
-            started_package = started_package.color(Color::BrightYellow),
-            started_target = started_target.color(Color::BrightYellow)
+            started_package = started_package.color(highlight),
+            started_target = started_target.color(highlight)
         )
     } else {
         format!("Process {started_package} created for {started_target}\n")
@@ -560,9 +559,9 @@ pub fn format_process_start_messages(
     let pugid_msg = if colorize && !args.no_color {
         format!(
             "PID: {started_pid}   UID: {started_uid}   GIDs: {started_gids}\n",
-            started_pid = started_pid.color(Color::BrightYellow),
-            started_uid = started_uid.color(Color::BrightYellow),
-            started_gids = started_gids.color(Color::BrightYellow)
+            started_pid = started_pid.color(highlight),
+            started_uid = started_uid.color(highlight),
+            started_gids = started_gids.color(highlight)
         )
     } else {
         format!("PID: {started_pid}   UID: {started_uid}   GIDs: {started_gids}\n")
@@ -585,11 +584,13 @@ pub fn format_process_death_message(entry: &LogEntry, args: &CliArgs, colorize: 
         "-".repeat(puid_width)
     };
 
+    let highlight: Color = active_theme().log.highlight.into();
+
     if colorize && !args.no_color {
         format!(
             "Process {dead_process_name} (PID: {dead_pid}) ended\n",
-            dead_process_name = dead_process_name.color(Color::BrightYellow),
-            dead_pid = dead_pid.color(Color::BrightYellow)
+            dead_process_name = dead_process_name.color(highlight),
+            dead_pid = dead_pid.color(highlight)
         )
     } else {
         format!("Process {dead_process_name} (PID: {dead_pid}) ended\n")
@@ -605,11 +606,9 @@ fn render_process_start(
     let header_width = compute_header_width(args);
     let banner_width = header_width.saturating_sub(1usize);
     let spaces = " ".repeat(banner_width);
+    let banner: Color = active_theme().log.process_start.into();
 
-    let spaces = spaces
-        .color(Color::BrightGreen)
-        .on_color(Color::BrightGreen)
-        .to_string();
+    let spaces = spaces.color(banner).on_color(banner).to_string();
 
     let (started_process_msg, pugid_msg) = format_process_start_messages(entry, args, true);
 
@@ -618,62 +617,34 @@ fn render_process_start(
         writers,
         false,
         header_width,
-        Color::BrightGreen,
-        Color::BrightGreen,
+        banner,
+        banner,
     );
 
-    write_token(
-        " ",
-        writers,
-        false,
-        header_width,
-        Color::BrightGreen,
-        Color::BrightGreen,
-    );
+    write_token(" ", writers, false, header_width, banner, banner);
 
     write_token(
         &started_process_msg,
         writers,
         true,
         header_width,
-        Color::BrightGreen,
-        Color::BrightGreen,
+        banner,
+        banner,
     );
 
-    write_token(
-        &spaces,
-        writers,
-        false,
-        header_width,
-        Color::BrightGreen,
-        Color::BrightGreen,
-    );
+    write_token(&spaces, writers, false, header_width, banner, banner);
 
-    write_token(
-        " ",
-        writers,
-        false,
-        header_width,
-        Color::BrightGreen,
-        Color::BrightGreen,
-    );
+    write_token(" ", writers, false, header_width, banner, banner);
 
-    write_token(
-        &pugid_msg,
-        writers,
-        true,
-        header_width,
-        Color::BrightGreen,
-        Color::BrightGreen,
-    );
+    write_token(&pugid_msg, writers, true, header_width, banner, banner);
 
     write_token(
         &format!("{spaces}\n"),
         writers,
         false,
         header_width,
-        Color::BrightGreen,
-        Color::BrightGreen,
+        banner,
+        banner,
     );
 
     state.last_tag = None;
@@ -688,11 +659,9 @@ fn render_process_death(
     let header_width = compute_header_width(args);
     let banner_width = header_width.saturating_sub(1usize);
     let spaces = " ".repeat(banner_width);
+    let banner: Color = active_theme().log.process_death.into();
 
-    let spaces = spaces
-        .color(Color::BrightRed)
-        .on_color(Color::BrightRed)
-        .to_string();
+    let spaces = spaces.color(banner).on_color(banner).to_string();
 
     let dead_process_msg = format_process_death_message(entry, args, true);
 
@@ -701,26 +670,19 @@ fn render_process_death(
         writers,
         false,
         header_width,
-        Color::BrightRed,
-        Color::BrightRed,
+        banner,
+        banner,
     );
 
-    write_token(
-        " ",
-        writers,
-        false,
-        header_width,
-        Color::BrightGreen,
-        Color::BrightGreen,
-    );
+    write_token(" ", writers, false, header_width, banner, banner);
 
     write_token(
         &dead_process_msg,
         writers,
         true,
         header_width,
-        Color::BrightRed,
-        Color::BrightRed,
+        banner,
+        banner,
     );
 
     write_token(
@@ -728,8 +690,8 @@ fn render_process_death(
         writers,
         false,
         header_width,
-        Color::BrightRed,
-        Color::BrightRed,
+        banner,
+        banner,
     );
 
     state.last_tag = None;
@@ -1502,6 +1464,7 @@ fn write_log_level(
 }
 
 pub fn format_log_message(args: &CliArgs, message: &str) -> String {
+    let colors = &active_theme().log;
     let mut message = message.to_string();
     if STRICT_MODE.is_match(&message) {
         message = STRICT_MODE
@@ -1509,8 +1472,8 @@ pub fn format_log_message(args: &CliArgs, message: &str) -> String {
                 format!(
                     "{message}{duration}{unit}",
                     message = &caps[1usize],
-                    duration = caps[2usize].color(Color::BrightRed),
-                    unit = caps[3usize].color(Color::BrightYellow)
+                    duration = caps[2usize].color(Color::from(colors.gc_duration)),
+                    unit = caps[3usize].color(Color::from(colors.gc_unit))
                 )
             })
             .to_string();
@@ -1522,9 +1485,9 @@ pub fn format_log_message(args: &CliArgs, message: &str) -> String {
                 format!(
                     "{freed}{free}{paused}{unit}",
                     freed = &caps[1usize],
-                    free = caps[2usize].color(Color::BrightGreen),
+                    free = caps[2usize].color(Color::from(colors.gc_free)),
                     paused = &caps[3usize],
-                    unit = caps[4usize].color(Color::BrightYellow)
+                    unit = caps[4usize].color(Color::from(colors.gc_unit))
                 )
             })
             .to_string();

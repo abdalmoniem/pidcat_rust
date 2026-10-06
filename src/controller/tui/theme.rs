@@ -6,36 +6,63 @@ use ratatui::style::Style;
 
 use tui_file_explorer::Theme as ExplorerTheme;
 
-// Gruber Darker palette — https://github.com/rexim/gruber-darker-theme
-pub const BG: Color = Color::Rgb(24, 24, 24); // #181818 bg0
-pub const TEXT: Color = Color::Rgb(228, 228, 239); // #e4e4ef fg0
-pub const SUBTEXT: Color = Color::Rgb(168, 153, 132); // #a89984 fg3
-pub const YELLOW: Color = Color::Rgb(255, 221, 51); // #ffdd33 yellow0
-pub const ORANGE: Color = Color::Rgb(204, 140, 60); // #cc8c3c brown0
-pub const GREEN: Color = Color::Rgb(115, 201, 54); // #73c936 green0
-pub const BLUE: Color = Color::Rgb(150, 166, 200); // #96a6c8 niagara0
-pub const RED: Color = Color::Rgb(244, 56, 65); // #f43841 red0
-pub const AQUA: Color = Color::Rgb(142, 192, 124); // #8ec07c aqua1
-pub const CYAN: Color = Color::Rgb(140, 208, 211); // unselected palette entries
-pub const SEL_BG: Color = Color::Rgb(64, 64, 64); // #404040 bg5
+use crate::active_theme;
 
-/// Primary accent — yellow highlights throughout the UI.
-pub const ACCENT: Color = YELLOW;
+pub fn background() -> Color {
+    active_theme().ui.background.into()
+}
 
-/// Secondary accent — soft blue for labels and metadata.
-pub const MAUVE: Color = BLUE;
+pub fn text() -> Color {
+    active_theme().ui.text.into()
+}
+
+pub fn subtext() -> Color {
+    active_theme().ui.subtext.into()
+}
+
+pub fn accent() -> Color {
+    active_theme().ui.accent.into()
+}
+
+pub fn secondary() -> Color {
+    active_theme().ui.secondary.into()
+}
+
+pub fn success() -> Color {
+    active_theme().ui.success.into()
+}
+
+pub fn warning() -> Color {
+    active_theme().ui.warning.into()
+}
+
+pub fn error() -> Color {
+    active_theme().ui.error.into()
+}
+
+pub fn matched() -> Color {
+    active_theme().ui.r#match.into()
+}
+
+pub fn keys() -> Color {
+    active_theme().ui.keys.into()
+}
+
+pub fn selection() -> Color {
+    active_theme().ui.selection.into()
+}
 
 pub fn explorer_theme() -> ExplorerTheme {
     ExplorerTheme {
-        brand: YELLOW,
-        accent: YELLOW,
-        dir: YELLOW,
-        sel_bg: SEL_BG,
-        success: GREEN,
-        match_file: AQUA,
-        dim: SUBTEXT,
-        fg: TEXT,
-        bg: BG,
+        brand: accent(),
+        accent: accent(),
+        dir: accent(),
+        sel_bg: selection(),
+        success: success(),
+        match_file: matched(),
+        dim: subtext(),
+        fg: text(),
+        bg: background(),
     }
 }
 
@@ -44,69 +71,69 @@ pub fn status_style() -> Style {
 }
 
 pub fn selection_line_style() -> Style {
-    Style::default().bg(SEL_BG)
+    Style::default().bg(selection())
 }
 
 pub fn status_accent() -> Style {
     Style::default()
-        .fg(BG)
-        .bg(YELLOW)
+        .fg(background())
+        .bg(accent())
         .add_modifier(Modifier::BOLD)
 }
 
 pub fn status_idle() -> Style {
-    Style::default().fg(ORANGE)
+    Style::default().fg(warning())
 }
 
 pub fn error_style() -> Style {
-    Style::default().fg(RED)
+    Style::default().fg(error())
 }
 
 pub fn heading_style() -> Style {
-    Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)
+    Style::default().fg(accent()).add_modifier(Modifier::BOLD)
 }
 
 pub fn dim_style() -> Style {
-    Style::default().fg(SUBTEXT)
+    Style::default().fg(subtext())
 }
 
 pub fn placeholder_style() -> Style {
-    Style::default().fg(SUBTEXT).add_modifier(Modifier::DIM)
+    Style::default().fg(subtext()).add_modifier(Modifier::DIM)
 }
 
 pub fn app_background_style() -> Style {
-    Style::default().bg(BG).fg(TEXT)
+    Style::default().bg(background()).fg(text())
 }
 
 pub fn help_selected_style() -> Style {
     Style::default()
-        .fg(YELLOW)
-        .bg(SEL_BG)
+        .fg(accent())
+        .bg(selection())
         .add_modifier(Modifier::BOLD)
 }
 
 pub fn help_keys_style(executable: bool) -> Style {
     if executable {
-        Style::default().fg(CYAN)
+        Style::default().fg(keys())
     } else {
-        Style::default().fg(CYAN).add_modifier(Modifier::DIM)
+        Style::default().fg(keys()).add_modifier(Modifier::DIM)
     }
 }
 
 pub fn help_desc_style(executable: bool) -> Style {
     if executable {
-        Style::default().fg(TEXT)
+        Style::default().fg(text())
     } else {
-        Style::default().fg(SUBTEXT)
+        Style::default().fg(subtext())
     }
 }
 
 pub fn hint_style() -> Style {
-    Style::default().fg(SUBTEXT)
+    Style::default().fg(subtext())
 }
 
 pub fn hint_key_style() -> Style {
-    Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)
+    Style::default().fg(accent()).add_modifier(Modifier::BOLD)
 }
 
 const EXPORT_HINT: (&str, &str) = ("^s", " export");

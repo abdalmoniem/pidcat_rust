@@ -329,6 +329,15 @@ pub struct CliArgs {
     #[arg(help = "Print the effective configuration as a documented config file and exit")]
     pub print_config: bool,
 
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(long = "print-theme")]
+    #[arg(default_value_t = false)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = CONFIG_OPTIONS)]
+    #[arg(help = "Print the active theme as a documented theme file and exit")]
+    pub print_theme: bool,
+
     #[arg(skip)]
     pub tui_mode: bool,
 }
