@@ -330,6 +330,7 @@ pub fn process_line(line: &str, state: &mut State, args: &CliArgs) -> Option<Log
                 level: LogLevel::INFO,
                 message: started_target,
                 banner_text,
+                raw: raw_line(line),
             });
         }
 
@@ -401,6 +402,7 @@ pub fn process_line(line: &str, state: &mut State, args: &CliArgs) -> Option<Log
             level: LogLevel::INFO,
             message: dead_process_name,
             banner_text,
+            raw: raw_line(line),
         });
     }
 
@@ -464,7 +466,12 @@ pub fn process_line(line: &str, state: &mut State, args: &CliArgs) -> Option<Log
         level,
         message,
         banner_text: String::default(),
+        raw: raw_line(line),
     })
+}
+
+fn raw_line(line: &str) -> String {
+    line.trim_end_matches(['\r', '\n']).to_string()
 }
 
 pub fn render_entry(entry: &LogEntry, state: &mut State, args: &CliArgs, writers: &mut [Writer]) {

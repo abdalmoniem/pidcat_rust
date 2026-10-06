@@ -26,6 +26,8 @@ use super::border::render_log_table_panel;
 use super::copy::render_copy_menu;
 use super::device_picker::device_state_label;
 use super::device_picker::render_device_picker;
+use super::export::export_format_dialog_height;
+use super::export::render_export_format_menu;
 use super::help::HELP_CATALOG;
 use super::help::HelpRow;
 use super::help::build_help_rows;
@@ -90,9 +92,19 @@ pub fn render(frame: &mut Frame, app: &mut TuiApp) {
                 );
             }
         }
+        Overlay::ExportFormat => {
+            let area = centered_rect_size(
+                EXPORT_FORMAT_DIALOG_WIDTH,
+                export_format_dialog_height(),
+                frame.area(),
+            );
+            render_export_format_menu(frame, &mut app.export_format_palette, area);
+        }
         Overlay::None => {}
     }
 }
+
+const EXPORT_FORMAT_DIALOG_WIDTH: u16 = 44;
 
 const FILTER_PLACEHOLDER: &str = "e.g. package:com.example tag:ActivityManager level:debug";
 
@@ -460,10 +472,13 @@ fn render_file_explorer_overlay(frame: &mut Frame, app: &mut TuiApp, area: Rect)
     };
 
     let (title, hints) = match app.file_dialog_mode {
-        FileDialogMode::Open => ("open log file", FILE_OPEN_HINTS),
-        FileDialogMode::Save => ("export all entries", FILE_SAVE_HINTS),
+        FileDialogMode::Open => ("open log file".to_string(), FILE_OPEN_HINTS),
+        FileDialogMode::Save => (
+            format!("export all entries as {}", app.export_format.label()),
+            FILE_SAVE_HINTS,
+        ),
     };
-    let inner = render_dialog(frame, area, title, hints, false);
+    let inner = render_dialog(frame, area, &title, hints, false);
     let error_height = if app.file_open_error.is_some() { 3 } else { 0 };
     let chunks = Layout::vertical([
         Constraint::Length(3),

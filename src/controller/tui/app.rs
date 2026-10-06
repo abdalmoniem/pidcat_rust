@@ -51,6 +51,8 @@ use super::copy::copy_to_clipboard;
 use super::device_picker::filter_device_indices;
 use super::device_picker::is_selectable;
 use super::display_cache::DisplayCache;
+use super::export::EXPORT_FORMAT_OPTIONS;
+use super::export::ExportFormat;
 use super::export::ExportJob;
 use super::export::default_export_file_name;
 use super::file_source::default_browse_directory;
@@ -95,6 +97,7 @@ pub enum Overlay {
     FileDialog,
     Help,
     CopyMenu,
+    ExportFormat,
 }
 
 pub struct TuiApp {
@@ -128,6 +131,8 @@ pub struct TuiApp {
     pub file_dialog_mode: FileDialogMode,
     pending_overwrite: Option<String>,
     export_file_name: String,
+    pub export_format_palette: PaletteSearch,
+    pub export_format: ExportFormat,
     export_job: Option<ExportJob>,
     pub explorer_theme: Theme,
     pub catchall_packages: Vec<String>,
@@ -184,6 +189,8 @@ impl TuiApp {
             file_dialog_mode: FileDialogMode::Open,
             pending_overwrite: None,
             export_file_name: String::new(),
+            export_format_palette: PaletteSearch::default(),
+            export_format: ExportFormat::Pidcat,
             export_job: None,
             explorer_theme: theme::explorer_theme(),
             catchall_packages: Vec::default(),
@@ -446,8 +453,44 @@ impl TuiApp {
             self.status_feedback = Some("export already in progress".to_string());
             return;
         }
+        self.exit_select_mode();
+        self.export_format_palette.reset();
+        self.export_format_palette.select_first(0);
+        self.overlay = Overlay::ExportFormat;
+    }
+
+    fn handle_export_format_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
+        if let KeyCode::Char(ch) = key
+            && let Some(format) = ExportFormat::for_key(ch)
+        {
+            self.choose_export_format(format);
+            return;
+        }
+
+        let action = handle_palette_key(
+            &mut self.export_format_palette,
+            key,
+            modifiers,
+            EXPORT_FORMAT_OPTIONS.len(),
+            |_| true,
+        );
+
+        match action {
+            PaletteKeyAction::Enter => {
+                if let Some(option) = EXPORT_FORMAT_OPTIONS.get(self.export_format_palette.selected)
+                {
+                    self.choose_export_format(option.format);
+                }
+            }
+            PaletteKeyAction::Close => self.overlay = Overlay::None,
+            _ => {}
+        }
+    }
+
+    fn choose_export_format(&mut self, format: ExportFormat) {
+        self.export_format = format;
         let file_name =
-            default_export_file_name(&self.source_mode, self.selected_device.as_deref());
+            default_export_file_name(format, &self.source_mode, self.selected_device.as_deref());
         self.show_file_dialog(FileDialogMode::Save, file_name);
     }
 
@@ -474,7 +517,13 @@ impl TuiApp {
     }
 
     fn start_export(&mut self, path: String) {
-        match ExportJob::start(path, self.entries.clone(), &self.state, &self.args) {
+        match ExportJob::start(
+            path,
+            self.export_format,
+            self.entries.clone(),
+            &self.state,
+            &self.args,
+        ) {
             Ok(job) => {
                 self.status_feedback = Some(format!("exporting to {}...", job.path));
                 self.export_job = Some(job);
@@ -567,6 +616,11 @@ impl TuiApp {
 
         if self.overlay == Overlay::CopyMenu {
             self.handle_copy_menu_key(key, modifiers);
+            return;
+        }
+
+        if self.overlay == Overlay::ExportFormat {
+            self.handle_export_format_key(key, modifiers);
             return;
         }
 
@@ -871,6 +925,15 @@ impl TuiApp {
                 for _ in 0..3 {
                     self.copy_palette.move_selection(
                         option_count,
+                        if scroll_up { -1 } else { 1 },
+                        |_| true,
+                    );
+                }
+            }
+            Overlay::ExportFormat => {
+                for _ in 0..3 {
+                    self.export_format_palette.move_selection(
+                        EXPORT_FORMAT_OPTIONS.len(),
                         if scroll_up { -1 } else { 1 },
                         |_| true,
                     );
