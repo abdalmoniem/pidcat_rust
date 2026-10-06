@@ -29,27 +29,58 @@ use super::schema::hex_color_map_schema;
 pub const DEFAULT_THEME_NAME: &str = "gruber-darker";
 pub const DEFAULT_THEME_SOURCE: &str = include_str!("themes/gruber-darker.toml");
 
+/// `source` must equal `render()`, so the embedded file is exactly the credits
+/// followed by the `--print-theme` output.
 pub struct BundledTheme {
     pub name: &'static str,
+    pub credits: &'static [&'static str],
     pub source: &'static str,
 }
 
 pub const BUNDLED_THEMES: &[BundledTheme] = &[
     BundledTheme {
         name: DEFAULT_THEME_NAME,
+        credits: &[
+            "Gruber Darker by Alexey Kutepov (rexim)",
+            "https://github.com/rexim/gruber-darker-theme",
+        ],
         source: DEFAULT_THEME_SOURCE,
     },
     BundledTheme {
         name: "monokai",
+        credits: &["Monokai by Wimer Hazenberg", "https://monokai.pro"],
         source: include_str!("themes/monokai.toml"),
     },
     BundledTheme {
         name: "gruvbox",
+        credits: &[
+            "Gruvbox (dark) by Pavel Pertsev (morhetz)",
+            "https://github.com/morhetz/gruvbox",
+        ],
         source: include_str!("themes/gruvbox.toml"),
     },
 ];
 
 static ACTIVE_THEME: OnceLock<Theme> = OnceLock::new();
+
+impl BundledTheme {
+    pub fn file_name(&self) -> String {
+        format!("{name}.toml", name = self.name)
+    }
+
+    /// The documented file content: the credits, then the `--print-theme` output.
+    pub fn render(&self) -> Result<String, String> {
+        let theme_file = parse_theme(self.source)
+            .map_err(|err| format!("invalid bundled theme '{}':\n{err}", self.name))?;
+        let credits = self
+            .credits
+            .iter()
+            .map(|line| format!("# {line}\n"))
+            .collect::<String>();
+
+        Ok(format!("{credits}#\n{}", theme_file.to_doc_toml()))
+    }
+}
 
 pub const THEME_FILE_DOC: &[&str] = &[
     "Colors are hex strings in the form \"#rrggbb\". Every key in [ui] and [log]",
@@ -472,29 +503,21 @@ pub fn install_bundled_themes() {
     }
 
     for bundled in BUNDLED_THEMES {
-        let path = dir.join(format!("{name}.toml", name = bundled.name));
+        let path = dir.join(bundled.file_name());
         let Ok(theme_file) = parse_theme(bundled.source) else {
             continue;
         };
 
-        let credits = bundled
-            .source
-            .lines()
-            .take_while(|line| line.starts_with('#'))
-            .map(|line| format!("{line}\n"))
-            .collect::<String>();
-        let contents = format!("{credits}#\n{}", theme_file.to_doc_toml());
-
         let outdated = match path.exists() {
             false => true,
             true => fs::read_to_string(&path).is_ok_and(|existing| {
-                existing != contents
+                existing != bundled.source
                     && parse_theme(&existing).is_ok_and(|existing| existing == theme_file)
             }),
         };
 
         if outdated {
-            let _ = fs::write(&path, contents);
+            let _ = fs::write(&path, bundled.source);
         }
     }
 }
@@ -772,14 +795,12 @@ impl ThemeFile {
 
     pub fn to_doc_toml(&self) -> String {
         let pkg = env!("CARGO_PKG_NAME");
-        let dir = themes_dir()
-            .map(|dir| dir.display().to_string())
-            .unwrap_or_default();
-
         let header = [
             format!("{pkg} color theme"),
             String::default(),
-            format!("Themes directory: {dir}"),
+            "Themes directory: `themes` next to the config file; its full path is shown"
+                .to_string(),
+            format!("under --theme in: {pkg} --help"),
             format!("Select a theme with: {pkg} --theme <NAME|PATH>"),
             "or with `theme = \"<NAME|PATH>\"` in the config file. NAME is a file name in"
                 .to_string(),
