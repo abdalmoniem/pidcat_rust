@@ -75,6 +75,12 @@ schema:
 themes:
     @cargo xtask themes
 
+[arg('dir', help='directory with the theme files to bundle')]
+[doc('Add or replace bundled themes with documented copies of the theme files in dir')]
+[group('build')]
+import-themes dir:
+    @cargo xtask themes --import "$dir"
+
 [doc('Check that the bundled theme sources are up to date')]
 [group('lint')]
 check-themes:

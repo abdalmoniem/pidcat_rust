@@ -20,10 +20,10 @@ pub use config::theme::ThemeFile;
 pub use config::theme::UiColors;
 pub use config::theme::active as active_theme;
 pub use config::theme::available_themes;
-pub use config::theme::bundled_theme_names;
 pub use config::theme::install_bundled_themes;
 pub use config::theme::load_theme;
 pub use config::theme::parse_theme;
+pub use config::theme::render_theme_source;
 pub use config::theme::set_active as set_active_theme;
 
 pub use controller::adb::build_adb_command;
