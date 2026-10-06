@@ -18,4 +18,5 @@ pub struct LogEntry {
     pub level: LogLevel,
     pub message: String,
     pub banner_text: String,
+    pub raw: String,
 }

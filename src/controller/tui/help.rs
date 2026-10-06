@@ -201,6 +201,24 @@ pub const HELP_CATALOG: &[HelpEntry] = &[
         action: None,
     },
     HelpEntry {
+        section: "export format",
+        keys: "p / a",
+        description: "export as rendered output or raw adb logcat lines",
+        action: None,
+    },
+    HelpEntry {
+        section: "export format",
+        keys: "enter",
+        description: "choose highlighted format",
+        action: None,
+    },
+    HelpEntry {
+        section: "export format",
+        keys: "j / k / up / down",
+        description: "move selection",
+        action: None,
+    },
+    HelpEntry {
         section: "file explorer",
         keys: "type a path",
         description: "list matching entries of the typed directory",
