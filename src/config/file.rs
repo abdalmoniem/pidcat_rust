@@ -18,7 +18,247 @@ use crate::LogFormat;
 use crate::LogFormatKind;
 use crate::LogLevel;
 
+use super::doc_toml::DocItem;
+use super::doc_toml::DocSection;
+use super::doc_toml::render;
 use super::paths::default_config_file;
+
+pub const PACKAGES_DOC: &[&str] = &[
+    "Application package names whose log messages are shown.",
+    "A plain name such as \"com.example.app\" matches the package and all of its",
+    "processes. A name containing ':' such as \"com.example.app:remote\" matches only",
+    "that named process, and a trailing ':' (\"com.example.app:\") matches only the",
+    "main process. When the list is empty and `current` is false, messages from all",
+    "packages are shown.",
+    "type: array of strings",
+    "default: []",
+    "command line: PACKAGE positional arguments (they replace this list)",
+    "example: packages = [\"com.example.app\", \"com.example.app:remote\"]",
+];
+
+pub const ADB_DOC: &[&str] = &[
+    "Path to the adb executable used to read logs and query devices.",
+    "Leave unset to run \"adb\" from the PATH.",
+    "type: string (file path)",
+    "default: unset (adb from the PATH)",
+    "command line: -A, --adb <ADB_PATH>",
+    "example: adb = \"/opt/android-sdk/platform-tools/adb\"",
+];
+
+pub const DEVICE_DOC: &[&str] = &[
+    "Read logs from the first connected physical (non-emulator) device.",
+    "type: boolean",
+    "default: false",
+    "command line: -d, --device",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: device = true",
+];
+
+pub const EMULATOR_DOC: &[&str] = &[
+    "Read logs from the first running emulator.",
+    "type: boolean",
+    "default: false",
+    "command line: -e, --emulator",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: emulator = true",
+];
+
+pub const SERIAL_DOC: &[&str] = &[
+    "Serial number of the device to read logs from, as listed by \"adb devices\".",
+    "type: string",
+    "default: unset (the only connected device is used; the TUI asks when several",
+    "are connected)",
+    "command line: -s, --serial <DEVICE_SERIAL>",
+    "example: serial = \"emulator-5554\"",
+];
+
+pub const ALL_DOC: &[&str] = &[
+    "Show log messages from all packages instead of only the selected ones.",
+    "type: boolean",
+    "default: false",
+    "command line: -a, --all",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: all = true",
+];
+
+pub const KEEP_DOC: &[&str] = &[
+    "Keep the existing logcat buffer instead of clearing it at startup, so older",
+    "messages are shown too.",
+    "type: boolean",
+    "default: false",
+    "command line: -k, --keep",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: keep = true",
+];
+
+pub const CURRENT_DOC: &[&str] = &[
+    "Add the package of the app currently in the foreground to the package filter.",
+    "type: boolean",
+    "default: false",
+    "command line: -c, --current",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: current = true",
+];
+
+pub const IGNORE_SYSTEM_TAGS_DOC: &[&str] = &[
+    "Hide messages from a built-in list of noisy Android system tags such as HWUI,",
+    "libEGL and ViewRootImpl. Use `ignore-tag` to hide additional tags.",
+    "type: boolean",
+    "default: false",
+    "command line: -I, --ignore-system-tags",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: ignore-system-tags = true",
+];
+
+pub const TAG_DOC: &[&str] = &[
+    "Only show messages whose tag matches one of these entries.",
+    "Matching is case-insensitive. An entry containing regex characters is a regular",
+    "expression anchored at the start of the tag; any other entry matches anywhere",
+    "in the tag. An entry may also be a comma-separated list of tags.",
+    "type: array of strings",
+    "default: unset (messages with any tag are shown)",
+    "command line: -t, --tag <TAG> (repeatable; replaces this list)",
+    "example: tag = [\"MainActivity\", \"OkHttp\"]",
+];
+
+pub const IGNORE_TAG_DOC: &[&str] = &[
+    "Hide messages whose tag matches one of these entries.",
+    "Entries are matched exactly like `tag` entries.",
+    "type: array of strings",
+    "default: unset (no tag is hidden)",
+    "command line: -i, --ignore-tag <IGNORED_TAG> (repeatable; replaces this list)",
+    "example: ignore-tag = [\"chatty\", \"^Binder.*\"]",
+];
+
+pub const LOG_LEVEL_DOC: &[&str] = &[
+    "Hide messages below this minimum log level.",
+    "values (case-insensitive): \"verbose\" or \"V\", \"debug\" or \"D\", \"info\" or \"I\",",
+    "\"warn\" or \"W\", \"error\" or \"E\", \"fatal\" or \"F\"",
+    "default: \"verbose\"",
+    "command line: -l, --log-level <LEVEL>",
+    "example: log-level = \"info\"",
+];
+
+pub const REGEX_DOC: &[&str] = &[
+    "Only show messages matching this regular expression.",
+    "It is passed to \"adb logcat -e\", and the TUI also seeds its filter bar with it.",
+    "type: string (regular expression)",
+    "default: unset (no message filter)",
+    "command line: -r, --regex <REGEX>",
+    "example: regex = \"Exception|Error\"",
+];
+
+pub const LOG_FORMAT_DOC: &[&str] = &[
+    "Log format requested from adb (\"adb logcat -v\") and expected in piped input.",
+    "values (case-insensitive): \"brief\" or \"B\", \"long\" or \"L\", \"process\" or \"P\",",
+    "\"raw\" or \"R\", \"tag\" or \"T\", \"thread\" or \"Th\", \"threadtime\" or \"Tht\",",
+    "\"time\" or \"Ti\"; only \"brief\" and \"threadtime\" are currently implemented",
+    "default: \"brief\"",
+    "command line: -f, --log-format <FORMAT>",
+    "example: log-format = \"threadtime\"",
+];
+
+pub const SHOW_PID_DOC: &[&str] = &[
+    "Show the process ID column.",
+    "type: boolean",
+    "default: false",
+    "command line: -P, --show-pid",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: show-pid = true",
+];
+
+pub const SHOW_UID_DOC: &[&str] = &[
+    "Show the user ID column. The UID is only known when adb includes it in the log",
+    "lines.",
+    "type: boolean",
+    "default: false",
+    "command line: -U, --show-uid",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: show-uid = true",
+];
+
+pub const SHOW_PACKAGE_DOC: &[&str] = &[
+    "Show the package name column.",
+    "type: boolean",
+    "default: false",
+    "command line: -p, --show-package",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: show-package = true",
+];
+
+pub const ALWAYS_SHOW_TAGS_DOC: &[&str] = &[
+    "Print the tag on every line instead of only when it differs from the previous",
+    "line.",
+    "type: boolean",
+    "default: false",
+    "command line: -S, --always-show-tags",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: always-show-tags = true",
+];
+
+pub const PUID_WIDTH_DOC: &[&str] = &[
+    "Width of the PID and UID columns in characters. Longer values are truncated",
+    "with an ellipsis.",
+    "type: integer from 1 to 255",
+    "default: 5",
+    "command line: -x, --puid-width <WIDTH>",
+    "example: puid-width = 7",
+];
+
+pub const PACKAGE_WIDTH_DOC: &[&str] = &[
+    "Width of the package name column in characters. Longer names are truncated",
+    "with an ellipsis.",
+    "type: integer from 1 to 255",
+    "default: 20",
+    "command line: -m, --package-width <WIDTH>",
+    "example: package-width = 30",
+];
+
+pub const TAG_WIDTH_DOC: &[&str] = &[
+    "Width of the tag column in characters. Longer tags are truncated with an",
+    "ellipsis, and 0 hides the column.",
+    "type: integer from 0 to 255",
+    "default: 20",
+    "command line: -n, --tag-width <WIDTH>",
+    "example: tag-width = 24",
+];
+
+pub const GC_COLOR_DOC: &[&str] = &[
+    "Highlight the freed memory and pause time in garbage collector messages.",
+    "type: boolean",
+    "default: false",
+    "command line: -g, --gc-color",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: gc-color = true",
+];
+
+pub const NO_COLOR_DOC: &[&str] = &[
+    "Disable colors in the log output.",
+    "type: boolean",
+    "default: false",
+    "command line: -N, --no-color",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: no-color = true",
+];
+
+pub const OUTPUT_DOC: &[&str] = &[
+    "Also save the log output to this file. The file is created, or truncated if it",
+    "exists, at startup.",
+    "type: string (file path)",
+    "default: unset (no file output)",
+    "command line: -o, --output <FILE_PATH>",
+    "example: output = \"logcat.txt\"",
+];
+
+pub const PLAIN_DOC: &[&str] = &[
+    "Use plain text output instead of the interactive TUI. Plain output is also",
+    "used automatically when standard output is not a terminal.",
+    "type: boolean",
+    "default: false",
+    "command line: --plain",
+    "note: when true here, it cannot be switched off from the command line",
+    "example: plain = true",
+];
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
@@ -204,5 +444,213 @@ impl Config {
             "output_path",
         );
         set_unless_cli(&mut args.plain, plain, matches, "plain");
+    }
+
+    pub fn from_args(args: &CliArgs) -> Self {
+        Self {
+            packages: Some(args.packages.clone()),
+            adb: args.adb_path.clone(),
+            device: Some(args.use_device),
+            emulator: Some(args.use_emulator),
+            serial: args.device_serial.clone(),
+            all: Some(args.all),
+            keep: Some(args.keep_logcat),
+            current: Some(args.current_app),
+            ignore_system_tags: Some(args.ignore_system_tags),
+            tag: args.tag.clone(),
+            ignore_tag: args.ignore_tag.clone(),
+            log_level: Some(args.log_level),
+            regex: args.regex.clone(),
+            log_format: Some(args.log_format.kind),
+            show_pid: Some(args.show_pid),
+            show_uid: Some(args.show_uid),
+            show_package: Some(args.show_package),
+            always_show_tags: Some(args.always_show_tags),
+            puid_width: Some(args.puid_width),
+            package_width: Some(args.package_width),
+            tag_width: Some(args.tag_width),
+            gc_color: Some(args.gc_color),
+            no_color: Some(args.no_color),
+            output: args.output_path.clone(),
+            plain: Some(args.plain),
+        }
+    }
+
+    pub fn doc_items(&self) -> Vec<DocSection> {
+        let Self {
+            packages,
+            adb,
+            device,
+            emulator,
+            serial,
+            all,
+            keep,
+            current,
+            ignore_system_tags,
+            tag,
+            ignore_tag,
+            log_level,
+            regex,
+            log_format,
+            show_pid,
+            show_uid,
+            show_package,
+            always_show_tags,
+            puid_width,
+            package_width,
+            tag_width,
+            gc_color,
+            no_color,
+            output,
+            plain,
+        } = self.clone();
+
+        vec![
+            DocSection {
+                title: "Positional arguments",
+                table: None,
+                doc: &[],
+                items: vec![DocItem::optional(
+                    "packages",
+                    PACKAGES_DOC,
+                    packages,
+                    vec!["com.example.app"],
+                )],
+            },
+            DocSection {
+                title: "Options",
+                table: None,
+                doc: &[],
+                items: vec![DocItem::optional(
+                    "adb",
+                    ADB_DOC,
+                    adb,
+                    "/opt/android-sdk/platform-tools/adb",
+                )],
+            },
+            DocSection {
+                title: "Device options",
+                table: None,
+                doc: &["Select which connected device or emulator logs are read from."],
+                items: vec![
+                    DocItem::optional("device", DEVICE_DOC, device, true),
+                    DocItem::optional("emulator", EMULATOR_DOC, emulator, true),
+                    DocItem::optional("serial", SERIAL_DOC, serial, "emulator-5554"),
+                ],
+            },
+            DocSection {
+                title: "Filtering options",
+                table: None,
+                doc: &["Choose which log messages are shown."],
+                items: vec![
+                    DocItem::optional("all", ALL_DOC, all, true),
+                    DocItem::optional("keep", KEEP_DOC, keep, true),
+                    DocItem::optional("current", CURRENT_DOC, current, true),
+                    DocItem::optional(
+                        "ignore-system-tags",
+                        IGNORE_SYSTEM_TAGS_DOC,
+                        ignore_system_tags,
+                        true,
+                    ),
+                    DocItem::optional("tag", TAG_DOC, tag, vec!["MainActivity", "OkHttp"]),
+                    DocItem::optional(
+                        "ignore-tag",
+                        IGNORE_TAG_DOC,
+                        ignore_tag,
+                        vec!["chatty", "^Binder.*"],
+                    ),
+                    DocItem::optional(
+                        "log-level",
+                        LOG_LEVEL_DOC,
+                        log_level.map(LogLevel::filter_name),
+                        "info",
+                    ),
+                    DocItem::optional("regex", REGEX_DOC, regex, "Exception|Error"),
+                ],
+            },
+            DocSection {
+                title: "Formatting options",
+                table: None,
+                doc: &["Control the input log format and the columns of the output."],
+                items: vec![
+                    DocItem::optional(
+                        "log-format",
+                        LOG_FORMAT_DOC,
+                        log_format.map(|kind| kind.to_string()),
+                        "threadtime",
+                    ),
+                    DocItem::optional("show-pid", SHOW_PID_DOC, show_pid, true),
+                    DocItem::optional("show-uid", SHOW_UID_DOC, show_uid, true),
+                    DocItem::optional("show-package", SHOW_PACKAGE_DOC, show_package, true),
+                    DocItem::optional(
+                        "always-show-tags",
+                        ALWAYS_SHOW_TAGS_DOC,
+                        always_show_tags,
+                        true,
+                    ),
+                    DocItem::optional(
+                        "puid-width",
+                        PUID_WIDTH_DOC,
+                        puid_width.map(i64::from),
+                        7i64,
+                    ),
+                    DocItem::optional(
+                        "package-width",
+                        PACKAGE_WIDTH_DOC,
+                        package_width.map(i64::from),
+                        30i64,
+                    ),
+                    DocItem::optional("tag-width", TAG_WIDTH_DOC, tag_width.map(i64::from), 24i64),
+                ],
+            },
+            DocSection {
+                title: "Color options",
+                table: None,
+                doc: &[],
+                items: vec![
+                    DocItem::optional("gc-color", GC_COLOR_DOC, gc_color, true),
+                    DocItem::optional("no-color", NO_COLOR_DOC, no_color, true),
+                ],
+            },
+            DocSection {
+                title: "Output options",
+                table: None,
+                doc: &[],
+                items: vec![
+                    DocItem::optional("output", OUTPUT_DOC, output, "logcat.txt"),
+                    DocItem::optional("plain", PLAIN_DOC, plain, true),
+                ],
+            },
+        ]
+    }
+
+    pub fn to_doc_toml(&self) -> String {
+        let pkg = env!("CARGO_PKG_NAME");
+        let default_path = default_config_file()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
+
+        let header = [
+            format!("{pkg} configuration file"),
+            String::default(),
+            format!("Default location: {default_path}"),
+            format!("Load another file with: {pkg} --config <CONFIG_PATH>"),
+            format!("Print the effective configuration with: {pkg} --print-config"),
+            String::default(),
+            "Every key mirrors the command-line flag of the same name. A flag passed on the"
+                .to_string(),
+            "command line wins over the value in this file, which wins over the built-in"
+                .to_string(),
+            "default.".to_string(),
+            String::default(),
+            "Boolean keys can only switch options on: when a key is true here, there is no"
+                .to_string(),
+            "command-line flag to switch it back off for a single run.".to_string(),
+            String::default(),
+            "Commented-out keys have no value; uncomment and edit them to set one.".to_string(),
+            "Unknown keys are rejected.".to_string(),
+        ];
+
+        render(&header, &self.doc_items())
     }
 }
