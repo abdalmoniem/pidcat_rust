@@ -12,6 +12,7 @@ use colored::Color;
 use is_terminal::IsTerminal;
 
 use pidcat::CliArgs;
+use pidcat::Config;
 use pidcat::ValueOrPanic;
 use pidcat::colored;
 use pidcat::run_plain;
@@ -63,6 +64,12 @@ fn main() {
         let bin_name = cmd.get_name().to_string();
 
         generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
+
+        process::exit(0i32);
+    }
+
+    if args.print_config {
+        print!("{}", Config::from_args(args).to_doc_toml());
 
         process::exit(0i32);
     }

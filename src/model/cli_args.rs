@@ -320,6 +320,15 @@ pub struct CliArgs {
     #[arg(help = CliArgs::get_config_help())]
     pub config_path: Option<String>,
 
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(long = "print-config")]
+    #[arg(default_value_t = false)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = CONFIG_OPTIONS)]
+    #[arg(help = "Print the effective configuration as a documented config file and exit")]
+    pub print_config: bool,
+
     #[arg(skip)]
     pub tui_mode: bool,
 }
