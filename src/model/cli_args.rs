@@ -422,10 +422,24 @@ impl CliArgs {
         )
     }
 
+    /// The built-in defaults, as if no flags were passed.
+    fn defaults() -> Option<Self> {
+        Self::command()
+            .try_get_matches_from([env!("CARGO_PKG_NAME")])
+            .ok()
+            .and_then(|matches| Self::from_arg_matches(&matches).ok())
+    }
+
     pub fn parse_args() -> Self {
         let matches = Self::command().get_matches();
         let mut args = Self::from_arg_matches(&matches).unwrap_or_else(|err| err.exit());
         let show_colors = !args.no_color;
+
+        if args.config_path.is_none()
+            && let Some(defaults) = Self::defaults()
+        {
+            Config::install_default_file(&defaults);
+        }
 
         Config::load_effective(args.config_path.as_deref())
             .unwrap_or_else(|err| exit_with_error(&err, show_colors))
