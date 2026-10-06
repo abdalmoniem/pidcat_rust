@@ -1,6 +1,7 @@
 #![deny(clippy::unwrap_used)]
 
 use std::fs::File;
+use std::process;
 
 use colored::Color;
 use colored::Colorize;
@@ -15,6 +16,13 @@ pub fn colored(msg: &str, show_colors: bool, color: Color) -> String {
         true => msg.color(color).bold().to_string(),
         false => msg.to_string(),
     })
+}
+
+pub fn exit_with_error(msg: &str, show_colors: bool) -> ! {
+    let err_msg = format!("ERROR: {msg}").run(|msg| colored(msg, show_colors, Color::BrightRed));
+
+    eprintln!("{err_msg}");
+    process::exit(1i32);
 }
 
 pub fn trim_log_line_bytes(raw: &[u8]) -> String {
