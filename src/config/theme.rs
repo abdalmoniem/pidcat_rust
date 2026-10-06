@@ -10,6 +10,8 @@ use std::sync::OnceLock;
 
 use itertools::Itertools;
 
+use schemars::JsonSchema;
+
 use serde::Deserialize;
 
 use toml::Table;
@@ -21,6 +23,8 @@ use super::doc_toml::DocItem;
 use super::doc_toml::DocSection;
 use super::doc_toml::render;
 use super::paths::themes_dir;
+use super::schema::HEX_COLOR_PATTERN;
+use super::schema::hex_color_map_schema;
 
 pub const DEFAULT_THEME_NAME: &str = "gruber-darker";
 pub const DEFAULT_THEME_SOURCE: &str = include_str!("themes/gruber-darker.toml");
@@ -46,6 +50,12 @@ pub const BUNDLED_THEMES: &[BundledTheme] = &[
 ];
 
 static ACTIVE_THEME: OnceLock<Theme> = OnceLock::new();
+
+pub const THEME_FILE_DOC: &[&str] = &[
+    "Colors are hex strings in the form \"#rrggbb\". Every key in [ui] and [log]",
+    "except `tokens` takes either a hex color or the name of a [palette] entry.",
+    "All [ui] and [log] keys are required; unknown keys are rejected.",
+];
 
 pub const PALETTE_DOC: &[&str] = &[
     "Named colors that the [ui] and [log] tables can refer to by name.",
@@ -265,47 +275,79 @@ pub const TOKENS_DOC: &[&str] = &[
     "example: tokens = [\"#fb4934\", \"#83a598\", \"#b8bb26\", \"#fabd2f\"]",
 ];
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[schemars(title = concat!(env!("CARGO_PKG_NAME"), " color theme"))]
+#[schemars(description = THEME_FILE_DOC.join("\n"))]
 pub struct ThemeFile {
     #[serde(default)]
+    #[schemars(schema_with = "hex_color_map_schema")]
+    #[schemars(description = PALETTE_DOC.join("\n"))]
     pub palette: Table,
+    #[schemars(description = UI_DOC.join("\n"))]
     pub ui: UiSection,
+    #[schemars(description = LOG_DOC.join("\n"))]
     pub log: LogSection,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct UiSection {
+    #[schemars(description = BACKGROUND_DOC.join("\n"))]
     pub background: String,
+    #[schemars(description = TEXT_DOC.join("\n"))]
     pub text: String,
+    #[schemars(description = SUBTEXT_DOC.join("\n"))]
     pub subtext: String,
+    #[schemars(description = ACCENT_DOC.join("\n"))]
     pub accent: String,
+    #[schemars(description = SECONDARY_DOC.join("\n"))]
     pub secondary: String,
+    #[schemars(description = SUCCESS_DOC.join("\n"))]
     pub success: String,
+    #[schemars(description = WARNING_DOC.join("\n"))]
     pub warning: String,
+    #[schemars(description = ERROR_DOC.join("\n"))]
     pub error: String,
+    #[schemars(description = MATCH_DOC.join("\n"))]
     pub r#match: String,
+    #[schemars(description = KEYS_DOC.join("\n"))]
     pub keys: String,
+    #[schemars(description = SELECTION_DOC.join("\n"))]
     pub selection: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct LogSection {
+    #[schemars(description = LEVEL_FG_DOC.join("\n"))]
     pub level_fg: String,
+    #[schemars(description = VERBOSE_DOC.join("\n"))]
     pub verbose: String,
+    #[schemars(description = DEBUG_DOC.join("\n"))]
     pub debug: String,
+    #[schemars(description = INFO_DOC.join("\n"))]
     pub info: String,
+    #[schemars(description = WARN_DOC.join("\n"))]
     pub warn: String,
+    #[schemars(description = LOG_ERROR_DOC.join("\n"))]
     pub error: String,
+    #[schemars(description = FATAL_DOC.join("\n"))]
     pub fatal: String,
+    #[schemars(description = HIGHLIGHT_DOC.join("\n"))]
     pub highlight: String,
+    #[schemars(description = PROCESS_START_DOC.join("\n"))]
     pub process_start: String,
+    #[schemars(description = PROCESS_DEATH_DOC.join("\n"))]
     pub process_death: String,
+    #[schemars(description = GC_DURATION_DOC.join("\n"))]
     pub gc_duration: String,
+    #[schemars(description = GC_FREE_DOC.join("\n"))]
     pub gc_free: String,
+    #[schemars(description = GC_UNIT_DOC.join("\n"))]
     pub gc_unit: String,
+    #[schemars(length(min = 1), inner(pattern(HEX_COLOR_PATTERN)))]
+    #[schemars(description = TOKENS_DOC.join("\n"))]
     pub tokens: Vec<String>,
 }
 
@@ -747,12 +789,10 @@ impl ThemeFile {
             "themes directory when missing and are never overwritten, so they can be".to_string(),
             "edited in place; delete a file to restore its bundled version.".to_string(),
             String::default(),
-            "Colors are hex strings in the form \"#rrggbb\". Every key in [ui] and [log]"
-                .to_string(),
-            "except `tokens` takes either a hex color or the name of a [palette] entry."
-                .to_string(),
-            "All [ui] and [log] keys are required; unknown keys are rejected.".to_string(),
-        ];
+        ]
+        .into_iter()
+        .chain(THEME_FILE_DOC.iter().map(|line| line.to_string()))
+        .collect::<Vec<_>>();
 
         render(&header, &self.doc_items())
     }

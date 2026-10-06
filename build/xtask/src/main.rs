@@ -6,9 +6,14 @@ use clap::error::DefaultFormatter as ClapFormatter;
 use clap::error::Error as ClapError;
 use clap::error::ErrorKind as ClapErrorKind;
 
+use pidcat::config_schema;
+use pidcat::theme_schema;
+
 use scope_functions::Run;
 
 use std::env::var_os;
+use std::fs::create_dir_all;
+use std::fs::write;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -148,6 +153,27 @@ fn run(shell: &Shell, profile: &Profile, args: &[String]) -> Result<()> {
     cargo().and_then(cmd).context("failed to run!")
 }
 
+/// Write the JSON schemas for the config and theme files
+fn schema() -> Result<()> {
+    status(">> Generating schemas...");
+
+    let schemas_dir = PathBuf::from("schemas");
+    create_dir_all(&schemas_dir).context("failed to create schemas dir!")?;
+
+    [
+        ("config.schema.json", config_schema()),
+        ("theme.schema.json", theme_schema()),
+    ]
+    .into_iter()
+    .try_for_each(|(file_name, schema)| {
+        let path = schemas_dir.join(file_name);
+
+        write(&path, schema)
+            .with_context(|| format!("failed to write {path:?}!"))
+            .map(|_| println!("wrote {path:?}"))
+    })
+}
+
 /// Install PidCat using the Inno Setup Installer
 #[cfg(target_os = "windows")]
 fn install(shell: &Shell, silent: bool) -> Result<()> {
@@ -214,6 +240,8 @@ fn main() -> Result<()> {
         }
 
         Command::Run { profile, args } => run(&shell, &profile, &args),
+
+        Command::Schema => schema(),
 
         #[cfg(target_os = "windows")]
         Command::Install { silent } => install(&shell, silent),

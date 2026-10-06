@@ -8,6 +8,8 @@ pub use config::paths::THEMES_DIR_NAME;
 pub use config::paths::config_dir;
 pub use config::paths::default_config_file;
 pub use config::paths::themes_dir;
+pub use config::schema::config_schema;
+pub use config::schema::theme_schema;
 pub use config::theme::BUNDLED_THEMES;
 pub use config::theme::BundledTheme;
 pub use config::theme::DEFAULT_THEME_NAME;
