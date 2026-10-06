@@ -8,6 +8,13 @@ pub use config::paths::THEMES_DIR_NAME;
 pub use config::paths::config_dir;
 pub use config::paths::default_config_file;
 pub use config::paths::themes_dir;
+pub use config::theme::LogColors;
+pub use config::theme::Rgb;
+pub use config::theme::Theme;
+pub use config::theme::ThemeFile;
+pub use config::theme::UiColors;
+pub use config::theme::active as active_theme;
+pub use config::theme::parse_theme;
 
 pub use controller::adb::build_adb_command;
 pub use controller::adb::build_logcat_command;

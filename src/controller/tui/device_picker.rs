@@ -121,11 +121,11 @@ pub fn render_device_picker(
                 let line = format!("{prefix}{}  {state_label}", device.device_id);
                 let style = if list_index == search.selected {
                     Style::default()
-                        .fg(theme::BG)
-                        .bg(theme::YELLOW)
+                        .fg(theme::background())
+                        .bg(theme::accent())
                         .add_modifier(Modifier::BOLD)
                 } else if selectable {
-                    Style::default().fg(theme::TEXT)
+                    Style::default().fg(theme::text())
                 } else {
                     theme::dim_style()
                 };

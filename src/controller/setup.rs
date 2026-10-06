@@ -16,6 +16,7 @@ use crate::LogLevel;
 use crate::SYSTEM_TAGS;
 use crate::State;
 use crate::ValueOrPanic;
+use crate::active_theme;
 use crate::build_adb_command;
 use crate::clear_logcat;
 use crate::get_adb_devices;
@@ -98,14 +99,12 @@ pub fn build_state(
     let base_adb_command = build_adb_command(args, device_serial);
     let (pids_map, uids_map) = get_processes(&base_adb_command, catchall_packages, args);
 
-    let token_colors = vec![
-        Color::BrightRed,
-        Color::BrightBlue,
-        Color::BrightCyan,
-        Color::BrightGreen,
-        Color::BrightYellow,
-        Color::BrightMagenta,
-    ];
+    let token_colors = active_theme()
+        .log
+        .tokens
+        .iter()
+        .map(|&token| Color::from(token))
+        .collect();
 
     State {
         pids_map,

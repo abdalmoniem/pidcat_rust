@@ -13,6 +13,7 @@ use is_terminal::IsTerminal;
 
 use pidcat::CliArgs;
 use pidcat::Config;
+use pidcat::ThemeFile;
 use pidcat::ValueOrPanic;
 use pidcat::colored;
 use pidcat::run_plain;
@@ -70,6 +71,12 @@ fn main() {
 
     if args.print_config {
         print!("{}", Config::from_args(args).to_doc_toml());
+
+        process::exit(0i32);
+    }
+
+    if args.print_theme {
+        print!("{}", ThemeFile::default_theme().to_doc_toml());
 
         process::exit(0i32);
     }

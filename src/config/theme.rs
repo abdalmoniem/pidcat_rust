@@ -1,0 +1,598 @@
+#![deny(clippy::unwrap_used)]
+
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result as FmtResult;
+use std::sync::OnceLock;
+
+use serde::Deserialize;
+
+use toml::Table;
+use toml::Value;
+
+use crate::ValueOrPanic;
+
+use super::doc_toml::DocItem;
+use super::doc_toml::DocSection;
+use super::doc_toml::render;
+
+pub const DEFAULT_THEME_SOURCE: &str = include_str!("themes/gruber-darker.toml");
+
+static ACTIVE_THEME: OnceLock<Theme> = OnceLock::new();
+
+pub const PALETTE_DOC: &[&str] = &[
+    "Named colors that the [ui] and [log] tables can refer to by name.",
+    "Names are free-form (letters, digits, '-' and '_'), values are hex colors in",
+    "the form \"#rrggbb\". The palette is optional; [ui] and [log] keys may also use",
+    "hex colors directly.",
+    "example: bg0 = \"#181818\"",
+];
+
+pub const UI_DOC: &[&str] = &[
+    "Colors of the interactive TUI chrome. Plain output does not use this table.",
+    "Each key takes a [palette] name or a hex color \"#rrggbb\".",
+];
+
+pub const LOG_DOC: &[&str] = &[
+    "Colors of the log lines, used both in the TUI log view and in plain output",
+    "(and in copied or exported text). Each key except `tokens` takes a [palette]",
+    "name or a hex color \"#rrggbb\". Log lines use these exact 24-bit colors when",
+    "the environment sets COLORTERM to \"truecolor\" or \"24bit\", and the closest",
+    "basic ANSI colors otherwise.",
+];
+
+pub const BACKGROUND_DOC: &[&str] = &[
+    "Background of the whole TUI: log view, status bar, panels, menus, dialogs and",
+    "the file browser. Also the text color on accent-colored badges such as the",
+    "running status indicator and the selected device.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"bg0\" (#181818)",
+    "example: background = \"#1d2021\"",
+];
+
+pub const TEXT_DOC: &[&str] = &[
+    "Main foreground text: menu and dialog content, help descriptions, device",
+    "names, key hint descriptions, file browser entries, and selected log line",
+    "text that has no color of its own.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"fg0\" (#e4e4ef)",
+    "example: text = \"#ebdbb2\"",
+];
+
+pub const SUBTEXT_DOC: &[&str] = &[
+    "Dimmed text: status bar separators and entry counters, device states, input",
+    "placeholders, hints, unavailable commands in the help menu and file browser",
+    "metadata.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"fg3\" (#a89984)",
+    "example: subtext = \"#928374\"",
+];
+
+pub const ACCENT_DOC: &[&str] = &[
+    "Primary accent: panel borders, section headings, key names in the border",
+    "hints, the running status badge, the log source in the status bar, the",
+    "selected help and menu row, the selected device, and the file browser title,",
+    "directories and highlights.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"yellow\" (#ffdd33)",
+    "example: accent = \"#fabd2f\"",
+];
+
+pub const SECONDARY_DOC: &[&str] = &[
+    "Secondary accent: the device serial in the status bar.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"niagara\" (#96a6c8)",
+    "example: secondary = \"#83a598\"",
+];
+
+pub const SUCCESS_DOC: &[&str] = &[
+    "Success feedback: status bar messages such as copy confirmations, and success",
+    "messages in the file browser.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"green\" (#73c936)",
+    "example: success = \"#b8bb26\"",
+];
+
+pub const WARNING_DOC: &[&str] = &[
+    "Idle status indicator in the status bar, shown while paused, waiting for a",
+    "device or not reading live logs.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"brown\" (#cc8c3c)",
+    "example: warning = \"#fe8019\"",
+];
+
+pub const ERROR_DOC: &[&str] = &[
+    "Error messages in the device picker and the file dialogs.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"red\" (#f43841)",
+    "example: error = \"#fb4934\"",
+];
+
+pub const MATCH_DOC: &[&str] = &[
+    "File browser entries matching the current search.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"aqua\" (#8ec07c)",
+    "example: match = \"#8ec07c\"",
+];
+
+pub const KEYS_DOC: &[&str] = &[
+    "Key bindings listed in the help, copy and export menus.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"cyan\" (#8cd0d3)",
+    "example: keys = \"#83a598\"",
+];
+
+pub const SELECTION_DOC: &[&str] = &[
+    "Background of the selected log line in select mode, the selected help and",
+    "menu row, and the selected file browser entry.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"bg5\" (#404040)",
+    "example: selection = \"#504945\"",
+];
+
+pub const LEVEL_FG_DOC: &[&str] = &[
+    "Text color of the log level badges (V, D, I, W, E, F) and of the connectors",
+    "(╠═ and ╚═) in front of wrapped message lines. The badge background is the",
+    "color of the message's level below.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"black\" (#000000)",
+    "example: level-fg = \"#1d2021\"",
+];
+
+pub const VERBOSE_DOC: &[&str] = &[
+    "Level badge and wrap connector background of verbose (V) messages.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"cyan\" (#8cd0d3)",
+    "example: verbose = \"#83a598\"",
+];
+
+pub const DEBUG_DOC: &[&str] = &[
+    "Level badge and wrap connector background of debug (D) messages.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"niagara\" (#96a6c8)",
+    "example: debug = \"#458588\"",
+];
+
+pub const INFO_DOC: &[&str] = &[
+    "Level badge and wrap connector background of info (I) messages.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"green\" (#73c936)",
+    "example: info = \"#b8bb26\"",
+];
+
+pub const WARN_DOC: &[&str] = &[
+    "Level badge and wrap connector background of warning (W) messages.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"yellow\" (#ffdd33)",
+    "example: warn = \"#fabd2f\"",
+];
+
+pub const LOG_ERROR_DOC: &[&str] = &[
+    "Level badge and wrap connector background of error (E) messages.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"brown\" (#cc8c3c)",
+    "example: error = \"#fe8019\"",
+];
+
+pub const FATAL_DOC: &[&str] = &[
+    "Level badge and wrap connector background of fatal (F) messages.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"red\" (#f43841)",
+    "example: fatal = \"#fb4934\"",
+];
+
+pub const HIGHLIGHT_DOC: &[&str] = &[
+    "Highlighted values inside the process banners: the package, target, PID, UID",
+    "and GIDs of started processes and the name and PID of ended processes.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"yellow\" (#ffdd33)",
+    "example: highlight = \"#fabd2f\"",
+];
+
+pub const PROCESS_START_DOC: &[&str] = &[
+    "Background of the banner shown when a process starts.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"green\" (#73c936)",
+    "example: process-start = \"#98971a\"",
+];
+
+pub const PROCESS_DEATH_DOC: &[&str] = &[
+    "Background of the banner shown when a process ends.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"red\" (#f43841)",
+    "example: process-death = \"#cc241d\"",
+];
+
+pub const GC_DURATION_DOC: &[&str] = &[
+    "The \"; ~duration=\" label of StrictMode policy violation messages.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"red\" (#f43841)",
+    "example: gc-duration = \"#fb4934\"",
+];
+
+pub const GC_FREE_DOC: &[&str] = &[
+    "The \"freed <size>\" part of garbage collector messages. Only used when",
+    "gc-color is enabled (gc-color = true in the config file, or -g).",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"green\" (#73c936)",
+    "example: gc-free = \"#b8bb26\"",
+];
+
+pub const GC_UNIT_DOC: &[&str] = &[
+    "The duration value of StrictMode policy violation messages, and the",
+    "\"paused <time>\" part of garbage collector messages (the latter only when",
+    "gc-color is enabled).",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "default (gruber-darker): \"yellow\" (#ffdd33)",
+    "example: gc-unit = \"#fabd2f\"",
+];
+
+pub const TOKENS_DOC: &[&str] = &[
+    "Colors rotated through for the PID, UID, package and tag columns. A newly seen",
+    "value gets the least recently used color and keeps it, so the same tag or",
+    "package is always shown in the same color.",
+    "type: non-empty array of hex colors \"#rrggbb\" (palette names are not",
+    "accepted); there is no upper limit on the number of colors",
+    "default (gruber-darker): [\"#f43841\", \"#96a6c8\", \"#8cd0d3\", \"#73c936\",",
+    "\"#ffdd33\", \"#9e95c7\", \"#8ec07c\", \"#cc8c3c\"]",
+    "example: tokens = [\"#fb4934\", \"#83a598\", \"#b8bb26\", \"#fabd2f\"]",
+];
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct ThemeFile {
+    #[serde(default)]
+    pub palette: Table,
+    pub ui: UiSection,
+    pub log: LogSection,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct UiSection {
+    pub background: String,
+    pub text: String,
+    pub subtext: String,
+    pub accent: String,
+    pub secondary: String,
+    pub success: String,
+    pub warning: String,
+    pub error: String,
+    pub r#match: String,
+    pub keys: String,
+    pub selection: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct LogSection {
+    pub level_fg: String,
+    pub verbose: String,
+    pub debug: String,
+    pub info: String,
+    pub warn: String,
+    pub error: String,
+    pub fatal: String,
+    pub highlight: String,
+    pub process_start: String,
+    pub process_death: String,
+    pub gc_duration: String,
+    pub gc_free: String,
+    pub gc_unit: String,
+    pub tokens: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Rgb {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+#[derive(Clone, Debug)]
+pub struct UiColors {
+    pub background: Rgb,
+    pub text: Rgb,
+    pub subtext: Rgb,
+    pub accent: Rgb,
+    pub secondary: Rgb,
+    pub success: Rgb,
+    pub warning: Rgb,
+    pub error: Rgb,
+    pub r#match: Rgb,
+    pub keys: Rgb,
+    pub selection: Rgb,
+}
+
+#[derive(Clone, Debug)]
+pub struct LogColors {
+    pub level_fg: Rgb,
+    pub verbose: Rgb,
+    pub debug: Rgb,
+    pub info: Rgb,
+    pub warn: Rgb,
+    pub error: Rgb,
+    pub fatal: Rgb,
+    pub highlight: Rgb,
+    pub process_start: Rgb,
+    pub process_death: Rgb,
+    pub gc_duration: Rgb,
+    pub gc_free: Rgb,
+    pub gc_unit: Rgb,
+    pub tokens: Vec<Rgb>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Theme {
+    pub ui: UiColors,
+    pub log: LogColors,
+}
+
+impl Rgb {
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        let digits = hex.strip_prefix('#')?;
+        if digits.len() != 6usize || !digits.chars().all(|char| char.is_ascii_hexdigit()) {
+            return None;
+        }
+
+        let channel = |index: usize| u8::from_str_radix(&digits[index..index + 2usize], 16).ok();
+
+        Some(Self {
+            r: channel(0usize)?,
+            g: channel(2usize)?,
+            b: channel(4usize)?,
+        })
+    }
+}
+
+impl Display for Rgb {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+        write!(formatter, "#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
+    }
+}
+
+impl From<Rgb> for ratatui::style::Color {
+    fn from(rgb: Rgb) -> Self {
+        Self::Rgb(rgb.r, rgb.g, rgb.b)
+    }
+}
+
+impl From<Rgb> for colored::Color {
+    fn from(rgb: Rgb) -> Self {
+        Self::TrueColor {
+            r: rgb.r,
+            g: rgb.g,
+            b: rgb.b,
+        }
+    }
+}
+
+fn hex_color(key: &str, value: &str) -> Result<Rgb, String> {
+    Rgb::from_hex(value)
+        .ok_or_else(|| format!("{key}: invalid color '{value}', expected a hex color \"#rrggbb\""))
+}
+
+pub fn parse_theme(source: &str) -> Result<ThemeFile, String> {
+    toml::from_str(source).map_err(|err| err.to_string().trim_end().to_string())
+}
+
+/// Falls back to the embedded default theme when no theme has been activated.
+pub fn active() -> &'static Theme {
+    ACTIVE_THEME.get_or_init(|| {
+        parse_theme(DEFAULT_THEME_SOURCE)
+            .and_then(|theme_file| theme_file.resolve())
+            .unwrap_or_panic("the embedded default theme is invalid")
+    })
+}
+
+impl ThemeFile {
+    pub fn default_theme() -> Self {
+        parse_theme(DEFAULT_THEME_SOURCE).unwrap_or_panic("the embedded default theme is invalid")
+    }
+
+    fn palette_color(&self, key: &str, value: &str) -> Result<Rgb, String> {
+        if value.starts_with('#') {
+            return hex_color(key, value);
+        }
+
+        match self.palette.get(value) {
+            Some(Value::String(hex)) => hex_color(&format!("palette.{value}"), hex),
+            Some(_) => Err(format!(
+                "palette.{value}: expected a hex color string \"#rrggbb\""
+            )),
+            None => Err(format!(
+                "{key}: '{value}' is neither a hex color \"#rrggbb\" nor a [palette] name"
+            )),
+        }
+    }
+
+    pub fn resolve(&self) -> Result<Theme, String> {
+        for (name, value) in &self.palette {
+            match value {
+                Value::String(hex) => hex_color(&format!("palette.{name}"), hex).map(|_| ())?,
+                _ => {
+                    return Err(format!(
+                        "palette.{name}: expected a hex color string \"#rrggbb\""
+                    ));
+                }
+            }
+        }
+
+        let UiSection {
+            background,
+            text,
+            subtext,
+            accent,
+            secondary,
+            success,
+            warning,
+            error,
+            r#match,
+            keys,
+            selection,
+        } = &self.ui;
+
+        let LogSection {
+            level_fg,
+            verbose,
+            debug,
+            info,
+            warn,
+            error: log_error,
+            fatal,
+            highlight,
+            process_start,
+            process_death,
+            gc_duration,
+            gc_free,
+            gc_unit,
+            tokens,
+        } = &self.log;
+
+        if tokens.is_empty() {
+            return Err("log.tokens: at least one color is required".to_string());
+        }
+
+        let tokens = tokens
+            .iter()
+            .enumerate()
+            .map(|(index, token)| hex_color(&format!("log.tokens[{index}]"), token))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Theme {
+            ui: UiColors {
+                background: self.palette_color("ui.background", background)?,
+                text: self.palette_color("ui.text", text)?,
+                subtext: self.palette_color("ui.subtext", subtext)?,
+                accent: self.palette_color("ui.accent", accent)?,
+                secondary: self.palette_color("ui.secondary", secondary)?,
+                success: self.palette_color("ui.success", success)?,
+                warning: self.palette_color("ui.warning", warning)?,
+                error: self.palette_color("ui.error", error)?,
+                r#match: self.palette_color("ui.match", r#match)?,
+                keys: self.palette_color("ui.keys", keys)?,
+                selection: self.palette_color("ui.selection", selection)?,
+            },
+            log: LogColors {
+                level_fg: self.palette_color("log.level-fg", level_fg)?,
+                verbose: self.palette_color("log.verbose", verbose)?,
+                debug: self.palette_color("log.debug", debug)?,
+                info: self.palette_color("log.info", info)?,
+                warn: self.palette_color("log.warn", warn)?,
+                error: self.palette_color("log.error", log_error)?,
+                fatal: self.palette_color("log.fatal", fatal)?,
+                highlight: self.palette_color("log.highlight", highlight)?,
+                process_start: self.palette_color("log.process-start", process_start)?,
+                process_death: self.palette_color("log.process-death", process_death)?,
+                gc_duration: self.palette_color("log.gc-duration", gc_duration)?,
+                gc_free: self.palette_color("log.gc-free", gc_free)?,
+                gc_unit: self.palette_color("log.gc-unit", gc_unit)?,
+                tokens,
+            },
+        })
+    }
+
+    pub fn doc_items(&self) -> Vec<DocSection> {
+        let Self { palette, ui, log } = self.clone();
+
+        let UiSection {
+            background,
+            text,
+            subtext,
+            accent,
+            secondary,
+            success,
+            warning,
+            error,
+            r#match,
+            keys,
+            selection,
+        } = ui;
+
+        let LogSection {
+            level_fg,
+            verbose,
+            debug,
+            info,
+            warn,
+            error: log_error,
+            fatal,
+            highlight,
+            process_start,
+            process_death,
+            gc_duration,
+            gc_free,
+            gc_unit,
+            tokens,
+        } = log;
+
+        vec![
+            DocSection {
+                title: "Palette",
+                table: Some("palette"),
+                doc: PALETTE_DOC,
+                items: palette
+                    .into_iter()
+                    .map(|(name, value)| DocItem::set(&name, &[], value))
+                    .collect(),
+            },
+            DocSection {
+                title: "User interface",
+                table: Some("ui"),
+                doc: UI_DOC,
+                items: vec![
+                    DocItem::set("background", BACKGROUND_DOC, background),
+                    DocItem::set("text", TEXT_DOC, text),
+                    DocItem::set("subtext", SUBTEXT_DOC, subtext),
+                    DocItem::set("accent", ACCENT_DOC, accent),
+                    DocItem::set("secondary", SECONDARY_DOC, secondary),
+                    DocItem::set("success", SUCCESS_DOC, success),
+                    DocItem::set("warning", WARNING_DOC, warning),
+                    DocItem::set("error", ERROR_DOC, error),
+                    DocItem::set("match", MATCH_DOC, r#match),
+                    DocItem::set("keys", KEYS_DOC, keys),
+                    DocItem::set("selection", SELECTION_DOC, selection),
+                ],
+            },
+            DocSection {
+                title: "Log colors",
+                table: Some("log"),
+                doc: LOG_DOC,
+                items: vec![
+                    DocItem::set("level-fg", LEVEL_FG_DOC, level_fg),
+                    DocItem::set("verbose", VERBOSE_DOC, verbose),
+                    DocItem::set("debug", DEBUG_DOC, debug),
+                    DocItem::set("info", INFO_DOC, info),
+                    DocItem::set("warn", WARN_DOC, warn),
+                    DocItem::set("error", LOG_ERROR_DOC, log_error),
+                    DocItem::set("fatal", FATAL_DOC, fatal),
+                    DocItem::set("highlight", HIGHLIGHT_DOC, highlight),
+                    DocItem::set("process-start", PROCESS_START_DOC, process_start),
+                    DocItem::set("process-death", PROCESS_DEATH_DOC, process_death),
+                    DocItem::set("gc-duration", GC_DURATION_DOC, gc_duration),
+                    DocItem::set("gc-free", GC_FREE_DOC, gc_free),
+                    DocItem::set("gc-unit", GC_UNIT_DOC, gc_unit),
+                    DocItem::set("tokens", TOKENS_DOC, tokens),
+                ],
+            },
+        ]
+    }
+
+    pub fn to_doc_toml(&self) -> String {
+        let pkg = env!("CARGO_PKG_NAME");
+
+        let header = [
+            format!("{pkg} color theme"),
+            String::default(),
+            format!("Print the active theme with: {pkg} --print-theme"),
+            String::default(),
+            "Colors are hex strings in the form \"#rrggbb\". Every key in [ui] and [log]"
+                .to_string(),
+            "except `tokens` takes either a hex color or the name of a [palette] entry."
+                .to_string(),
+            "All [ui] and [log] keys are required; unknown keys are rejected.".to_string(),
+        ];
+
+        render(&header, &self.doc_items())
+    }
+}
