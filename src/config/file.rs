@@ -250,6 +250,19 @@ pub const OUTPUT_DOC: &[&str] = &[
     "example: output = \"logcat.txt\"",
 ];
 
+pub const THEME_DOC: &[&str] = &[
+    "Color theme of the TUI and of the log output (also in plain mode).",
+    "Either the name of a theme file in the `themes` directory next to the default",
+    "config file, without the .toml extension, or a path to a theme file. A value",
+    "containing a path separator or ending in .toml is a path; relative paths are",
+    "resolved from the current directory. The bundled themes are written to the",
+    "themes directory when missing and can be edited there.",
+    "type: string (theme name or file path)",
+    "default: \"gruber-darker\"",
+    "command line: --theme <THEME>",
+    "example: theme = \"monokai\"",
+];
+
 pub const PLAIN_DOC: &[&str] = &[
     "Use plain text output instead of the interactive TUI. Plain output is also",
     "used automatically when standard output is not a terminal.",
@@ -290,6 +303,7 @@ pub struct Config {
     pub no_color: Option<bool>,
     pub output: Option<String>,
     pub plain: Option<bool>,
+    pub theme: Option<String>,
 }
 
 fn parse_value_enum<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -377,6 +391,7 @@ impl Config {
             no_color,
             output,
             plain,
+            theme,
         } = self;
 
         set_unless_cli(&mut args.packages, packages, matches, "packages");
@@ -444,6 +459,7 @@ impl Config {
             "output_path",
         );
         set_unless_cli(&mut args.plain, plain, matches, "plain");
+        set_unless_cli(&mut args.theme, theme, matches, "theme");
     }
 
     pub fn from_args(args: &CliArgs) -> Self {
@@ -473,6 +489,7 @@ impl Config {
             no_color: Some(args.no_color),
             output: args.output_path.clone(),
             plain: Some(args.plain),
+            theme: Some(args.theme.clone()),
         }
     }
 
@@ -503,6 +520,7 @@ impl Config {
             no_color,
             output,
             plain,
+            theme,
         } = self.clone();
 
         vec![
@@ -620,6 +638,12 @@ impl Config {
                     DocItem::optional("output", OUTPUT_DOC, output, "logcat.txt"),
                     DocItem::optional("plain", PLAIN_DOC, plain, true),
                 ],
+            },
+            DocSection {
+                title: "Config options",
+                table: None,
+                doc: &[],
+                items: vec![DocItem::optional("theme", THEME_DOC, theme, "monokai")],
             },
         ]
     }

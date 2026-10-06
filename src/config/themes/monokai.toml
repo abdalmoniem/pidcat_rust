@@ -1,0 +1,43 @@
+# Monokai by Wimer Hazenberg
+# https://monokai.pro
+
+[palette]
+bg = "#272822"
+selection = "#49483e"
+comment = "#75715e"
+fg = "#f8f8f2"
+red = "#f92672"
+orange = "#fd971f"
+yellow = "#e6db74"
+green = "#a6e22e"
+cyan = "#66d9ef"
+purple = "#ae81ff"
+
+[ui]
+background = "bg"
+text = "fg"
+subtext = "comment"
+accent = "yellow"
+secondary = "cyan"
+success = "green"
+warning = "orange"
+error = "red"
+match = "green"
+keys = "cyan"
+selection = "selection"
+
+[log]
+level-fg = "bg"
+verbose = "purple"
+debug = "cyan"
+info = "green"
+warn = "yellow"
+error = "orange"
+fatal = "red"
+highlight = "yellow"
+process-start = "green"
+process-death = "red"
+gc-duration = "red"
+gc-free = "green"
+gc-unit = "yellow"
+tokens = ["#f92672", "#66d9ef", "#a6e22e", "#e6db74", "#ae81ff", "#fd971f"]
