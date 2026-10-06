@@ -400,6 +400,26 @@ impl Config {
         })
     }
 
+    /// Writes the documented `defaults` to the default config file when it is missing and
+    /// never overwrites it; failures are ignored so a read-only home still works.
+    pub fn install_default_file(defaults: &CliArgs) {
+        let Some(path) = default_config_file() else {
+            return;
+        };
+
+        if path.exists() {
+            return;
+        }
+
+        if let Some(dir) = path.parent()
+            && fs::create_dir_all(dir).is_err()
+        {
+            return;
+        }
+
+        let _ = fs::write(&path, Self::from_args(defaults).to_doc_toml());
+    }
+
     /// An explicit path must exist; a missing default config file falls back to built-in defaults.
     pub fn load_effective(explicit_path: Option<&str>) -> Result<Self, String> {
         match explicit_path {
@@ -705,6 +725,8 @@ impl Config {
             format!("{pkg} configuration file"),
             String::default(),
             format!("Default location: {default_path}"),
+            "It is created with the built-in defaults when missing and is never".to_string(),
+            "overwritten; delete it to restore the defaults.".to_string(),
             format!("Load another file with: {pkg} --config <CONFIG_PATH>"),
             format!("Print the effective configuration with: {pkg} --print-config"),
         ]
