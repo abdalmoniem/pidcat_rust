@@ -203,10 +203,8 @@ pub fn bootstrap_adb_plain(args: &CliArgs, show_colors: bool) {
         None => {
             let err = Error::from(ErrorKind::NotConnected);
             let err_code = err.raw_os_error().unwrap_or(1i32);
-            let err_hdr =
-                colored(NO_ADB_DEVICES_ERROR_HEADER, show_colors, Color::BrightRed);
-            let err_msg =
-                colored(NO_ADB_DEVICES_ERROR_MESSAGE, show_colors, Color::BrightRed);
+            let err_hdr = colored(NO_ADB_DEVICES_ERROR_HEADER, show_colors, Color::BrightRed);
+            let err_msg = colored(NO_ADB_DEVICES_ERROR_MESSAGE, show_colors, Color::BrightRed);
             eprintln!("{err_hdr}");
             eprintln!("{err_msg}");
             process::exit(err_code);

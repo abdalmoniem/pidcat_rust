@@ -29,6 +29,7 @@ ratatui = "0.30.2"
 crossterm = "0.29"
 tui-file-explorer = { version = "2.3.0", default-features = false }
 arboard = "3.6.1"
+tokio = { version = "1.48.0", features = ["rt-multi-thread", "io-util", "io-std", "fs", "process", "sync", "macros"] }
 
 [build-dependencies]
 build-print = "1.0.1"

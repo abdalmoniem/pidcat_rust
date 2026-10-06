@@ -80,7 +80,7 @@ nextest:
 [doc('Install the application by running the generated installer')]
 [group('install')]
 [script]
-install:
+install: fmt lint
     if [ "$TARGET_OS" != "windows" ]; then
         cargo xtask install
     else
@@ -92,7 +92,7 @@ install:
 [doc('Perform a full rebuild, create the installer, and install the application')]
 [group('install')]
 [script]
-reinstall:
+reinstall: fmt lint
     if [ "$TARGET_OS" != "windows" ]; then
         cargo xtask reinstall
     else

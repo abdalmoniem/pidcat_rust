@@ -44,6 +44,8 @@ pub use controller::log_processor::plain_prefix_column_widths;
 pub use controller::log_processor::process_line;
 pub use controller::log_processor::render_entry;
 pub use controller::log_processor::render_entry_lines;
+pub use controller::log_processor::tui_column_header;
+pub use controller::log_processor::tui_log_border_columns;
 pub use controller::log_processor::wrap_message_for_tui;
 pub use controller::log_processor::wrap_text_for_tui;
 pub use controller::log_processor::write_log_line;

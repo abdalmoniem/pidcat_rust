@@ -1025,6 +1025,95 @@ pub fn plain_banner_prefix_width(args: &CliArgs) -> usize {
     compute_header_width(args).saturating_sub(1usize)
 }
 
+fn fit_column_label(label: &str, width: usize) -> String {
+    let char_count = label.chars().count();
+    if char_count <= width {
+        return label.to_string();
+    }
+
+    let keep = width.saturating_sub(*ELLIPSIS_COUNT);
+    if keep == 0 {
+        return label.chars().take(width).collect();
+    }
+
+    format!(
+        "{}{}",
+        label.chars().take(keep).collect::<String>(),
+        *ELLIPSIS
+    )
+}
+
+/// Fixed-column segments for the log table top border (`PID`, `UID`, …).
+pub fn tui_log_border_columns(args: &CliArgs) -> Vec<(String, usize)> {
+    let mut columns = Vec::default();
+
+    if args.show_pid {
+        let width = args.puid_width as usize + 1usize;
+        columns.push((fit_column_label("PID", width), width));
+    }
+    if args.show_uid {
+        let width = args.puid_width as usize + 1usize;
+        columns.push((fit_column_label("UID", width), width));
+    }
+    if args.show_package {
+        let width = args.package_width as usize + 1usize;
+        columns.push((fit_column_label("PACKAGE", width), width));
+    }
+    if args.tag_width > 0 {
+        let width = args.tag_width as usize + 1usize;
+        columns.push((fit_column_label("TAG", width), width));
+    }
+    columns.push((
+        fit_column_label("L", PLAIN_LEVEL_HEADER_WIDTH),
+        PLAIN_LEVEL_HEADER_WIDTH,
+    ));
+
+    columns
+}
+
+/// TUI log panel title — column names aligned like plain-mode output fields.
+pub fn tui_column_header(args: &CliArgs) -> String {
+    let mut header = String::new();
+
+    if args.show_pid {
+        let width = args.puid_width as usize;
+        let label = fit_column_label("PID", width);
+        header.push_str(&format!("{:width$}", label, width = width));
+        header.push(' ');
+    }
+
+    if args.show_uid {
+        let width = args.puid_width as usize;
+        let label = fit_column_label("UID", width);
+        header.push_str(&format!("{:width$}", label, width = width));
+        header.push(' ');
+    }
+
+    if args.show_package {
+        let width = args.package_width as usize;
+        let label = fit_column_label("PACKAGE", width);
+        header.push_str(&format!("{:width$}", label, width = width));
+        header.push(' ');
+    }
+
+    if args.tag_width > 0 {
+        let width = args.tag_width as usize;
+        let label = fit_column_label("TAG", width);
+        let tag_display = if args.show_pid || args.show_uid || args.show_package {
+            format!("{:>width$}", label, width = width)
+        } else {
+            format!("{:width$}", label, width = width)
+        };
+        header.push_str(&tag_display);
+        header.push(' ');
+    }
+
+    header.push_str(" L ");
+    header.push(' ');
+
+    header
+}
+
 /// Prefix column widths for the TUI table — mirrors plain-mode field + separator layout.
 pub fn plain_prefix_column_widths(args: &CliArgs) -> Vec<usize> {
     let mut widths = Vec::default();

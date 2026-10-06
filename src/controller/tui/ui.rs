@@ -10,7 +10,6 @@ use ratatui::style::Modifier;
 use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::text::Span;
-use ratatui::widgets::Clear;
 use ratatui::widgets::Paragraph;
 use ratatui::widgets::Scrollbar;
 use ratatui::widgets::ScrollbarOrientation;
@@ -20,6 +19,9 @@ use tui_file_explorer::render_themed;
 use super::app::Overlay;
 use super::app::SourceMode;
 use super::app::TuiApp;
+use super::border::render_dialog;
+use super::border::render_labeled_panel;
+use super::border::render_log_table_panel;
 use super::copy::render_copy_menu;
 use super::device_picker::device_state_label;
 use super::device_picker::render_device_picker;
@@ -35,14 +37,12 @@ pub fn render(frame: &mut Frame, app: &mut TuiApp) {
         Constraint::Length(3),
         Constraint::Length(1),
         Constraint::Min(0),
-        Constraint::Length(1),
     ])
     .split(frame.area());
 
     render_filter_bar(frame, app, chunks[0usize]);
     render_status_bar(frame, app, chunks[1usize]);
     render_log_table(frame, app, chunks[2usize]);
-    render_shortcuts_bar(frame, app, chunks[3usize]);
 
     match app.overlay {
         Overlay::DevicePicker => {
@@ -93,28 +93,7 @@ pub fn render(frame: &mut Frame, app: &mut TuiApp) {
 const FILTER_PLACEHOLDER: &str = "e.g. package:com.example tag:ActivityManager level:debug";
 
 fn render_filter_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
-    let title = if app.filter_focused {
-        Line::from(vec![
-            Span::raw(" filter ("),
-            Span::styled("enter".to_string(), theme::hint_key_style()),
-            Span::styled(": apply, ".to_string(), theme::hint_style()),
-            Span::styled("esc".to_string(), theme::hint_key_style()),
-            Span::styled(": cancel) ".to_string(), theme::hint_style()),
-        ])
-    } else {
-        Line::from(vec![
-            Span::raw(" filter ("),
-            Span::styled("/".to_string(), theme::hint_key_style()),
-            Span::raw(") "),
-        ])
-    };
-
-    let block = if app.filter_focused {
-        theme::focused_panel_block_with_title(title)
-    } else {
-        theme::panel_block_with_title(title)
-    };
-    let inner = block.inner(area);
+    let inner = render_labeled_panel(frame, area, Some("filter"), app.filter_focused);
     let visible_width = inner.width as usize;
     let (text, scroll_chars) = input_field_line(
         &app.filter_input,
@@ -123,7 +102,10 @@ fn render_filter_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
         visible_width.max(1),
     );
 
-    frame.render_widget(Paragraph::new(text).block(block), area);
+    frame.render_widget(
+        Paragraph::new(text).style(theme::app_background_style()),
+        inner,
+    );
 
     if app.filter_focused {
         let cursor_x = inner.x.saturating_add(
@@ -207,18 +189,12 @@ fn render_status_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
     frame.render_widget(Paragraph::new(line).style(theme::status_style()), area);
 }
 
-fn render_shortcuts_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
-    frame.render_widget(
-        Paragraph::new(theme::main_shortcuts_line(app.select_mode)).style(theme::status_style()),
-        area,
-    );
-}
-
 fn render_log_table(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
     use super::display_cache::DISPLAY_BUILD_BUDGET;
 
-    let block = theme::panel_block("logs");
-    let inner = block.inner(area);
+    let columns = crate::tui_log_border_columns(&app.args);
+    let hints = theme::main_shortcut_hints(app.select_mode);
+    let inner = render_log_table_panel(frame, area, &columns, hints);
     let width = inner.width as i16;
     let viewport_lines = inner.height as usize;
     app.viewport_lines = viewport_lines;
@@ -274,7 +250,10 @@ fn render_log_table(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
         })
         .collect();
 
-    frame.render_widget(Paragraph::new(visible_lines).block(block), area);
+    frame.render_widget(
+        Paragraph::new(visible_lines).style(theme::app_background_style()),
+        inner,
+    );
 
     if total_lines > viewport_lines {
         render_log_scrollbar(frame, area, app.scroll_offset, total_lines, viewport_lines);
@@ -306,7 +285,12 @@ fn render_log_scrollbar(
     total_lines: usize,
     viewport_lines: usize,
 ) {
-    let inner = theme::panel_block("logs").inner(area);
+    let inner = Rect {
+        x: area.x.saturating_add(1),
+        y: area.y.saturating_add(1),
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
+    };
 
     let scrollbar_area = Rect {
         x: inner.x.saturating_add(inner.width.saturating_sub(1)),
@@ -356,23 +340,16 @@ fn map_scroll_offset_to_scrollbar_position(
 
 const HELP_KEYS_WIDTH: usize = 22;
 
+const HELP_HINTS: &[(&str, &str)] = &[
+    ("↑↓", " navigate"),
+    ("enter", " execute"),
+    ("esc", " close"),
+];
+
 fn render_help(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
-    frame.render_widget(Clear, area);
-    frame.render_widget(
-        Paragraph::new("").style(theme::app_background_style()),
-        area,
-    );
+    let inner = render_dialog(frame, area, "command palette", HELP_HINTS, false);
 
-    let block = theme::overlay_block("command palette");
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let chunks = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Min(4),
-        Constraint::Length(1),
-    ])
-    .split(inner);
+    let chunks = Layout::vertical([Constraint::Length(1), Constraint::Min(4)]).split(inner);
 
     render_search_field(
         frame,
@@ -381,7 +358,6 @@ fn render_help(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
         "search commands or keybindings...",
     );
     render_help_list(frame, app, chunks[1usize]);
-    render_help_footer(frame, chunks[2usize]);
 }
 
 fn render_help_list(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
@@ -441,66 +417,32 @@ fn help_row_line(row: &HelpRow, selected: bool) -> Line<'static> {
     }
 }
 
-fn render_help_footer(frame: &mut Frame, area: Rect) {
-    let footer = theme::dialog_footer_line(&[
-        ("↑↓", " navigate"),
-        ("enter", " execute"),
-        ("esc", " close"),
-    ]);
-    frame.render_widget(
-        Paragraph::new(footer).style(theme::app_background_style()),
-        area,
-    );
-}
-
-fn render_file_footer(frame: &mut Frame, area: Rect) {
-    let footer = theme::dialog_footer_line(&[
-        ("↑↓", " navigate"),
-        ("enter", " open"),
-        ("/", " search"),
-        ("esc", " close"),
-    ]);
-    frame.render_widget(
-        Paragraph::new(footer).style(theme::app_background_style()),
-        area,
-    );
-}
+const FILE_HINTS: &[(&str, &str)] = &[
+    ("↑↓", " navigate"),
+    ("enter", " open"),
+    ("/", " search"),
+    ("esc", " close"),
+];
 
 fn render_file_explorer_overlay(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
-    frame.render_widget(Clear, area);
-    frame.render_widget(
-        Paragraph::new("").style(theme::app_background_style()),
-        area,
-    );
-
     let Some(explorer) = &mut app.file_explorer else {
         return;
     };
 
-    let block = theme::overlay_block("open log file");
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let inner = render_dialog(frame, area, "open log file", FILE_HINTS, false);
 
     if let Some(err) = app.file_open_error.as_deref() {
-        let chunks = Layout::vertical([
-            Constraint::Length(3),
-            Constraint::Min(0),
-            Constraint::Length(1),
-        ])
-        .split(inner);
-        let error_block = theme::overlay_block("error");
+        let chunks = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(inner);
+        let error_inner = render_labeled_panel(frame, chunks[0usize], Some("error"), false);
         frame.render_widget(
             Paragraph::new(err)
-                .block(error_block)
-                .style(theme::error_style()),
-            chunks[0usize],
+                .style(theme::error_style())
+                .style(theme::app_background_style()),
+            error_inner,
         );
         render_themed(explorer, frame, chunks[1usize], &app.explorer_theme);
-        render_file_footer(frame, chunks[2usize]);
     } else {
-        let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(inner);
-        render_themed(explorer, frame, chunks[0usize], &app.explorer_theme);
-        render_file_footer(frame, chunks[1usize]);
+        render_themed(explorer, frame, inner, &app.explorer_theme);
     }
 }
 
