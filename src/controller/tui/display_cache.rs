@@ -60,6 +60,14 @@ impl DisplayCache {
         &self.lines
     }
 
+    pub fn rendered_line_count(&self) -> usize {
+        self.lines.len()
+    }
+
+    pub fn rendered_entry_count(&self) -> usize {
+        self.rendered_filtered_count
+    }
+
     pub fn line_filtered_index_at(&self, line: usize) -> Option<usize> {
         self.line_filtered_index.get(line).copied()
     }

@@ -4,6 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
+use std::time::Duration;
 
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
@@ -22,6 +23,13 @@ use crate::trim_log_line_bytes;
 use super::app::SourceMode;
 
 const INGEST_BATCH_SIZE: usize = 128;
+const PAUSE_POLL: Duration = Duration::from_millis(50);
+
+async fn wait_while_paused(paused: &AtomicBool, stop: &AtomicBool) {
+    while paused.load(Relaxed) && !stop.load(Relaxed) {
+        tokio::time::sleep(PAUSE_POLL).await;
+    }
+}
 
 fn flush_batch(batch: &mut Vec<IngestItem>, tx: &mpsc::UnboundedSender<Vec<IngestItem>>) {
     if batch.is_empty() {
@@ -34,13 +42,9 @@ fn ingest_line(
     line: String,
     state: &mut State,
     args: &CliArgs,
-    paused: &AtomicBool,
     batch: &mut Vec<IngestItem>,
     tx: &mpsc::UnboundedSender<Vec<IngestItem>>,
 ) {
-    if paused.load(Relaxed) {
-        return;
-    }
     if let Some(entry) = process_line(&line, state, args) {
         batch.push(IngestItem {
             entry,
@@ -114,12 +118,15 @@ impl LogIngest {
                     };
                     let mut lines = BufReader::new(file).lines();
                     while !stop_task.load(Relaxed) {
+                        wait_while_paused(&paused_task, &stop_task).await;
+                        if stop_task.load(Relaxed) {
+                            break;
+                        }
                         match lines.next_line().await {
                             Ok(Some(line)) => ingest_line(
                                 trim_log_line(&line),
                                 &mut state,
                                 &args,
-                                &paused_task,
                                 &mut batch,
                                 &batch_tx,
                             ),
@@ -132,12 +139,15 @@ impl LogIngest {
                     let stdin = tokio::io::stdin();
                     let mut lines = BufReader::new(stdin).lines();
                     while !stop_task.load(Relaxed) {
+                        wait_while_paused(&paused_task, &stop_task).await;
+                        if stop_task.load(Relaxed) {
+                            break;
+                        }
                         match lines.next_line().await {
                             Ok(Some(line)) => ingest_line(
                                 trim_log_line(&line),
                                 &mut state,
                                 &args,
-                                &paused_task,
                                 &mut batch,
                                 &batch_tx,
                             ),
@@ -168,6 +178,10 @@ impl LogIngest {
                     let mut buffer = Vec::default();
 
                     while !stop_task.load(Relaxed) {
+                        wait_while_paused(&paused_task, &stop_task).await;
+                        if stop_task.load(Relaxed) {
+                            break;
+                        }
                         buffer.clear();
                         match reader.read_until(b'\n', &mut buffer).await {
                             Ok(0) => break,
@@ -175,7 +189,6 @@ impl LogIngest {
                                 trim_log_line_bytes(&buffer),
                                 &mut state,
                                 &args,
-                                &paused_task,
                                 &mut batch,
                                 &batch_tx,
                             ),
