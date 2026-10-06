@@ -16,6 +16,7 @@ use ratatui::widgets::ScrollbarOrientation;
 use ratatui::widgets::ScrollbarState;
 use tui_file_explorer::render_themed;
 
+use super::app::FileDialogMode;
 use super::app::Overlay;
 use super::app::SourceMode;
 use super::app::TuiApp;
@@ -52,7 +53,7 @@ pub fn render(frame: &mut Frame, app: &mut TuiApp) {
             let area = centered_rect(72, 78, frame.area());
             render_device_picker(frame, &app.devices, &mut app.device_palette, area);
         }
-        Overlay::FileOpen => {
+        Overlay::FileDialog => {
             let area = centered_rect(80, 75, frame.area());
             render_file_explorer_overlay(frame, app, area);
         }
@@ -180,7 +181,7 @@ fn render_status_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
             Style::default().fg(theme::SUBTEXT),
         ),
     ]);
-    if let Some(feedback) = &app.copy_feedback {
+    if let Some(feedback) = &app.status_feedback {
         spans.push(Span::styled("  │  ", theme::dim_style()));
         spans.push(Span::styled(
             feedback.clone(),
@@ -241,8 +242,8 @@ fn refresh_log_view(app: &mut TuiApp, log_area: Rect) {
 
 fn render_log_table(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
     let columns = crate::tui_log_border_columns(&app.args);
-    let hints = theme::main_shortcut_hints(app.select_mode);
-    let inner = render_log_table_panel(frame, area, &columns, hints);
+    let hints = theme::main_shortcut_hints(app.select_mode, !app.entries.is_empty());
+    let inner = render_log_table_panel(frame, area, &columns, &hints);
     let viewport_lines = inner.height as usize;
     let total_lines = app.display_cache.rendered_line_count();
 
@@ -437,10 +438,17 @@ fn help_row_line(row: &HelpRow, selected: bool) -> Line<'static> {
     }
 }
 
-const FILE_HINTS: &[(&str, &str)] = &[
+const FILE_OPEN_HINTS: &[(&str, &str)] = &[
     ("↑↓", " select"),
     ("tab", " complete"),
     ("enter", " open"),
+    ("esc", " close"),
+];
+
+const FILE_SAVE_HINTS: &[(&str, &str)] = &[
+    ("↑↓", " select"),
+    ("tab", " complete"),
+    ("enter", " save"),
     ("esc", " close"),
 ];
 
@@ -451,7 +459,11 @@ fn render_file_explorer_overlay(frame: &mut Frame, app: &mut TuiApp, area: Rect)
         return;
     };
 
-    let inner = render_dialog(frame, area, "open log file", FILE_HINTS, false);
+    let (title, hints) = match app.file_dialog_mode {
+        FileDialogMode::Open => ("open log file", FILE_OPEN_HINTS),
+        FileDialogMode::Save => ("export all entries", FILE_SAVE_HINTS),
+    };
+    let inner = render_dialog(frame, area, title, hints, false);
     let error_height = if app.file_open_error.is_some() { 3 } else { 0 };
     let chunks = Layout::vertical([
         Constraint::Length(3),

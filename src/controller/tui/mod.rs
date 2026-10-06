@@ -5,6 +5,7 @@ mod border;
 mod copy;
 mod device_picker;
 mod display_cache;
+mod export;
 mod file_source;
 mod help;
 mod log_ingest;

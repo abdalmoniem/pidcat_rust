@@ -50,21 +50,25 @@ pub fn normalize_cli_args(args: &mut CliArgs) {
     }
 }
 
-pub fn resolve_packages(args: &mut CliArgs) -> (HashSet<String>, Vec<String>, Vec<String>) {
+pub fn current_app_packages(args: &CliArgs, device_serial: Option<&str>) -> Vec<String> {
+    if !args.current_app {
+        return Vec::default();
+    }
+
+    get_current_app_package(&build_adb_command(args, device_serial)).unwrap_or_default()
+}
+
+pub fn resolve_packages(
+    args: &mut CliArgs,
+    device_serial: Option<&str>,
+) -> (HashSet<String>, Vec<String>, Vec<String>) {
     let mut packages: HashSet<String> = args
         .packages
         .iter()
         .map(|package| package.to_string())
         .collect();
 
-    if args.current_app {
-        let base_adb_command = build_adb_command(args, None);
-        if let Some(running_packages) = get_current_app_package(&base_adb_command)
-            && !running_packages.is_empty()
-        {
-            packages.extend(running_packages);
-        }
-    }
+    packages.extend(current_app_packages(args, device_serial));
 
     let catchall_packages = packages
         .iter()
@@ -116,13 +120,16 @@ pub fn build_state(
     }
 }
 
-pub fn seed_filter_input(args: &CliArgs) -> String {
+pub fn seed_filter_input(args: &CliArgs, packages: &HashSet<String>) -> String {
     let mut parts = Vec::default();
 
-    for package in &args.packages {
-        if !package.contains(':') {
-            parts.push(format!("package:{package}"));
-        }
+    let mut packages: Vec<&String> = packages
+        .iter()
+        .filter(|package| !package.contains(':'))
+        .collect();
+    packages.sort();
+    for package in packages {
+        parts.push(format!("package:{package}"));
     }
 
     if let Some(tags) = &args.tag {

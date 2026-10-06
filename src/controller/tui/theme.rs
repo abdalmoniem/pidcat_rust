@@ -109,9 +109,14 @@ pub fn hint_key_style() -> Style {
     Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)
 }
 
-pub fn main_shortcut_hints(select_mode: bool) -> &'static [(&'static str, &'static str)] {
-    if select_mode {
-        &[
+const EXPORT_HINT: (&str, &str) = ("^s", " export");
+
+pub fn main_shortcut_hints(
+    select_mode: bool,
+    has_entries: bool,
+) -> Vec<(&'static str, &'static str)> {
+    let mut hints = if select_mode {
+        vec![
             ("↑↓", " select"),
             ("y", " copy"),
             ("v", " normal"),
@@ -121,7 +126,7 @@ pub fn main_shortcut_hints(select_mode: bool) -> &'static [(&'static str, &'stat
             ("q", " quit"),
         ]
     } else {
-        &[
+        vec![
             ("↑↓", " scroll"),
             ("v", " select"),
             ("/", " filter"),
@@ -132,5 +137,12 @@ pub fn main_shortcut_hints(select_mode: bool) -> &'static [(&'static str, &'stat
             ("p", " pause"),
             ("q", " quit"),
         ]
+    };
+
+    if has_entries {
+        let before_pause = hints.len() - 2;
+        hints.insert(before_pause, EXPORT_HINT);
     }
+
+    hints
 }

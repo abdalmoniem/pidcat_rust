@@ -7,6 +7,7 @@ pub enum HelpAction {
     RestartLive,
     OpenDevicePicker,
     OpenFileDialog,
+    ExportEntries,
     FocusFilter,
 }
 
@@ -128,6 +129,12 @@ pub const HELP_CATALOG: &[HelpEntry] = &[
         action: Some(HelpAction::OpenFileDialog),
     },
     HelpEntry {
+        section: "log capture",
+        keys: "ctrl+s",
+        description: "export all processed entries to a file",
+        action: Some(HelpAction::ExportEntries),
+    },
+    HelpEntry {
         section: "filter bar",
         keys: "/",
         description: "focus filter input",
@@ -195,26 +202,26 @@ pub const HELP_CATALOG: &[HelpEntry] = &[
     },
     HelpEntry {
         section: "file explorer",
-        keys: "enter / l",
-        description: "open file or enter directory",
+        keys: "type a path",
+        description: "list matching entries of the typed directory",
         action: None,
     },
     HelpEntry {
         section: "file explorer",
-        keys: "j / k / up / down",
+        keys: "up / down / pgup / pgdn",
         description: "move selection",
         action: None,
     },
     HelpEntry {
         section: "file explorer",
-        keys: "h / backspace",
-        description: "go to parent directory",
+        keys: "tab",
+        description: "complete path with selected entry",
         action: None,
     },
     HelpEntry {
         section: "file explorer",
-        keys: "/",
-        description: "search files in current directory",
+        keys: "enter",
+        description: "open file / save export (enter twice to overwrite)",
         action: None,
     },
     HelpEntry {

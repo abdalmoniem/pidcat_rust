@@ -44,7 +44,7 @@ impl FileOutputThread {
         let (tx, rx) = mpsc::channel();
         let path = path.clone();
         let join = thread::Builder::new()
-            .name("pidcat-file-output".into())
+            .name(format!("{}-file-output", env!("CARGO_PKG_NAME")))
             .spawn(move || {
                 let mut writer = open_output_writer(&path);
                 let mut state = initial_state;
