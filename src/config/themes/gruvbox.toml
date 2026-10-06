@@ -1,0 +1,46 @@
+# Gruvbox (dark) by Pavel Pertsev (morhetz)
+# https://github.com/morhetz/gruvbox
+
+[palette]
+bg0 = "#282828"
+bg2 = "#504945"
+fg1 = "#ebdbb2"
+gray = "#928374"
+red = "#fb4934"
+green = "#b8bb26"
+yellow = "#fabd2f"
+blue = "#83a598"
+purple = "#d3869b"
+aqua = "#8ec07c"
+orange = "#fe8019"
+neutral-red = "#cc241d"
+neutral-green = "#98971a"
+
+[ui]
+background = "bg0"
+text = "fg1"
+subtext = "gray"
+accent = "yellow"
+secondary = "blue"
+success = "green"
+warning = "orange"
+error = "red"
+match = "aqua"
+keys = "blue"
+selection = "bg2"
+
+[log]
+level-fg = "bg0"
+verbose = "aqua"
+debug = "blue"
+info = "green"
+warn = "yellow"
+error = "orange"
+fatal = "red"
+highlight = "yellow"
+process-start = "neutral-green"
+process-death = "neutral-red"
+gc-duration = "red"
+gc-free = "green"
+gc-unit = "yellow"
+tokens = ["#fb4934", "#83a598", "#8ec07c", "#b8bb26", "#fabd2f", "#d3869b", "#fe8019"]

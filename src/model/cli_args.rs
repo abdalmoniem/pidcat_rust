@@ -12,13 +12,16 @@ use clap_complete::Shell;
 use colored::Colorize;
 
 use crate::Config;
+use crate::DEFAULT_THEME_NAME;
 use crate::LogFormat;
 use crate::LogFormatKind;
 use crate::LogFormatParser;
 use crate::LogLevel;
 use crate::ValueOrPanic;
+use crate::bundled_theme_names;
 use crate::default_config_file;
 use crate::exit_with_error;
+use crate::themes_dir;
 
 const POSITIONAL_ARGUMENTS: &str = "Positional Arguments";
 const ABOUT_OPTIONS: &str = "Options";
@@ -320,6 +323,14 @@ pub struct CliArgs {
     #[arg(help = CliArgs::get_config_help())]
     pub config_path: Option<String>,
 
+    #[arg(long = "theme")]
+    #[arg(required = false)]
+    #[arg(value_name = "THEME")]
+    #[arg(help_heading = CONFIG_OPTIONS)]
+    #[arg(default_value = DEFAULT_THEME_NAME)]
+    #[arg(help = CliArgs::get_theme_help())]
+    pub theme: String,
+
     #[arg(required = false)]
     #[arg(value_name = None)]
     #[arg(long = "print-config")]
@@ -396,6 +407,18 @@ impl CliArgs {
 
         format!(
             "Load configuration from {metavar} instead of the default\nconfig file: {default_path}"
+        )
+    }
+
+    fn get_theme_help() -> String {
+        let metavar = "[THEME]".cyan().bold();
+        let themes_dir = themes_dir()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
+        let bundled = bundled_theme_names();
+
+        format!(
+            "Color {metavar} name from {themes_dir}\nor path to a .toml theme file\nBundled themes: {bundled}"
         )
     }
 

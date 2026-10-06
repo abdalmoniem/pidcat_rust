@@ -13,11 +13,14 @@ use is_terminal::IsTerminal;
 
 use pidcat::CliArgs;
 use pidcat::Config;
-use pidcat::ThemeFile;
 use pidcat::ValueOrPanic;
 use pidcat::colored;
+use pidcat::exit_with_error;
+use pidcat::install_bundled_themes;
+use pidcat::load_theme;
 use pidcat::run_plain;
 use pidcat::run_tui;
+use pidcat::set_active_theme;
 use pidcat::set_running;
 
 use scope_functions::Run;
@@ -75,11 +78,18 @@ fn main() {
         process::exit(0i32);
     }
 
+    install_bundled_themes();
+
+    let (theme_file, theme) =
+        load_theme(&args.theme).unwrap_or_else(|err| exit_with_error(&err, show_colors));
+
     if args.print_theme {
-        print!("{}", ThemeFile::default_theme().to_doc_toml());
+        print!("{}", theme_file.to_doc_toml());
 
         process::exit(0i32);
     }
+
+    set_active_theme(theme);
 
     let use_tui = !args.plain && std::io::stdout().is_terminal();
 
