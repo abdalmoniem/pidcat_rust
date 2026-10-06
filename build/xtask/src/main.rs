@@ -6,21 +6,23 @@ use clap::error::DefaultFormatter as ClapFormatter;
 use clap::error::Error as ClapError;
 use clap::error::ErrorKind as ClapErrorKind;
 
-use pidcat::BUNDLED_THEMES;
 use pidcat::config_schema;
+use pidcat::render_theme_source;
 use pidcat::theme_schema;
 
 use scope_functions::Run;
 
 use std::env::var_os;
 use std::fs::create_dir_all;
+use std::fs::read_dir;
 use std::fs::read_to_string;
 use std::fs::write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::time::Instant;
 
 #[cfg(target_os = "windows")]
-use std::{fs::Metadata, fs::read_dir, io::Error as IoError, io::ErrorKind as IoErrorKind};
+use std::{fs::Metadata, io::Error as IoError, io::ErrorKind as IoErrorKind};
 
 use which::which;
 
@@ -176,31 +178,78 @@ fn schema() -> Result<()> {
     })
 }
 
-/// Write or check the documented bundled theme sources embedded in the binary
-fn themes(check: bool) -> Result<()> {
-    match check {
-        true => status(">> Checking bundled themes..."),
-        false => status(">> Generating bundled themes..."),
+/// The `.toml` theme files in [dir], sorted by name
+fn theme_files(dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = read_dir(dir)
+        .with_context(|| format!("failed to read {dir:?}!"))?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()
+        .with_context(|| format!("failed to read {dir:?}!"))?
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|ext| ext == "toml"))
+        .collect::<Vec<_>>();
+    files.sort();
+
+    Ok(files)
+}
+
+/// Write or check the documented bundled theme sources embedded in the binary, rendering
+/// each from the bundled source itself or, when importing, from the imported theme file
+fn themes(check: bool, import_dir: Option<PathBuf>) -> Result<()> {
+    match (check, &import_dir) {
+        (true, _) => status(">> Checking bundled themes..."),
+        (false, Some(dir)) => status(&format!(">> Importing themes from {dir:?}...")),
+        (false, None) => status(">> Generating bundled themes..."),
     }
 
     let themes_dir = PathBuf::from("src/config/themes");
+    let sources = theme_files(import_dir.as_deref().unwrap_or(&themes_dir))?;
 
-    BUNDLED_THEMES.iter().try_for_each(|bundled| {
-        let path = themes_dir.join(bundled.file_name());
-        let rendered = bundled.render().map_err(Error::msg)?;
+    let outdated = sources
+        .iter()
+        .map(|source_path| {
+            let file_name = source_path
+                .file_name()
+                .with_context(|| format!("invalid theme file name {source_path:?}!"))?;
+            let path = themes_dir.join(file_name);
+            let source = read_to_string(source_path)
+                .with_context(|| format!("failed to read {source_path:?}!"))?;
+            let rendered = render_theme_source(&source)
+                .map_err(Error::msg)
+                .with_context(|| format!("invalid theme file {source_path:?}!"))?;
 
-        match check {
-            true => read_to_string(&path)
-                .with_context(|| format!("failed to read {path:?}!"))?
-                .eq(&rendered)
-                .then(|| println!("up to date {path:?}"))
-                .with_context(|| format!("{path:?} is outdated, run 'just themes'!")),
+            Ok((path, rendered))
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .filter(|(path, rendered)| read_to_string(path).ok().as_ref() != Some(rendered))
+        .collect::<Vec<_>>();
 
-            false => write(&path, rendered)
+    match check {
+        true => match outdated.is_empty() {
+            true => {
+                println!(
+                    "{count} bundled themes are up to date",
+                    count = sources.len()
+                );
+                Ok(())
+            }
+            false => Err(Error::msg(
+                outdated
+                    .iter()
+                    .map(|(path, _)| format!("  {path:?}"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ))
+            .context("outdated bundled themes, run 'just themes'!"),
+        },
+
+        false => outdated.iter().try_for_each(|(path, rendered)| {
+            write(path, rendered)
                 .with_context(|| format!("failed to write {path:?}!"))
-                .map(|_| println!("wrote {path:?}")),
-        }
-    })
+                .map(|_| println!("wrote {path:?}"))
+        }),
+    }
 }
 
 /// Install PidCat using the Inno Setup Installer
@@ -272,7 +321,7 @@ fn main() -> Result<()> {
 
         Command::Schema => schema(),
 
-        Command::Themes { check } => themes(check),
+        Command::Themes { check, import_dir } => themes(check, import_dir),
 
         #[cfg(target_os = "windows")]
         Command::Install { silent } => install(&shell, silent),
