@@ -90,6 +90,9 @@ pub enum Command {
         args: Vec<String>,
     },
 
+    /// Generate the JSON schemas for the config and theme files
+    Schema,
+
     #[cfg(target_os = "windows")]
     /// Install the application by running the generated installer
     Install {

@@ -1,0 +1,163 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "description": "Every key mirrors the command-line flag of the same name. A flag passed on the\ncommand line wins over the value in this file, which wins over the built-in\ndefault.\n\nBoolean keys can only switch options on: when a key is true here, there is no\ncommand-line flag to switch it back off for a single run.\n\nCommented-out keys have no value; uncomment and edit them to set one.\nUnknown keys are rejected.",
+  "properties": {
+    "adb": {
+      "description": "Path to the adb executable used to read logs and query devices.\nLeave unset to run \"adb\" from the PATH.\ntype: string (file path)\ndefault: unset (adb from the PATH)\ncommand line: -A, --adb <ADB_PATH>\nexample: adb = \"/opt/android-sdk/platform-tools/adb\"",
+      "type": "string"
+    },
+    "all": {
+      "description": "Show log messages from all packages instead of only the selected ones.\ntype: boolean\ndefault: false\ncommand line: -a, --all\nnote: when true here, it cannot be switched off from the command line\nexample: all = true",
+      "type": "boolean"
+    },
+    "always-show-tags": {
+      "description": "Print the tag on every line instead of only when it differs from the previous\nline.\ntype: boolean\ndefault: false\ncommand line: -S, --always-show-tags\nnote: when true here, it cannot be switched off from the command line\nexample: always-show-tags = true",
+      "type": "boolean"
+    },
+    "current": {
+      "description": "Add the package of the app currently in the foreground to the package filter.\ntype: boolean\ndefault: false\ncommand line: -c, --current\nnote: when true here, it cannot be switched off from the command line\nexample: current = true",
+      "type": "boolean"
+    },
+    "device": {
+      "description": "Read logs from the first connected physical (non-emulator) device.\ntype: boolean\ndefault: false\ncommand line: -d, --device\nnote: when true here, it cannot be switched off from the command line\nexample: device = true",
+      "type": "boolean"
+    },
+    "emulator": {
+      "description": "Read logs from the first running emulator.\ntype: boolean\ndefault: false\ncommand line: -e, --emulator\nnote: when true here, it cannot be switched off from the command line\nexample: emulator = true",
+      "type": "boolean"
+    },
+    "gc-color": {
+      "description": "Highlight the freed memory and pause time in garbage collector messages.\ntype: boolean\ndefault: false\ncommand line: -g, --gc-color\nnote: when true here, it cannot be switched off from the command line\nexample: gc-color = true",
+      "type": "boolean"
+    },
+    "ignore-system-tags": {
+      "description": "Hide messages from a built-in list of noisy Android system tags such as HWUI,\nlibEGL and ViewRootImpl. Use `ignore-tag` to hide additional tags.\ntype: boolean\ndefault: false\ncommand line: -I, --ignore-system-tags\nnote: when true here, it cannot be switched off from the command line\nexample: ignore-system-tags = true",
+      "type": "boolean"
+    },
+    "ignore-tag": {
+      "description": "Hide messages whose tag matches one of these entries.\nEntries are matched exactly like `tag` entries.\ntype: array of strings\ndefault: unset (no tag is hidden)\ncommand line: -i, --ignore-tag <IGNORED_TAG> (repeatable; replaces this list)\nexample: ignore-tag = [\"chatty\", \"^Binder.*\"]",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "keep": {
+      "description": "Keep the existing logcat buffer instead of clearing it at startup, so older\nmessages are shown too.\ntype: boolean\ndefault: false\ncommand line: -k, --keep\nnote: when true here, it cannot be switched off from the command line\nexample: keep = true",
+      "type": "boolean"
+    },
+    "log-format": {
+      "description": "Log format requested from adb (\"adb logcat -v\") and expected in piped input.\nvalues (case-insensitive): \"brief\" or \"B\", \"long\" or \"L\", \"process\" or \"P\",\n\"raw\" or \"R\", \"tag\" or \"T\", \"thread\" or \"Th\", \"threadtime\" or \"Tht\",\n\"time\" or \"Ti\"; only \"brief\" and \"threadtime\" are currently implemented\ndefault: \"brief\"\ncommand line: -f, --log-format <FORMAT>\nexample: log-format = \"threadtime\"",
+      "enum": [
+        "B",
+        "brief",
+        "L",
+        "long",
+        "P",
+        "process",
+        "R",
+        "raw",
+        "T",
+        "tag",
+        "Th",
+        "thread",
+        "Tht",
+        "threadtime",
+        "Ti",
+        "time"
+      ],
+      "type": "string"
+    },
+    "log-level": {
+      "description": "Hide messages below this minimum log level.\nvalues (case-insensitive): \"verbose\" or \"V\", \"debug\" or \"D\", \"info\" or \"I\",\n\"warn\" or \"W\", \"error\" or \"E\", \"fatal\" or \"F\"\ndefault: \"verbose\"\ncommand line: -l, --log-level <LEVEL>\nexample: log-level = \"info\"",
+      "enum": [
+        "V",
+        "verbose",
+        "D",
+        "debug",
+        "I",
+        "info",
+        "W",
+        "warn",
+        "E",
+        "error",
+        "F",
+        "fatal"
+      ],
+      "type": "string"
+    },
+    "no-color": {
+      "description": "Disable colors in the log output.\ntype: boolean\ndefault: false\ncommand line: -N, --no-color\nnote: when true here, it cannot be switched off from the command line\nexample: no-color = true",
+      "type": "boolean"
+    },
+    "output": {
+      "description": "Also save the log output to this file. The file is created, or truncated if it\nexists, at startup.\ntype: string (file path)\ndefault: unset (no file output)\ncommand line: -o, --output <FILE_PATH>\nexample: output = \"logcat.txt\"",
+      "type": "string"
+    },
+    "package-width": {
+      "description": "Width of the package name column in characters. Longer names are truncated\nwith an ellipsis.\ntype: integer from 1 to 255\ndefault: 20\ncommand line: -m, --package-width <WIDTH>\nexample: package-width = 30",
+      "format": "uint8",
+      "maximum": 255,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "packages": {
+      "description": "Application package names whose log messages are shown.\nA plain name such as \"com.example.app\" matches the package and all of its\nprocesses. A name containing ':' such as \"com.example.app:remote\" matches only\nthat named process, and a trailing ':' (\"com.example.app:\") matches only the\nmain process. When the list is empty and `current` is false, messages from all\npackages are shown.\ntype: array of strings\ndefault: []\ncommand line: PACKAGE positional arguments (they replace this list)\nexample: packages = [\"com.example.app\", \"com.example.app:remote\"]",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "plain": {
+      "description": "Use plain text output instead of the interactive TUI. Plain output is also\nused automatically when standard output is not a terminal.\ntype: boolean\ndefault: false\ncommand line: --plain\nnote: when true here, it cannot be switched off from the command line\nexample: plain = true",
+      "type": "boolean"
+    },
+    "puid-width": {
+      "description": "Width of the PID and UID columns in characters. Longer values are truncated\nwith an ellipsis.\ntype: integer from 1 to 255\ndefault: 5\ncommand line: -x, --puid-width <WIDTH>\nexample: puid-width = 7",
+      "format": "uint8",
+      "maximum": 255,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "regex": {
+      "description": "Only show messages matching this regular expression.\nIt is passed to \"adb logcat -e\", and the TUI also seeds its filter bar with it.\ntype: string (regular expression)\ndefault: unset (no message filter)\ncommand line: -r, --regex <REGEX>\nexample: regex = \"Exception|Error\"",
+      "type": "string"
+    },
+    "serial": {
+      "description": "Serial number of the device to read logs from, as listed by \"adb devices\".\ntype: string\ndefault: unset (the only connected device is used; the TUI asks when several\nare connected)\ncommand line: -s, --serial <DEVICE_SERIAL>\nexample: serial = \"emulator-5554\"",
+      "type": "string"
+    },
+    "show-package": {
+      "description": "Show the package name column.\ntype: boolean\ndefault: false\ncommand line: -p, --show-package\nnote: when true here, it cannot be switched off from the command line\nexample: show-package = true",
+      "type": "boolean"
+    },
+    "show-pid": {
+      "description": "Show the process ID column.\ntype: boolean\ndefault: false\ncommand line: -P, --show-pid\nnote: when true here, it cannot be switched off from the command line\nexample: show-pid = true",
+      "type": "boolean"
+    },
+    "show-uid": {
+      "description": "Show the user ID column. The UID is only known when adb includes it in the log\nlines.\ntype: boolean\ndefault: false\ncommand line: -U, --show-uid\nnote: when true here, it cannot be switched off from the command line\nexample: show-uid = true",
+      "type": "boolean"
+    },
+    "tag": {
+      "description": "Only show messages whose tag matches one of these entries.\nMatching is case-insensitive. An entry containing regex characters is a regular\nexpression anchored at the start of the tag; any other entry matches anywhere\nin the tag. An entry may also be a comma-separated list of tags.\ntype: array of strings\ndefault: unset (messages with any tag are shown)\ncommand line: -t, --tag <TAG> (repeatable; replaces this list)\nexample: tag = [\"MainActivity\", \"OkHttp\"]",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "tag-width": {
+      "description": "Width of the tag column in characters. Longer tags are truncated with an\nellipsis, and 0 hides the column.\ntype: integer from 0 to 255\ndefault: 20\ncommand line: -n, --tag-width <WIDTH>\nexample: tag-width = 24",
+      "format": "uint8",
+      "maximum": 255,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "theme": {
+      "description": "Color theme of the TUI and of the log output (also in plain mode).\nEither the name of a theme file in the `themes` directory next to the default\nconfig file, without the .toml extension, or a path to a theme file. A value\ncontaining a path separator or ending in .toml is a path; relative paths are\nresolved from the current directory. The bundled themes are written to the\nthemes directory when missing and can be edited there.\ntype: string (theme name or file path)\ndefault: \"gruber-darker\"\ncommand line: --theme <THEME>\nexample: theme = \"monokai\"",
+      "type": "string"
+    }
+  },
+  "title": "pidcat configuration",
+  "type": "object"
+}
