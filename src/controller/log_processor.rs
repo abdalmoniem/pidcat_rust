@@ -1350,14 +1350,7 @@ fn write_package_name(
     let package_width = args.package_width as usize;
 
     if args.show_package && !owner.is_empty() {
-        let package_name = if state.uids_map.contains_key(owner) {
-            &state.uids_map
-        } else {
-            &state.pids_map
-        }
-        .get(owner)
-        .cloned()
-        .unwrap_or(format!("UNKNOWN({owner})"));
+        let package_name = crate::owner_display_package(owner, state);
         let mut display_pkg = package_name.clone();
         let pkg_color = get_token_color(&package_name, state);
 
