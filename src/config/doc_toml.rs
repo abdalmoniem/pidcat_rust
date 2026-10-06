@@ -108,8 +108,10 @@ pub fn render(header: &[String], sections: &[DocSection]) -> String {
             out.push_str(&format!("[{table}]\n"));
         }
 
-        for item in &section.items {
-            out.push('\n');
+        for (index, item) in section.items.iter().enumerate() {
+            if index == 0usize || !item.doc.is_empty() {
+                out.push('\n');
+            }
             for line in item.doc {
                 push_comment(&mut out, line);
             }

@@ -85,7 +85,7 @@ pub fn build_log_table_top_border(total_width: usize, columns: &[(String, usize)
 fn hint_bottom_border_line(total_width: usize, hints: &[(&str, &str)]) -> Line<'static> {
     let box_style = border_style(false);
     let key_style = theme::hint_key_style();
-    let desc_style = Style::default().fg(theme::TEXT).bg(theme::BG);
+    let desc_style = Style::default().fg(theme::text()).bg(theme::background());
 
     if total_width < 4 || hints.is_empty() {
         return Line::from(Span::styled(
@@ -147,10 +147,10 @@ enum BottomBorder<'a> {
 fn border_style(focused: bool) -> Style {
     if focused {
         Style::default()
-            .fg(theme::YELLOW)
+            .fg(theme::accent())
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(theme::YELLOW)
+        Style::default().fg(theme::accent())
     }
 }
 
