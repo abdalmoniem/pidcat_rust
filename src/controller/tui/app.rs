@@ -3,6 +3,8 @@
 use std::collections::VecDeque;
 use std::io::stdin;
 use std::io::stdout;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
 
@@ -25,11 +27,8 @@ use crate::LogEntry;
 use crate::State;
 use crate::TuiFilterSet;
 use crate::ValueOrPanic;
-use crate::Writer;
 use crate::build_adb_command;
 use crate::get_adb_devices;
-use crate::open_output_writer;
-use crate::render_entry;
 use crate::resolve_initial_device;
 use crate::set_running;
 
@@ -94,6 +93,7 @@ pub struct TuiApp {
     pub filter_cursor: usize,
     pub filter_focused: bool,
     pub tui_filters: TuiFilterSet,
+    filters_shared: Arc<RwLock<TuiFilterSet>>,
     pub paused: bool,
     pub scroll_offset: usize,
     pub max_scroll: usize,
@@ -115,7 +115,6 @@ pub struct TuiApp {
     pub catchall_packages: Vec<String>,
     pub tokio_handle: Option<tokio::runtime::Handle>,
     pub ingest: LogIngest,
-    pub file_writer: Option<Writer>,
     pub need_device_picker: bool,
     pub display_cache: DisplayCache,
     pub filter_generation: u64,
@@ -144,6 +143,7 @@ impl TuiApp {
             filter_cursor: 0,
             filter_focused: false,
             tui_filters: TuiFilterSet::default(),
+            filters_shared: Arc::new(RwLock::new(TuiFilterSet::default())),
             paused: false,
             scroll_offset: 0,
             max_scroll: 0,
@@ -165,7 +165,6 @@ impl TuiApp {
             catchall_packages: Vec::default(),
             tokio_handle: None,
             ingest: LogIngest::idle(),
-            file_writer: None,
             need_device_picker: false,
             display_cache: DisplayCache::new(),
             filter_generation: 0,
@@ -261,27 +260,6 @@ impl TuiApp {
         self.selected_filtered_index = next;
     }
 
-    fn push_entry(&mut self, entry: LogEntry) {
-        self.entries.push_back(entry);
-        let index = self.entries.len() - 1;
-
-        if let Some(writer) = &mut self.file_writer
-            && let Some(last) = self.entries.back()
-            && self.tui_filters.matches(last, &self.state)
-        {
-            render_entry(
-                last,
-                &mut self.state,
-                &self.args,
-                std::slice::from_mut(writer),
-            );
-        }
-
-        if self.tui_filters.matches(&self.entries[index], &self.state) {
-            self.filtered_indices.push(index);
-        }
-    }
-
     fn set_paused(&mut self, paused: bool) {
         self.paused = paused;
         self.ingest.paused_flag().store(paused, Relaxed);
@@ -303,6 +281,7 @@ impl TuiApp {
             self.args.clone(),
             self.state.clone(),
             self.selected_device.clone(),
+            Arc::clone(&self.filters_shared),
         );
         self.ingest.paused_flag().store(self.paused, Relaxed);
     }
@@ -313,10 +292,19 @@ impl TuiApp {
         }
 
         while let Some(batch) = self.ingest.try_recv_batch() {
-            for item in batch {
-                self.state = item.state;
-                self.push_entry(item.entry);
+            self.state = batch.state;
+            for item in batch.items {
+                self.entries.push_back(item.entry);
+                if item.matches_filter {
+                    self.filtered_indices.push(self.entries.len() - 1);
+                }
             }
+        }
+    }
+
+    fn sync_shared_filters(&self) {
+        if let Ok(mut shared) = self.filters_shared.write() {
+            *shared = self.tui_filters.clone();
         }
     }
 
@@ -401,6 +389,7 @@ impl TuiApp {
     fn apply_filter(&mut self) {
         self.tui_filters = TuiFilterSet::parse(&self.filter_input);
         self.filter_focused = false;
+        self.sync_shared_filters();
         self.recompute_filtered();
     }
 
@@ -877,9 +866,7 @@ pub fn run_tui(args: &mut CliArgs) {
     app.catchall_packages = catchall_packages.clone();
     app.filter_input = seed_filter_input(&app.args);
     app.tui_filters = TuiFilterSet::parse(&app.filter_input);
-    if let Some(path) = app.args.output_path.clone() {
-        app.file_writer = Some(open_output_writer(&path));
-    }
+    app.sync_shared_filters();
 
     if stdin_is_tty {
         app.devices = bootstrap_adb_tui(&app.args);
@@ -909,12 +896,6 @@ pub fn run_tui(args: &mut CliArgs) {
 
     app.source_mode = initial_source.clone();
 
-    match &initial_source {
-        SourceMode::Pipe => app.start_ingest(SourceMode::Pipe),
-        SourceMode::Live if app.selected_device.is_some() => app.start_ingest(SourceMode::Live),
-        SourceMode::File(_) | SourceMode::Live => {}
-    }
-
     stdout()
         .execute(EnableMouseCapture)
         .unwrap_or_panic("Failed to enable mouse capture");
@@ -925,10 +906,14 @@ pub fn run_tui(args: &mut CliArgs) {
 
     let mut terminal = ratatui::init();
 
-    while crate::is_running() {
-        app.drain_ingest();
+    match &initial_source {
+        SourceMode::Pipe => app.start_ingest(SourceMode::Pipe),
+        SourceMode::Live if app.selected_device.is_some() => app.start_ingest(SourceMode::Live),
+        SourceMode::File(_) | SourceMode::Live => {}
+    }
 
-        if crossterm::event::poll(Duration::from_millis(50)).unwrap_or(false) {
+    while crate::is_running() {
+        if crossterm::event::poll(Duration::from_millis(16)).unwrap_or(false) {
             match crossterm::event::read().unwrap_or_panic("Failed to read event") {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
                     if key.code == KeyCode::Char('c')
@@ -947,6 +932,8 @@ pub fn run_tui(args: &mut CliArgs) {
                 _ => {}
             }
         }
+
+        app.drain_ingest();
 
         terminal
             .draw(|frame| ui::render(frame, &mut app))
