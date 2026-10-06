@@ -1,5 +1,12 @@
+mod config;
 mod controller;
 mod model;
+
+pub use config::paths::CONFIG_FILE_NAME;
+pub use config::paths::THEMES_DIR_NAME;
+pub use config::paths::config_dir;
+pub use config::paths::default_config_file;
+pub use config::paths::themes_dir;
 
 pub use controller::adb::build_adb_command;
 pub use controller::adb::build_logcat_command;
