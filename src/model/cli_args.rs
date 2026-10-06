@@ -11,6 +11,7 @@ use clap_complete::Shell;
 
 use colored::Colorize;
 
+use crate::BUNDLED_THEMES;
 use crate::Config;
 use crate::DEFAULT_THEME_NAME;
 use crate::LogFormat;
@@ -18,7 +19,6 @@ use crate::LogFormatKind;
 use crate::LogFormatParser;
 use crate::LogLevel;
 use crate::ValueOrPanic;
-use crate::bundled_theme_names;
 use crate::default_config_file;
 use crate::exit_with_error;
 use crate::themes_dir;
@@ -415,10 +415,10 @@ impl CliArgs {
         let themes_dir = themes_dir()
             .map(|path| path.display().to_string())
             .unwrap_or_default();
-        let bundled = bundled_theme_names();
+        let bundled = BUNDLED_THEMES.len();
 
         format!(
-            "Color {metavar} name from {themes_dir}\nor path to a .toml theme file\nBundled themes: {bundled}"
+            "Color {metavar} name from {themes_dir}\nor path to a .toml theme file\n{bundled} bundled themes are installed there"
         )
     }
 

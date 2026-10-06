@@ -13,7 +13,6 @@ use scope_functions::Run;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fmt::Result;
-#[cfg(target_os = "windows")]
 use std::path::PathBuf;
 
 use std::process;
@@ -98,6 +97,11 @@ pub enum Command {
         /// Fail if a bundled theme source is not up to date instead of writing it
         #[arg(short = 'c', long = "check", default_value_t = false)]
         check: bool,
+
+        /// Add or replace bundled themes with the theme files found in IMPORT_DIR
+        #[arg(short = 'i', long = "import", value_name = "IMPORT_DIR")]
+        #[arg(conflicts_with = "check")]
+        import_dir: Option<PathBuf>,
     },
 
     #[cfg(target_os = "windows")]

@@ -27,39 +27,14 @@ use super::schema::HEX_COLOR_PATTERN;
 use super::schema::hex_color_map_schema;
 
 pub const DEFAULT_THEME_NAME: &str = "gruber-darker";
-pub const DEFAULT_THEME_SOURCE: &str = include_str!("themes/gruber-darker.toml");
-
-/// `source` must equal `render()`, so the embedded file is exactly the credits
-/// followed by the `--print-theme` output.
+/// `source` must equal its `render_theme_source()`: the credit lines, a lone `#` line, then exactly
+/// the `--print-theme` output.
 pub struct BundledTheme {
     pub name: &'static str,
-    pub credits: &'static [&'static str],
     pub source: &'static str,
 }
 
-pub const BUNDLED_THEMES: &[BundledTheme] = &[
-    BundledTheme {
-        name: DEFAULT_THEME_NAME,
-        credits: &[
-            "Gruber Darker by Alexey Kutepov (rexim)",
-            "https://github.com/rexim/gruber-darker-theme",
-        ],
-        source: DEFAULT_THEME_SOURCE,
-    },
-    BundledTheme {
-        name: "monokai",
-        credits: &["Monokai by Wimer Hazenberg", "https://monokai.pro"],
-        source: include_str!("themes/monokai.toml"),
-    },
-    BundledTheme {
-        name: "gruvbox",
-        credits: &[
-            "Gruvbox (dark) by Pavel Pertsev (morhetz)",
-            "https://github.com/morhetz/gruvbox",
-        ],
-        source: include_str!("themes/gruvbox.toml"),
-    },
-];
+include!(concat!(env!("OUT_DIR"), "/bundled_themes.rs"));
 
 static ACTIVE_THEME: OnceLock<Theme> = OnceLock::new();
 
@@ -67,19 +42,57 @@ impl BundledTheme {
     pub fn file_name(&self) -> String {
         format!("{name}.toml", name = self.name)
     }
+}
 
-    /// The documented file content: the credits, then the `--print-theme` output.
-    pub fn render(&self) -> Result<String, String> {
-        let theme_file = parse_theme(self.source)
-            .map_err(|err| format!("invalid bundled theme '{}':\n{err}", self.name))?;
-        let credits = self
-            .credits
-            .iter()
-            .map(|line| format!("# {line}\n"))
-            .collect::<String>();
+/// The credit lines of a theme source: the leading comment lines before the first
+/// lone `#` line, or none when the leading comments have no such line.
+fn theme_credits(source: &str) -> Vec<&str> {
+    let comments = source
+        .lines()
+        .take_while(|line| line.starts_with('#'))
+        .collect::<Vec<_>>();
 
-        Ok(format!("{credits}#\n{}", theme_file.to_doc_toml()))
+    match comments.iter().position(|line| *line == "#") {
+        Some(end) => comments[..end].to_vec(),
+        None => Vec::default(),
     }
+}
+
+/// Renders a theme source as a documented theme file that keeps its credit lines.
+pub fn render_theme_source(source: &str) -> Result<String, String> {
+    let theme_file = parse_theme(source)?;
+    theme_file.resolve()?;
+
+    let credits = theme_credits(source)
+        .into_iter()
+        .map(|line| format!("{line}\n"))
+        .collect::<String>();
+
+    Ok(format!("{credits}#\n{}", theme_file.to_doc_toml()))
+}
+
+fn bundled_theme(name: &str) -> Option<&'static BundledTheme> {
+    BUNDLED_THEMES.iter().find(|bundled| bundled.name == name)
+}
+
+/// Joins `names` with commas into indented lines no wider than 80 columns.
+fn wrap_theme_names(names: &[String]) -> String {
+    const WIDTH: usize = 80;
+    const INDENT: &str = "  ";
+
+    names
+        .iter()
+        .fold(Vec::<String>::new(), |mut lines, name| {
+            match lines.last_mut() {
+                Some(line) if line.len() + name.len() + 2 <= WIDTH => {
+                    line.push_str(", ");
+                    line.push_str(name);
+                }
+                _ => lines.push(format!("{INDENT}{name}")),
+            }
+            lines
+        })
+        .join(",\n")
 }
 
 pub const THEME_FILE_DOC: &[&str] = &[
@@ -479,7 +492,9 @@ pub fn parse_theme(source: &str) -> Result<ThemeFile, String> {
 /// Falls back to the embedded default theme when no theme has been activated.
 pub fn active() -> &'static Theme {
     ACTIVE_THEME.get_or_init(|| {
-        parse_theme(DEFAULT_THEME_SOURCE)
+        bundled_theme(DEFAULT_THEME_NAME)
+            .ok_or_else(|| format!("the default theme '{DEFAULT_THEME_NAME}' is not bundled"))
+            .and_then(|bundled| parse_theme(bundled.source))
             .and_then(|theme_file| theme_file.resolve())
             .unwrap_or_panic("the embedded default theme is invalid")
     })
@@ -504,16 +519,13 @@ pub fn install_bundled_themes() {
 
     for bundled in BUNDLED_THEMES {
         let path = dir.join(bundled.file_name());
-        let Ok(theme_file) = parse_theme(bundled.source) else {
-            continue;
+        let unedited = |existing: &str| {
+            parse_theme(existing).is_ok_and(|existing| parse_theme(bundled.source) == Ok(existing))
         };
 
-        let outdated = match path.exists() {
-            false => true,
-            true => fs::read_to_string(&path).is_ok_and(|existing| {
-                existing != bundled.source
-                    && parse_theme(&existing).is_ok_and(|existing| existing == theme_file)
-            }),
+        let outdated = match fs::read_to_string(&path) {
+            Ok(existing) => existing != bundled.source && unedited(&existing),
+            Err(_) => !path.exists(),
         };
 
         if outdated {
@@ -544,10 +556,6 @@ pub fn available_themes() -> Vec<String> {
         .collect()
 }
 
-pub fn bundled_theme_names() -> String {
-    BUNDLED_THEMES.iter().map(|bundled| bundled.name).join(", ")
-}
-
 fn is_theme_path(spec: &str) -> bool {
     spec.contains('/') || spec.contains(MAIN_SEPARATOR) || spec.ends_with(".toml")
 }
@@ -568,16 +576,22 @@ fn read_theme_file(path: &Path) -> Result<(ThemeFile, Theme), String> {
 /// `spec` is a path when it contains a path separator or ends in `.toml`, otherwise a theme
 /// name looked up in the themes directory with a fallback to the bundled copy.
 pub fn load_theme(spec: &str) -> Result<(ThemeFile, Theme), String> {
-    let available = || available_themes().join(", ");
+    let available = || {
+        let dir = themes_dir()
+            .map(|dir| format!(" (theme files are in {})", dir.display()))
+            .unwrap_or_default();
+
+        format!(
+            "available themes{dir}:\n{}",
+            wrap_theme_names(&available_themes())
+        )
+    };
 
     if is_theme_path(spec) {
         let path = Path::new(spec);
         return match path.is_file() {
             true => read_theme_file(path),
-            false => Err(format!(
-                "theme file '{spec}' not found; available themes: {}",
-                available()
-            )),
+            false => Err(format!("theme file '{spec}' not found; {}", available())),
         };
     }
 
@@ -587,7 +601,7 @@ pub fn load_theme(spec: &str) -> Result<(ThemeFile, Theme), String> {
         return read_theme_file(&path);
     }
 
-    match BUNDLED_THEMES.iter().find(|bundled| bundled.name == spec) {
+    match bundled_theme(spec) {
         Some(bundled) => {
             let theme_file = parse_theme(bundled.source)
                 .map_err(|err| format!("invalid bundled theme '{spec}':\n{err}"))?;
@@ -597,10 +611,7 @@ pub fn load_theme(spec: &str) -> Result<(ThemeFile, Theme), String> {
 
             Ok((theme_file, theme))
         }
-        None => Err(format!(
-            "unknown theme '{spec}'; available themes: {}",
-            available()
-        )),
+        None => Err(format!("unknown theme '{spec}'; {}", available())),
     }
 }
 
@@ -811,13 +822,9 @@ impl ThemeFile {
                 "Export a theme for editing with: {pkg} --theme <NAME> --print-theme > my-theme.toml"
             ),
             String::default(),
-            format!(
-                "The bundled themes ({}) are written to the",
-                bundled_theme_names()
-            ),
-            "themes directory when missing and their comments are refreshed while their".to_string(),
-            "colors are unchanged. Edited themes are never overwritten; delete a file to".to_string(),
-            "restore its bundled version.".to_string(),
+            "The bundled themes are written to the themes directory when missing, and".to_string(),
+            "their comments are refreshed while their colors are unchanged. Edited themes".to_string(),
+            "are never overwritten; delete a file to restore its bundled version.".to_string(),
             String::default(),
         ]
         .into_iter()

@@ -11,10 +11,9 @@
 # Print the active theme with: pidcat --print-theme
 # Export a theme for editing with: pidcat --theme <NAME> --print-theme > my-theme.toml
 #
-# The bundled themes (gruber-darker, monokai, gruvbox) are written to the
-# themes directory when missing and their comments are refreshed while their
-# colors are unchanged. Edited themes are never overwritten; delete a file to
-# restore its bundled version.
+# The bundled themes are written to the themes directory when missing, and
+# their comments are refreshed while their colors are unchanged. Edited themes
+# are never overwritten; delete a file to restore its bundled version.
 #
 # Colors are hex strings in the form "#rrggbb". Every key in [ui] and [log]
 # except `tokens` takes either a hex color or the name of a [palette] entry.
