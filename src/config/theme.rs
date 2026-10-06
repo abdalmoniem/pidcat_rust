@@ -3,7 +3,12 @@
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fmt::Result as FmtResult;
+use std::fs;
+use std::path::MAIN_SEPARATOR;
+use std::path::Path;
 use std::sync::OnceLock;
+
+use itertools::Itertools;
 
 use serde::Deserialize;
 
@@ -15,8 +20,30 @@ use crate::ValueOrPanic;
 use super::doc_toml::DocItem;
 use super::doc_toml::DocSection;
 use super::doc_toml::render;
+use super::paths::themes_dir;
 
+pub const DEFAULT_THEME_NAME: &str = "gruber-darker";
 pub const DEFAULT_THEME_SOURCE: &str = include_str!("themes/gruber-darker.toml");
+
+pub struct BundledTheme {
+    pub name: &'static str,
+    pub source: &'static str,
+}
+
+pub const BUNDLED_THEMES: &[BundledTheme] = &[
+    BundledTheme {
+        name: DEFAULT_THEME_NAME,
+        source: DEFAULT_THEME_SOURCE,
+    },
+    BundledTheme {
+        name: "monokai",
+        source: include_str!("themes/monokai.toml"),
+    },
+    BundledTheme {
+        name: "gruvbox",
+        source: include_str!("themes/gruvbox.toml"),
+    },
+];
 
 static ACTIVE_THEME: OnceLock<Theme> = OnceLock::new();
 
@@ -385,11 +412,126 @@ pub fn active() -> &'static Theme {
     })
 }
 
-impl ThemeFile {
-    pub fn default_theme() -> Self {
-        parse_theme(DEFAULT_THEME_SOURCE).unwrap_or_panic("the embedded default theme is invalid")
+/// Has no effect once a theme is active, so it must run before anything reads [`active`].
+pub fn set_active(theme: Theme) {
+    let _ = ACTIVE_THEME.set(theme);
+}
+
+/// Writes each bundled theme that is missing from the themes directory and never
+/// overwrites existing files; failures are ignored so a read-only home still works.
+pub fn install_bundled_themes() {
+    let Some(dir) = themes_dir() else {
+        return;
+    };
+
+    if fs::create_dir_all(&dir).is_err() {
+        return;
     }
 
+    for bundled in BUNDLED_THEMES {
+        let path = dir.join(format!("{name}.toml", name = bundled.name));
+        if path.exists() {
+            continue;
+        }
+
+        let Ok(theme_file) = parse_theme(bundled.source) else {
+            continue;
+        };
+
+        let credits = bundled
+            .source
+            .lines()
+            .take_while(|line| line.starts_with('#'))
+            .map(|line| format!("{line}\n"))
+            .collect::<String>();
+
+        let _ = fs::write(&path, format!("{credits}#\n{}", theme_file.to_doc_toml()));
+    }
+}
+
+pub fn available_themes() -> Vec<String> {
+    let installed = themes_dir()
+        .and_then(|dir| fs::read_dir(dir).ok())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "toml"))
+        .filter_map(|path| {
+            path.file_stem()
+                .map(|stem| stem.to_string_lossy().to_string())
+        });
+
+    BUNDLED_THEMES
+        .iter()
+        .map(|bundled| bundled.name.to_string())
+        .chain(installed)
+        .sorted()
+        .dedup()
+        .collect()
+}
+
+pub fn bundled_theme_names() -> String {
+    BUNDLED_THEMES.iter().map(|bundled| bundled.name).join(", ")
+}
+
+fn is_theme_path(spec: &str) -> bool {
+    spec.contains('/') || spec.contains(MAIN_SEPARATOR) || spec.ends_with(".toml")
+}
+
+fn read_theme_file(path: &Path) -> Result<(ThemeFile, Theme), String> {
+    let path_display = path.display();
+    let source = fs::read_to_string(path)
+        .map_err(|err| format!("failed to read theme file '{path_display}': {err}"))?;
+    let theme_file = parse_theme(&source)
+        .map_err(|err| format!("invalid theme file '{path_display}':\n{err}"))?;
+    let theme = theme_file
+        .resolve()
+        .map_err(|err| format!("invalid theme file '{path_display}': {err}"))?;
+
+    Ok((theme_file, theme))
+}
+
+/// `spec` is a path when it contains a path separator or ends in `.toml`, otherwise a theme
+/// name looked up in the themes directory with a fallback to the bundled copy.
+pub fn load_theme(spec: &str) -> Result<(ThemeFile, Theme), String> {
+    let available = || available_themes().join(", ");
+
+    if is_theme_path(spec) {
+        let path = Path::new(spec);
+        return match path.is_file() {
+            true => read_theme_file(path),
+            false => Err(format!(
+                "theme file '{spec}' not found; available themes: {}",
+                available()
+            )),
+        };
+    }
+
+    if let Some(path) = themes_dir().map(|dir| dir.join(format!("{spec}.toml")))
+        && path.is_file()
+    {
+        return read_theme_file(&path);
+    }
+
+    match BUNDLED_THEMES.iter().find(|bundled| bundled.name == spec) {
+        Some(bundled) => {
+            let theme_file = parse_theme(bundled.source)
+                .map_err(|err| format!("invalid bundled theme '{spec}':\n{err}"))?;
+            let theme = theme_file
+                .resolve()
+                .map_err(|err| format!("invalid bundled theme '{spec}': {err}"))?;
+
+            Ok((theme_file, theme))
+        }
+        None => Err(format!(
+            "unknown theme '{spec}'; available themes: {}",
+            available()
+        )),
+    }
+}
+
+impl ThemeFile {
     fn palette_color(&self, key: &str, value: &str) -> Result<Rgb, String> {
         if value.starts_with('#') {
             return hex_color(key, value);
@@ -580,11 +722,30 @@ impl ThemeFile {
 
     pub fn to_doc_toml(&self) -> String {
         let pkg = env!("CARGO_PKG_NAME");
+        let dir = themes_dir()
+            .map(|dir| dir.display().to_string())
+            .unwrap_or_default();
 
         let header = [
             format!("{pkg} color theme"),
             String::default(),
+            format!("Themes directory: {dir}"),
+            format!("Select a theme with: {pkg} --theme <NAME|PATH>"),
+            "or with `theme = \"<NAME|PATH>\"` in the config file. NAME is a file name in"
+                .to_string(),
+            "the themes directory without the .toml extension; PATH is a theme file path."
+                .to_string(),
             format!("Print the active theme with: {pkg} --print-theme"),
+            format!(
+                "Export a theme for editing with: {pkg} --theme <NAME> --print-theme > my-theme.toml"
+            ),
+            String::default(),
+            format!(
+                "The bundled themes ({}) are written to the",
+                bundled_theme_names()
+            ),
+            "themes directory when missing and are never overwritten, so they can be".to_string(),
+            "edited in place; delete a file to restore its bundled version.".to_string(),
             String::default(),
             "Colors are hex strings in the form \"#rrggbb\". Every key in [ui] and [log]"
                 .to_string(),
