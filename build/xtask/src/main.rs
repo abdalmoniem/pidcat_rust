@@ -6,6 +6,7 @@ use clap::error::DefaultFormatter as ClapFormatter;
 use clap::error::Error as ClapError;
 use clap::error::ErrorKind as ClapErrorKind;
 
+use pidcat::BUNDLED_THEMES;
 use pidcat::config_schema;
 use pidcat::theme_schema;
 
@@ -13,6 +14,7 @@ use scope_functions::Run;
 
 use std::env::var_os;
 use std::fs::create_dir_all;
+use std::fs::read_to_string;
 use std::fs::write;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -174,6 +176,33 @@ fn schema() -> Result<()> {
     })
 }
 
+/// Write or check the documented bundled theme sources embedded in the binary
+fn themes(check: bool) -> Result<()> {
+    match check {
+        true => status(">> Checking bundled themes..."),
+        false => status(">> Generating bundled themes..."),
+    }
+
+    let themes_dir = PathBuf::from("src/config/themes");
+
+    BUNDLED_THEMES.iter().try_for_each(|bundled| {
+        let path = themes_dir.join(bundled.file_name());
+        let rendered = bundled.render().map_err(Error::msg)?;
+
+        match check {
+            true => read_to_string(&path)
+                .with_context(|| format!("failed to read {path:?}!"))?
+                .eq(&rendered)
+                .then(|| println!("up to date {path:?}"))
+                .with_context(|| format!("{path:?} is outdated, run 'just themes'!")),
+
+            false => write(&path, rendered)
+                .with_context(|| format!("failed to write {path:?}!"))
+                .map(|_| println!("wrote {path:?}")),
+        }
+    })
+}
+
 /// Install PidCat using the Inno Setup Installer
 #[cfg(target_os = "windows")]
 fn install(shell: &Shell, silent: bool) -> Result<()> {
@@ -242,6 +271,8 @@ fn main() -> Result<()> {
         Command::Run { profile, args } => run(&shell, &profile, &args),
 
         Command::Schema => schema(),
+
+        Command::Themes { check } => themes(check),
 
         #[cfg(target_os = "windows")]
         Command::Install { silent } => install(&shell, silent),

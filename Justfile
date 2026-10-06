@@ -70,6 +70,16 @@ run-release args:
 schema:
     @cargo xtask schema
 
+[doc('Regenerate the documented bundled theme sources')]
+[group('build')]
+themes:
+    @cargo xtask themes
+
+[doc('Check that the bundled theme sources are up to date')]
+[group('lint')]
+check-themes:
+    @cargo xtask themes --check
+
 [doc('Run all tests')]
 [group('test')]
 test:

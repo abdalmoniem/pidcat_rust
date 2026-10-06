@@ -93,6 +93,13 @@ pub enum Command {
     /// Generate the JSON schemas for the config and theme files
     Schema,
 
+    /// Regenerate the documented bundled theme sources
+    Themes {
+        /// Fail if a bundled theme source is not up to date instead of writing it
+        #[arg(short = 'c', long = "check", default_value_t = false)]
+        check: bool,
+    },
+
     #[cfg(target_os = "windows")]
     /// Install the application by running the generated installer
     Install {
