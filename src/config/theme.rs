@@ -275,7 +275,7 @@ pub const TOKENS_DOC: &[&str] = &[
     "example: tokens = [\"#fb4934\", \"#83a598\", \"#b8bb26\", \"#fabd2f\"]",
 ];
 
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 #[schemars(title = concat!(env!("CARGO_PKG_NAME"), " color theme"))]
 #[schemars(description = THEME_FILE_DOC.join("\n"))]
@@ -290,7 +290,7 @@ pub struct ThemeFile {
     pub log: LogSection,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct UiSection {
     #[schemars(description = BACKGROUND_DOC.join("\n"))]
@@ -317,7 +317,7 @@ pub struct UiSection {
     pub selection: String,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct LogSection {
     #[schemars(description = LEVEL_FG_DOC.join("\n"))]
@@ -459,8 +459,9 @@ pub fn set_active(theme: Theme) {
     let _ = ACTIVE_THEME.set(theme);
 }
 
-/// Writes each bundled theme that is missing from the themes directory and never
-/// overwrites existing files; failures are ignored so a read-only home still works.
+/// Writes each bundled theme that is missing from the themes directory or whose
+/// file is an outdated rendering of it; failures are ignored so a read-only home
+/// still works.
 pub fn install_bundled_themes() {
     let Some(dir) = themes_dir() else {
         return;
@@ -472,10 +473,6 @@ pub fn install_bundled_themes() {
 
     for bundled in BUNDLED_THEMES {
         let path = dir.join(format!("{name}.toml", name = bundled.name));
-        if path.exists() {
-            continue;
-        }
-
         let Ok(theme_file) = parse_theme(bundled.source) else {
             continue;
         };
@@ -486,8 +483,19 @@ pub fn install_bundled_themes() {
             .take_while(|line| line.starts_with('#'))
             .map(|line| format!("{line}\n"))
             .collect::<String>();
+        let contents = format!("{credits}#\n{}", theme_file.to_doc_toml());
 
-        let _ = fs::write(&path, format!("{credits}#\n{}", theme_file.to_doc_toml()));
+        let outdated = match path.exists() {
+            false => true,
+            true => fs::read_to_string(&path).is_ok_and(|existing| {
+                existing != contents
+                    && parse_theme(&existing).is_ok_and(|existing| existing == theme_file)
+            }),
+        };
+
+        if outdated {
+            let _ = fs::write(&path, contents);
+        }
     }
 }
 
@@ -786,8 +794,9 @@ impl ThemeFile {
                 "The bundled themes ({}) are written to the",
                 bundled_theme_names()
             ),
-            "themes directory when missing and are never overwritten, so they can be".to_string(),
-            "edited in place; delete a file to restore its bundled version.".to_string(),
+            "themes directory when missing and their comments are refreshed while their".to_string(),
+            "colors are unchanged. Edited themes are never overwritten; delete a file to".to_string(),
+            "restore its bundled version.".to_string(),
             String::default(),
         ]
         .into_iter()
