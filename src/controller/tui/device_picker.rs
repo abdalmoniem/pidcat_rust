@@ -8,7 +8,6 @@ use ratatui::style::Modifier;
 use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::text::Span;
-use ratatui::widgets::Clear;
 use ratatui::widgets::List;
 use ratatui::widgets::ListItem;
 use ratatui::widgets::Paragraph;
@@ -18,12 +17,21 @@ use crate::AdbState;
 use crate::controller::adb::NO_ADB_DEVICES_ERROR_HEADER;
 use crate::controller::adb::NO_ADB_DEVICES_ERROR_MESSAGE;
 
+use super::border::render_dialog;
 use super::palette::PaletteSearch;
 use super::palette::matches_query;
 use super::palette::render_search_field;
 use super::theme;
 
 const DEVICE_SEARCH_PLACEHOLDER: &str = "search devices by serial or state...";
+
+const DEVICE_PICKER_HINTS: &[(&str, &str)] = &[
+    ("↑↓", " navigate"),
+    ("enter", " select"),
+    ("esc", " cancel"),
+    ("ctrl+r", " refresh"),
+    ("o", " open file"),
+];
 
 pub fn is_selectable(device: &AdbDevice) -> bool {
     matches!(device.device_state, AdbState::Device | AdbState::Emulator)
@@ -48,38 +56,15 @@ pub fn filter_device_indices(devices: &[AdbDevice], query: &str) -> Vec<usize> {
         .collect()
 }
 
-fn device_picker_footer() -> Line<'static> {
-    theme::dialog_footer_line(&[
-        ("↑↓", " navigate"),
-        ("enter", " select"),
-        ("esc", " cancel"),
-        ("ctrl+r", " refresh"),
-        ("o", " open file"),
-    ])
-}
-
 pub fn render_device_picker(
     frame: &mut Frame,
     devices: &[AdbDevice],
     search: &mut PaletteSearch,
     area: Rect,
 ) {
-    frame.render_widget(Clear, area);
-    frame.render_widget(
-        Paragraph::new("").style(theme::app_background_style()),
-        area,
-    );
+    let inner = render_dialog(frame, area, "select device", DEVICE_PICKER_HINTS, false);
 
-    let block = theme::overlay_block("select device");
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let chunks = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Min(0),
-        Constraint::Length(1),
-    ])
-    .split(inner);
+    let chunks = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).split(inner);
 
     render_search_field(frame, chunks[0usize], search, DEVICE_SEARCH_PLACEHOLDER);
 
@@ -151,9 +136,4 @@ pub fn render_device_picker(
         let list = List::new(items).style(theme::app_background_style());
         frame.render_widget(list, chunks[1usize]);
     }
-
-    frame.render_widget(
-        Paragraph::new(device_picker_footer()).style(theme::app_background_style()),
-        chunks[2usize],
-    );
 }

@@ -112,11 +112,13 @@ impl DisplayCache {
                 &mut self.lines,
                 &mut self.line_filtered_index,
                 filtered_index,
-                entry,
-                &mut self.render_state,
-                args,
-                width,
-                no_color,
+                &mut AppendEntryContext {
+                    entry,
+                    render_state: &mut self.render_state,
+                    args,
+                    width,
+                    no_color,
+                },
             );
         }
         self.rendered_filtered_count = end;
@@ -148,18 +150,22 @@ impl DisplayCache {
     }
 }
 
+struct AppendEntryContext<'a> {
+    entry: &'a LogEntry,
+    render_state: &'a mut State,
+    args: &'a CliArgs,
+    width: i16,
+    no_color: bool,
+}
+
 fn append_entry(
     lines: &mut Vec<Line<'static>>,
     line_filtered_index: &mut Vec<usize>,
     filtered_index: usize,
-    entry: &LogEntry,
-    render_state: &mut State,
-    args: &CliArgs,
-    width: i16,
-    no_color: bool,
+    ctx: &mut AppendEntryContext<'_>,
 ) {
-    for text in render_entry_lines(entry, render_state, args, width) {
-        let line = if no_color {
+    for text in render_entry_lines(ctx.entry, ctx.render_state, ctx.args, ctx.width) {
+        let line = if ctx.no_color {
             Line::from(text)
         } else {
             line_from_ansi(&text)

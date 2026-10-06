@@ -3,11 +3,6 @@
 use ratatui::style::Color;
 use ratatui::style::Modifier;
 use ratatui::style::Style;
-use ratatui::text::Line;
-use ratatui::text::Span;
-use ratatui::widgets::Block;
-use ratatui::widgets::BorderType;
-use ratatui::widgets::Borders;
 
 use tui_file_explorer::Theme as ExplorerTheme;
 
@@ -42,37 +37,6 @@ pub fn explorer_theme() -> ExplorerTheme {
         fg: TEXT,
         bg: BG,
     }
-}
-
-pub fn panel_block(title: &str) -> Block<'_> {
-    panel_block_with_title(Line::from(format!(" {title} ")))
-}
-
-pub fn panel_block_with_title(title: Line<'_>) -> Block<'_> {
-    Block::default()
-        .title(title)
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(YELLOW))
-        .style(Style::default().bg(BG).fg(TEXT))
-}
-
-pub fn focused_panel_block_with_title(title: Line<'_>) -> Block<'_> {
-    Block::default()
-        .title(title)
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(YELLOW).add_modifier(Modifier::BOLD))
-        .style(Style::default().bg(BG).fg(TEXT))
-}
-
-pub fn overlay_block(title: &str) -> Block<'_> {
-    Block::default()
-        .title(format!(" {title} "))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(YELLOW))
-        .style(Style::default().bg(BG).fg(TEXT))
 }
 
 pub fn status_style() -> Style {
@@ -145,13 +109,9 @@ pub fn hint_key_style() -> Style {
     Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)
 }
 
-pub fn dialog_footer_line(entries: &[(&str, &str)]) -> Line<'static> {
-    hint_line(entries, "  │  ")
-}
-
-pub fn main_shortcuts_line(select_mode: bool) -> Line<'static> {
+pub fn main_shortcut_hints(select_mode: bool) -> &'static [(&'static str, &'static str)] {
     if select_mode {
-        dialog_footer_line(&[
+        &[
             ("↑↓", " select"),
             ("y", " copy"),
             ("v", " normal"),
@@ -159,9 +119,9 @@ pub fn main_shortcuts_line(select_mode: bool) -> Line<'static> {
             ("?", " commands"),
             ("p", " pause"),
             ("q", " quit"),
-        ])
+        ]
     } else {
-        dialog_footer_line(&[
+        &[
             ("↑↓", " scroll"),
             ("v", " select"),
             ("/", " filter"),
@@ -171,20 +131,6 @@ pub fn main_shortcuts_line(select_mode: bool) -> Line<'static> {
             ("l", " clear"),
             ("p", " pause"),
             ("q", " quit"),
-        ])
+        ]
     }
-}
-
-pub fn hint_line(entries: &[(&str, &str)], separator: &str) -> Line<'static> {
-    let mut spans = Vec::default();
-
-    for (index, (key, text)) in entries.iter().enumerate() {
-        if index > 0 {
-            spans.push(Span::styled(separator.to_string(), hint_style()));
-        }
-        spans.push(Span::styled((*key).to_string(), hint_key_style()));
-        spans.push(Span::styled((*text).to_string(), hint_style()));
-    }
-
-    Line::from(spans)
 }

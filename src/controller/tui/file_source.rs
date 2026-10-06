@@ -1,12 +1,8 @@
 #![deny(clippy::unwrap_used)]
 
 use std::fs::File;
-use std::io::BufRead;
-use std::io::BufReader;
 use std::path::Path;
 use std::path::PathBuf;
-
-use crate::trim_log_line;
 
 pub fn default_browse_directory() -> PathBuf {
     if let Some(home) = std::env::var_os("HOME") {
@@ -52,26 +48,4 @@ pub fn validate_log_file(path: &str) -> Result<String, String> {
     File::open(file_path).map_err(|err| format!("cannot read file: {err}"))?;
 
     Ok(expanded)
-}
-
-pub fn read_file_lines(
-    path: &str,
-    tx: std::sync::mpsc::Sender<String>,
-    stop: &std::sync::atomic::AtomicBool,
-) {
-    let Ok(file) = File::open(path) else {
-        return;
-    };
-
-    let reader = BufReader::new(file);
-
-    for line in reader.lines().map_while(Result::ok) {
-        if stop.load(std::sync::atomic::Ordering::Relaxed) {
-            break;
-        }
-
-        if tx.send(trim_log_line(&line)).is_err() {
-            break;
-        }
-    }
 }

@@ -1,15 +1,9 @@
 #![deny(clippy::unwrap_used)]
 
 use std::collections::VecDeque;
-use std::io::BufRead;
 use std::io::stdin;
 use std::io::stdout;
-use std::process::Child;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
-use std::sync::mpsc;
-use std::thread;
 use std::time::Duration;
 
 use colored::control::set_override;
@@ -33,16 +27,11 @@ use crate::TuiFilterSet;
 use crate::ValueOrPanic;
 use crate::Writer;
 use crate::build_adb_command;
-use crate::build_logcat_command;
 use crate::get_adb_devices;
 use crate::open_output_writer;
-use crate::process_line;
 use crate::render_entry;
 use crate::resolve_initial_device;
 use crate::set_running;
-use crate::spawn_logcat;
-use crate::trim_log_line;
-use crate::trim_log_line_bytes;
 
 use crate::controller::setup::bootstrap_adb_tui;
 use crate::controller::setup::build_state;
@@ -62,12 +51,12 @@ use super::device_picker::filter_device_indices;
 use super::device_picker::is_selectable;
 use super::display_cache::DisplayCache;
 use super::file_source::default_browse_directory;
-use super::file_source::read_file_lines;
 use super::file_source::validate_log_file;
 use super::help::HelpAction;
 use super::help::HelpRow;
 use super::help::build_help_rows;
 use super::help::row_action;
+use super::log_ingest::LogIngest;
 use super::palette::PaletteKeyAction;
 use super::palette::PaletteSearch;
 use super::palette::handle_palette_key;
@@ -79,9 +68,6 @@ use tui_file_explorer::ExplorerOutcome;
 use tui_file_explorer::FileExplorer;
 use tui_file_explorer::SortMode;
 use tui_file_explorer::Theme;
-
-const MAX_ENTRIES: usize = 50_000;
-const MAX_LINES_PER_POLL: usize = 1_000;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SourceMode {
@@ -127,9 +113,8 @@ pub struct TuiApp {
     pub file_open_error: Option<String>,
     pub explorer_theme: Theme,
     pub catchall_packages: Vec<String>,
-    pub line_rx: mpsc::Receiver<String>,
-    pub reader_stop: Arc<AtomicBool>,
-    pub adb_child: Option<Child>,
+    pub tokio_handle: Option<tokio::runtime::Handle>,
+    pub ingest: LogIngest,
     pub file_writer: Option<Writer>,
     pub need_device_picker: bool,
     pub display_cache: DisplayCache,
@@ -176,9 +161,8 @@ impl TuiApp {
             file_open_error: None,
             explorer_theme: theme::explorer_theme(),
             catchall_packages: Vec::default(),
-            line_rx: mpsc::channel().1,
-            reader_stop: Arc::new(AtomicBool::new(false)),
-            adb_child: None,
+            tokio_handle: None,
+            ingest: LogIngest::idle(),
             file_writer: None,
             need_device_picker: false,
             display_cache: DisplayCache::new(),
@@ -274,11 +258,6 @@ impl TuiApp {
     }
 
     fn push_entry(&mut self, entry: LogEntry) {
-        let rotated = self.entries.len() >= MAX_ENTRIES;
-        if rotated {
-            self.entries.pop_front();
-        }
-
         self.entries.push_back(entry);
         let index = self.entries.len() - 1;
 
@@ -294,69 +273,43 @@ impl TuiApp {
             );
         }
 
-        if rotated {
-            self.recompute_filtered();
-        } else if self.tui_filters.matches(&self.entries[index], &self.state) {
+        if self.tui_filters.matches(&self.entries[index], &self.state) {
             self.filtered_indices.push(index);
         }
     }
 
-    fn handle_line(&mut self, line: String) {
-        if self.paused {
-            return;
-        }
-
-        if let Some(entry) = process_line(&line, &mut self.state, &self.args) {
-            self.push_entry(entry);
-        }
+    fn set_paused(&mut self, paused: bool) {
+        self.paused = paused;
+        self.ingest.paused_flag().store(paused, Relaxed);
     }
 
-    fn stop_reader(&mut self) {
-        self.reader_stop.store(true, Relaxed);
-
-        if let Some(mut child) = self.adb_child.take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+    fn stop_ingest(&mut self) {
+        self.ingest.stop();
     }
 
-    fn start_reader_pipe(&mut self) {
-        self.stop_reader();
-        self.reader_stop = Arc::new(AtomicBool::new(false));
-        let stop = Arc::clone(&self.reader_stop);
-        let (tx, rx) = mpsc::channel();
-        self.line_rx = rx;
+    fn start_ingest(&mut self, source: SourceMode) {
+        let handle = self
+            .tokio_handle
+            .as_ref()
+            .unwrap_or_panic("tokio runtime handle is not set");
+        self.ingest.stop();
+        self.ingest = LogIngest::start(
+            handle,
+            source,
+            self.args.clone(),
+            self.state.clone(),
+            self.selected_device.clone(),
+        );
+        self.ingest.paused_flag().store(self.paused, Relaxed);
+    }
 
-        thread::spawn(move || {
-            let mut reader = stdin().lock();
-            let mut buffer = String::new();
-
-            while !stop.load(Relaxed) {
-                buffer.clear();
-                match reader.read_line(&mut buffer) {
-                    Ok(0) => break,
-                    Ok(_) => {
-                        let line = trim_log_line(&buffer);
-                        if tx.send(line).is_err() {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
-                }
+    fn drain_ingest(&mut self) {
+        while let Some(batch) = self.ingest.try_recv_batch() {
+            for item in batch {
+                self.state = item.state;
+                self.push_entry(item.entry);
             }
-        });
-    }
-
-    fn start_reader_file(&mut self, path: String) {
-        self.stop_reader();
-        self.reader_stop = Arc::new(AtomicBool::new(false));
-        let stop = Arc::clone(&self.reader_stop);
-        let (tx, rx) = mpsc::channel();
-        self.line_rx = rx;
-
-        thread::spawn(move || {
-            read_file_lines(&path, tx, &stop);
-        });
+        }
     }
 
     fn refresh_device_maps(&mut self) {
@@ -368,45 +321,6 @@ impl TuiApp {
         );
     }
 
-    fn start_reader_live(&mut self) {
-        self.stop_reader();
-        self.reader_stop = Arc::new(AtomicBool::new(false));
-        let stop = Arc::clone(&self.reader_stop);
-
-        let adb_command = build_logcat_command(&self.args, self.selected_device.as_deref());
-
-        let mut child = spawn_logcat(&adb_command).unwrap_or_panic("Failed to start adb logcat");
-
-        let stdout = child
-            .stdout
-            .take()
-            .unwrap_or_panic("Failed to capture stdout");
-
-        self.adb_child = Some(child);
-
-        let (tx, rx) = mpsc::channel();
-        self.line_rx = rx;
-
-        thread::spawn(move || {
-            let mut reader = std::io::BufReader::new(stdout);
-            let mut buffer = Vec::default();
-
-            while !stop.load(Relaxed) {
-                buffer.clear();
-                match reader.read_until(b'\n', &mut buffer) {
-                    Ok(0) => break,
-                    Ok(_) => {
-                        let line = trim_log_line_bytes(&buffer);
-                        if tx.send(line).is_err() {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-        });
-    }
-
     fn switch_to_live(&mut self) {
         if self.selected_device.is_none() && self.need_device_picker {
             self.overlay = Overlay::DevicePicker;
@@ -416,14 +330,14 @@ impl TuiApp {
         self.entries.clear();
         self.source_mode = SourceMode::Live;
         self.refresh_device_maps();
-        self.start_reader_live();
+        self.start_ingest(SourceMode::Live);
         self.recompute_filtered();
     }
 
     fn switch_to_file(&mut self, path: String) {
         self.entries.clear();
         self.source_mode = SourceMode::File(path.clone());
-        self.start_reader_file(path);
+        self.start_ingest(SourceMode::File(path));
         self.recompute_filtered();
     }
 
@@ -433,7 +347,7 @@ impl TuiApp {
         self.refresh_device_maps();
 
         if self.source_mode == SourceMode::Live {
-            self.start_reader_live();
+            self.start_ingest(SourceMode::Live);
         }
     }
 
@@ -563,7 +477,7 @@ impl TuiApp {
 
         match key {
             KeyCode::Char('q') => set_running(false),
-            KeyCode::Char('p') | KeyCode::Char(' ') => self.paused = !self.paused,
+            KeyCode::Char('p') | KeyCode::Char(' ') => self.set_paused(!self.paused),
             KeyCode::Char('/') => {
                 self.filter_focused = true;
                 self.filter_cursor = self.filter_input.chars().count();
@@ -619,11 +533,11 @@ impl TuiApp {
     fn handle_copy_menu_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         let options = available_copy_options(&self.args);
 
-        if let KeyCode::Char(ch) = key {
-            if let Some(action) = copy_action_for_key(ch, &self.args) {
-                self.execute_copy_action(action);
-                return;
-            }
+        if let KeyCode::Char(ch) = key
+            && let Some(action) = copy_action_for_key(ch, &self.args)
+        {
+            self.execute_copy_action(action);
+            return;
         }
 
         let action = handle_palette_key(
@@ -728,7 +642,7 @@ impl TuiApp {
     fn execute_help_action(&mut self, action: HelpAction) {
         match action {
             HelpAction::Quit => set_running(false),
-            HelpAction::PauseResume => self.paused = !self.paused,
+            HelpAction::PauseResume => self.set_paused(!self.paused),
             HelpAction::RestartLive => self.switch_to_live(),
             HelpAction::OpenDevicePicker => self.open_device_picker(),
             HelpAction::OpenFileDialog => self.open_file_dialog(),
@@ -926,15 +840,6 @@ impl TuiApp {
             _ => {}
         }
     }
-
-    fn poll_lines(&mut self) {
-        for _ in 0..MAX_LINES_PER_POLL {
-            match self.line_rx.try_recv() {
-                Ok(line) => self.handle_line(line),
-                Err(_) => break,
-            }
-        }
-    }
 }
 
 fn char_index_to_byte(text: &str, char_index: usize) -> usize {
@@ -988,11 +893,17 @@ pub fn run_tui(args: &mut CliArgs) {
 
     set_running(true);
 
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap_or_panic("Failed to start tokio runtime");
+    app.tokio_handle = Some(runtime.handle().clone());
+
     app.source_mode = initial_source.clone();
 
     match &initial_source {
-        SourceMode::Pipe => app.start_reader_pipe(),
-        SourceMode::Live if app.selected_device.is_some() => app.start_reader_live(),
+        SourceMode::Pipe => app.start_ingest(SourceMode::Pipe),
+        SourceMode::Live if app.selected_device.is_some() => app.start_ingest(SourceMode::Live),
         SourceMode::File(_) | SourceMode::Live => {}
     }
 
@@ -1007,7 +918,7 @@ pub fn run_tui(args: &mut CliArgs) {
     let mut terminal = ratatui::init();
 
     while crate::is_running() {
-        app.poll_lines();
+        app.drain_ingest();
 
         if crossterm::event::poll(Duration::from_millis(50)).unwrap_or(false) {
             match crossterm::event::read().unwrap_or_panic("Failed to read event") {
@@ -1034,7 +945,8 @@ pub fn run_tui(args: &mut CliArgs) {
             .unwrap_or_panic("Failed to draw frame");
     }
 
-    app.stop_reader();
+    app.stop_ingest();
+    drop(runtime);
     ratatui::restore();
     let _ = stdout().execute(DisableMouseCapture);
 
