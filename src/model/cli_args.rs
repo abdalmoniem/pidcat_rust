@@ -1,5 +1,7 @@
 use clap::ArgAction;
 use clap::ColorChoice;
+use clap::CommandFactory;
+use clap::FromArgMatches;
 use clap::Parser;
 
 use clap::builder::styling::AnsiColor;
@@ -9,11 +11,14 @@ use clap_complete::Shell;
 
 use colored::Colorize;
 
+use crate::Config;
 use crate::LogFormat;
 use crate::LogFormatKind;
 use crate::LogFormatParser;
 use crate::LogLevel;
 use crate::ValueOrPanic;
+use crate::default_config_file;
+use crate::exit_with_error;
 
 const POSITIONAL_ARGUMENTS: &str = "Positional Arguments";
 const ABOUT_OPTIONS: &str = "Options";
@@ -22,6 +27,7 @@ const FILTERING_OPTIONS: &str = "Filtering Options";
 const FORMATTING_OPTIONS: &str = "Formatting Options";
 const COLORING_OPTIONS: &str = "Color Options";
 const OUTPUT_OPTIONS: &str = "Output Options";
+const CONFIG_OPTIONS: &str = "Config Options";
 
 #[derive(Clone, Debug, Parser)]
 #[command(disable_help_flag = true)]
@@ -306,6 +312,14 @@ pub struct CliArgs {
     #[arg(help = "Use plain text output instead of TUI")]
     pub plain: bool,
 
+    #[arg(long = "config")]
+    #[arg(required = false)]
+    #[arg(default_value = None)]
+    #[arg(value_name = "CONFIG_PATH")]
+    #[arg(help_heading = CONFIG_OPTIONS)]
+    #[arg(help = CliArgs::get_config_help())]
+    pub config_path: Option<String>,
+
     #[arg(skip)]
     pub tui_mode: bool,
 }
@@ -356,7 +370,26 @@ impl CliArgs {
         format!("{version}\n{description}\nAuthor: {author}").leak()
     }
 
+    fn get_config_help() -> String {
+        let metavar = "[CONFIG_PATH]".cyan().bold();
+        let default_path = default_config_file()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
+
+        format!(
+            "Load configuration from {metavar} instead of the default\nconfig file: {default_path}"
+        )
+    }
+
     pub fn parse_args() -> Self {
-        Self::parse()
+        let matches = Self::command().get_matches();
+        let mut args = Self::from_arg_matches(&matches).unwrap_or_else(|err| err.exit());
+        let show_colors = !args.no_color;
+
+        Config::load_effective(args.config_path.as_deref())
+            .unwrap_or_else(|err| exit_with_error(&err, show_colors))
+            .merge_into(&mut args, &matches);
+
+        args
     }
 }
