@@ -1,0 +1,241 @@
+# Ashokai Evermoor by TeriyakiBomb
+#
+# pidcat color theme
+#
+# Themes directory: `themes` next to the config file; its full path is shown
+# under --theme in: pidcat --help
+# Select a theme with: pidcat --theme <NAME|PATH>
+# or with `theme = "<NAME|PATH>"` in the config file. NAME is a file name in
+# the themes directory without the .toml extension; PATH is a theme file path.
+# Print the active theme with: pidcat --print-theme
+# Export a theme for editing with: pidcat --theme <NAME> --print-theme > my-theme.toml
+#
+# The bundled themes are written to the themes directory when missing, and
+# their comments are refreshed while their colors are unchanged. Edited themes
+# are never overwritten; delete a file to restore its bundled version.
+#
+# Colors are hex strings in the form "#rrggbb". Every key in [ui] and [log]
+# except `tokens` takes either a hex color or the name of a [palette] entry.
+# All [ui] and [log] keys are required; unknown keys are rejected.
+
+# ------------------------------------------------------------------------------
+# Palette
+# ------------------------------------------------------------------------------
+# Named colors that the [ui] and [log] tables can refer to by name.
+# Names are free-form (letters, digits, '-' and '_'), values are hex colors in
+# the form "#rrggbb". The palette is optional; [ui] and [log] keys may also use
+# hex colors directly.
+# example: bg0 = "#181818"
+[palette]
+
+bg0 = "#1d2a26"
+fg0 = "#f8fff8"
+comment = "#6c9286"
+orange = "#ff9647"
+purple = "#9983d7"
+diffgreen = "#5b7753"
+yellow = "#fbc664"
+red = "#ff5d5d"
+aqua = "#5db1b1"
+green = "#7aea92"
+selection = "#214037"
+blue = "#7ac3ff"
+magenta = "#f94786"
+
+# ------------------------------------------------------------------------------
+# User interface
+# ------------------------------------------------------------------------------
+# Colors of the interactive TUI chrome. Plain output does not use this table.
+# Each key takes a [palette] name or a hex color "#rrggbb".
+[ui]
+
+# Background of the whole TUI: log view, status bar, panels, menus, dialogs and
+# the file browser. Also the text color on accent-colored badges such as the
+# running status indicator and the selected device.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "bg0" (#181818)
+# example: background = "#1d2021"
+background = "bg0"
+
+# Main foreground text: menu and dialog content, help descriptions, device
+# names, key hint descriptions, file browser entries, and selected log line
+# text that has no color of its own.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "fg0" (#e4e4ef)
+# example: text = "#ebdbb2"
+text = "fg0"
+
+# Dimmed text: status bar separators and entry counters, device states, input
+# placeholders, hints, unavailable commands in the help menu and file browser
+# metadata.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "fg3" (#a89984)
+# example: subtext = "#928374"
+subtext = "comment"
+
+# Primary accent: panel borders, section headings, key names in the border
+# hints, the running status badge, the log source in the status bar, the
+# selected help and menu row, the selected device, and the file browser title,
+# directories and highlights.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "yellow" (#ffdd33)
+# example: accent = "#fabd2f"
+accent = "orange"
+
+# Secondary accent: the device serial in the status bar.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "niagara" (#96a6c8)
+# example: secondary = "#83a598"
+secondary = "purple"
+
+# Success feedback: status bar messages such as copy confirmations, and success
+# messages in the file browser.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "green" (#73c936)
+# example: success = "#b8bb26"
+success = "diffgreen"
+
+# Idle status indicator in the status bar, shown while paused, waiting for a
+# device or not reading live logs.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "brown" (#cc8c3c)
+# example: warning = "#fe8019"
+warning = "yellow"
+
+# Error messages in the device picker and the file dialogs.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "red" (#f43841)
+# example: error = "#fb4934"
+error = "red"
+
+# File browser entries matching the current search.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "aqua" (#8ec07c)
+# example: match = "#8ec07c"
+match = "aqua"
+
+# Key bindings listed in the help, copy and export menus.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "cyan" (#8cd0d3)
+# example: keys = "#83a598"
+keys = "green"
+
+# Background of the selected log line in select mode, the selected help and
+# menu row, and the selected file browser entry.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "bg5" (#404040)
+# example: selection = "#504945"
+selection = "selection"
+
+# ------------------------------------------------------------------------------
+# Log colors
+# ------------------------------------------------------------------------------
+# Colors of the log lines, used both in the TUI log view and in plain output
+# (and in copied or exported text). Each key except `tokens` takes a [palette]
+# name or a hex color "#rrggbb". Log lines use these exact 24-bit colors when
+# the environment sets COLORTERM to "truecolor" or "24bit", and the closest
+# basic ANSI colors otherwise.
+[log]
+
+# Text color of the log level badges (V, D, I, W, E, F) and of the connectors
+# (╠═ and ╚═) in front of wrapped message lines. The badge background is the
+# color of the message's level below.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "black" (#000000)
+# example: level-fg = "#1d2021"
+level-fg = "bg0"
+
+# Level badge and wrap connector background of verbose (V) messages.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "cyan" (#8cd0d3)
+# example: verbose = "#83a598"
+verbose = "blue"
+
+# Level badge and wrap connector background of debug (D) messages.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "niagara" (#96a6c8)
+# example: debug = "#458588"
+debug = "aqua"
+
+# Level badge and wrap connector background of info (I) messages.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "green" (#73c936)
+# example: info = "#b8bb26"
+info = "#637e5c"
+
+# Level badge and wrap connector background of warning (W) messages.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "yellow" (#ffdd33)
+# example: warn = "#fabd2f"
+warn = "yellow"
+
+# Level badge and wrap connector background of error (E) messages.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "brown" (#cc8c3c)
+# example: error = "#fe8019"
+error = "orange"
+
+# Level badge and wrap connector background of fatal (F) messages.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "red" (#f43841)
+# example: fatal = "#fb4934"
+fatal = "red"
+
+# Highlighted values inside the process banners: the package, target, PID, UID
+# and GIDs of started processes and the name and PID of ended processes.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "yellow" (#ffdd33)
+# example: highlight = "#fabd2f"
+highlight = "magenta"
+
+# Background of the banner shown when a process starts.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "green" (#73c936)
+# example: process-start = "#98971a"
+process-start = "diffgreen"
+
+# Background of the banner shown when a process ends.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "red" (#f43841)
+# example: process-death = "#cc241d"
+process-death = "red"
+
+# The "; ~duration=" label of StrictMode policy violation messages.
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "red" (#f43841)
+# example: gc-duration = "#fb4934"
+gc-duration = "red"
+
+# The "freed <size>" part of garbage collector messages. Only used when
+# gc-color is enabled (gc-color = true in the config file, or -g).
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "green" (#73c936)
+# example: gc-free = "#b8bb26"
+gc-free = "diffgreen"
+
+# The duration value of StrictMode policy violation messages, and the
+# "paused <time>" part of garbage collector messages (the latter only when
+# gc-color is enabled).
+# value: a [palette] name or a hex color "#rrggbb"
+# default (gruber-darker): "yellow" (#ffdd33)
+# example: gc-unit = "#fabd2f"
+gc-unit = "purple"
+
+# Colors rotated through for the PID, UID, package and tag columns. A newly seen
+# value gets the least recently used color and keeps it, so the same tag or
+# package is always shown in the same color.
+# type: non-empty array of hex colors "#rrggbb" (palette names are not
+# accepted); there is no upper limit on the number of colors
+# default (gruber-darker): ["#f43841", "#96a6c8", "#8cd0d3", "#73c936",
+# "#ffdd33", "#9e95c7", "#8ec07c", "#cc8c3c"]
+# example: tokens = ["#fb4934", "#83a598", "#b8bb26", "#fabd2f"]
+tokens = [
+    "#7ac3ff",
+    "#ff9647",
+    "#5db1b1",
+    "#ff5d5d",
+    "#7aea92",
+    "#f94786",
+    "#9983d7",
+    "#fbc664",
+]
