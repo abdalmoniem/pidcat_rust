@@ -65,6 +65,11 @@ run args:
 run-release args:
     @cargo xtask run --profile=release -- $args
 
+[doc('Generate the JSON schemas for the config and theme files')]
+[group('build')]
+schema:
+    @cargo xtask schema
+
 [doc('Run all tests')]
 [group('test')]
 test:

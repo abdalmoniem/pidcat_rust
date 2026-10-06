@@ -9,6 +9,8 @@ use clap::parser::ValueSource;
 
 use itertools::Itertools;
 
+use schemars::JsonSchema;
+
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::de::Error;
@@ -22,6 +24,7 @@ use super::doc_toml::DocItem;
 use super::doc_toml::DocSection;
 use super::doc_toml::render;
 use super::paths::default_config_file;
+use super::schema::value_enum_schema;
 
 pub const PACKAGES_DOC: &[&str] = &[
     "Application package names whose log messages are shown.",
@@ -273,36 +276,80 @@ pub const PLAIN_DOC: &[&str] = &[
     "example: plain = true",
 ];
 
-#[derive(Clone, Debug, Default, Deserialize)]
+pub const CONFIG_DOC: &[&str] = &[
+    "Every key mirrors the command-line flag of the same name. A flag passed on the",
+    "command line wins over the value in this file, which wins over the built-in",
+    "default.",
+    "",
+    "Boolean keys can only switch options on: when a key is true here, there is no",
+    "command-line flag to switch it back off for a single run.",
+    "",
+    "Commented-out keys have no value; uncomment and edit them to set one.",
+    "Unknown keys are rejected.",
+];
+
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema)]
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+#[schemars(title = concat!(env!("CARGO_PKG_NAME"), " configuration"))]
+#[schemars(description = CONFIG_DOC.join("\n"))]
 pub struct Config {
+    #[schemars(description = PACKAGES_DOC.join("\n"))]
     pub packages: Option<Vec<String>>,
+    #[schemars(description = ADB_DOC.join("\n"))]
     pub adb: Option<String>,
+    #[schemars(description = DEVICE_DOC.join("\n"))]
     pub device: Option<bool>,
+    #[schemars(description = EMULATOR_DOC.join("\n"))]
     pub emulator: Option<bool>,
+    #[schemars(description = SERIAL_DOC.join("\n"))]
     pub serial: Option<String>,
+    #[schemars(description = ALL_DOC.join("\n"))]
     pub all: Option<bool>,
+    #[schemars(description = KEEP_DOC.join("\n"))]
     pub keep: Option<bool>,
+    #[schemars(description = CURRENT_DOC.join("\n"))]
     pub current: Option<bool>,
+    #[schemars(description = IGNORE_SYSTEM_TAGS_DOC.join("\n"))]
     pub ignore_system_tags: Option<bool>,
+    #[schemars(description = TAG_DOC.join("\n"))]
     pub tag: Option<Vec<String>>,
+    #[schemars(description = IGNORE_TAG_DOC.join("\n"))]
     pub ignore_tag: Option<Vec<String>>,
     #[serde(deserialize_with = "parse_value_enum")]
+    #[schemars(schema_with = "value_enum_schema::<LogLevel>")]
+    #[schemars(description = LOG_LEVEL_DOC.join("\n"))]
     pub log_level: Option<LogLevel>,
+    #[schemars(description = REGEX_DOC.join("\n"))]
     pub regex: Option<String>,
     #[serde(deserialize_with = "parse_value_enum")]
+    #[schemars(schema_with = "value_enum_schema::<LogFormatKind>")]
+    #[schemars(description = LOG_FORMAT_DOC.join("\n"))]
     pub log_format: Option<LogFormatKind>,
+    #[schemars(description = SHOW_PID_DOC.join("\n"))]
     pub show_pid: Option<bool>,
+    #[schemars(description = SHOW_UID_DOC.join("\n"))]
     pub show_uid: Option<bool>,
+    #[schemars(description = SHOW_PACKAGE_DOC.join("\n"))]
     pub show_package: Option<bool>,
+    #[schemars(description = ALWAYS_SHOW_TAGS_DOC.join("\n"))]
     pub always_show_tags: Option<bool>,
+    #[schemars(description = PUID_WIDTH_DOC.join("\n"))]
+    #[schemars(range(min = 1))]
     pub puid_width: Option<u8>,
+    #[schemars(description = PACKAGE_WIDTH_DOC.join("\n"))]
+    #[schemars(range(min = 1))]
     pub package_width: Option<u8>,
+    #[schemars(description = TAG_WIDTH_DOC.join("\n"))]
     pub tag_width: Option<u8>,
+    #[schemars(description = GC_COLOR_DOC.join("\n"))]
     pub gc_color: Option<bool>,
+    #[schemars(description = NO_COLOR_DOC.join("\n"))]
     pub no_color: Option<bool>,
+    #[schemars(description = OUTPUT_DOC.join("\n"))]
     pub output: Option<String>,
+    #[schemars(description = PLAIN_DOC.join("\n"))]
     pub plain: Option<bool>,
+    #[schemars(description = THEME_DOC.join("\n"))]
     pub theme: Option<String>,
 }
 
@@ -660,20 +707,11 @@ impl Config {
             format!("Default location: {default_path}"),
             format!("Load another file with: {pkg} --config <CONFIG_PATH>"),
             format!("Print the effective configuration with: {pkg} --print-config"),
-            String::default(),
-            "Every key mirrors the command-line flag of the same name. A flag passed on the"
-                .to_string(),
-            "command line wins over the value in this file, which wins over the built-in"
-                .to_string(),
-            "default.".to_string(),
-            String::default(),
-            "Boolean keys can only switch options on: when a key is true here, there is no"
-                .to_string(),
-            "command-line flag to switch it back off for a single run.".to_string(),
-            String::default(),
-            "Commented-out keys have no value; uncomment and edit them to set one.".to_string(),
-            "Unknown keys are rejected.".to_string(),
-        ];
+        ]
+        .into_iter()
+        .chain([String::default()])
+        .chain(CONFIG_DOC.iter().map(|line| line.to_string()))
+        .collect::<Vec<_>>();
 
         render(&header, &self.doc_items())
     }
