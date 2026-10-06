@@ -49,7 +49,7 @@ pub fn run_plain(args: &mut CliArgs) {
     let stdout_writer = Writer::new_console(console_width, !args.no_color);
     let writers = &mut vec![stdout_writer];
 
-    let (packages, catchall_packages, named_processes) = resolve_packages(args);
+    let (packages, catchall_packages, named_processes) = resolve_packages(args, None);
 
     if let Some(path) = args.output_path.clone() {
         writers.push(open_output_writer(&path));

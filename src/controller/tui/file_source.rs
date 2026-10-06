@@ -12,6 +12,11 @@ pub fn default_browse_directory() -> PathBuf {
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
+/// Working directory the binary was launched from.
+pub fn default_export_directory() -> PathBuf {
+    std::env::current_dir().unwrap_or_else(|_| default_browse_directory())
+}
+
 pub fn expand_path(path: &str) -> String {
     if let Some(stripped) = path.strip_prefix("~/")
         && let Some(home) = std::env::var_os("HOME")

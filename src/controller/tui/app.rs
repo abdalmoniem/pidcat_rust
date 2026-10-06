@@ -35,6 +35,7 @@ use crate::set_running;
 
 use crate::controller::setup::bootstrap_adb_tui;
 use crate::controller::setup::build_state;
+use crate::controller::setup::current_app_packages;
 use crate::controller::setup::maybe_clear_logcat;
 use crate::controller::setup::normalize_cli_args;
 use crate::controller::setup::refresh_process_maps;
@@ -50,7 +51,10 @@ use super::copy::copy_to_clipboard;
 use super::device_picker::filter_device_indices;
 use super::device_picker::is_selectable;
 use super::display_cache::DisplayCache;
+use super::export::ExportJob;
+use super::export::default_export_file_name;
 use super::file_source::default_browse_directory;
+use super::file_source::default_export_directory;
 use super::file_source::directory_input;
 use super::file_source::expand_path;
 use super::file_source::split_path_input;
@@ -79,10 +83,16 @@ pub enum SourceMode {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FileDialogMode {
+    Open,
+    Save,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Overlay {
     None,
     DevicePicker,
-    FileOpen,
+    FileDialog,
     Help,
     CopyMenu,
 }
@@ -104,7 +114,7 @@ pub struct TuiApp {
     pub selected_filtered_index: usize,
     pub viewport_lines: usize,
     pub copy_palette: PaletteSearch,
-    pub copy_feedback: Option<String>,
+    pub status_feedback: Option<String>,
     pub select_mode: bool,
     pub source_mode: SourceMode,
     pub selected_device: Option<String>,
@@ -115,8 +125,13 @@ pub struct TuiApp {
     pub file_explorer: Option<FileExplorer>,
     pub file_open_error: Option<String>,
     pub file_path_input: PaletteSearch,
+    pub file_dialog_mode: FileDialogMode,
+    pending_overwrite: Option<String>,
+    export_file_name: String,
+    export_job: Option<ExportJob>,
     pub explorer_theme: Theme,
     pub catchall_packages: Vec<String>,
+    current_app_resolved: bool,
     pub tokio_handle: Option<tokio::runtime::Handle>,
     pub ingest: LogIngest,
     pub need_device_picker: bool,
@@ -155,7 +170,7 @@ impl TuiApp {
             selected_filtered_index: 0,
             viewport_lines: 0,
             copy_palette: PaletteSearch::default(),
-            copy_feedback: None,
+            status_feedback: None,
             select_mode: false,
             source_mode: SourceMode::Live,
             selected_device: None,
@@ -166,8 +181,13 @@ impl TuiApp {
             file_explorer: None,
             file_open_error: None,
             file_path_input: PaletteSearch::default(),
+            file_dialog_mode: FileDialogMode::Open,
+            pending_overwrite: None,
+            export_file_name: String::new(),
+            export_job: None,
             explorer_theme: theme::explorer_theme(),
             catchall_packages: Vec::default(),
+            current_app_resolved: false,
             tokio_handle: None,
             ingest: LogIngest::idle(),
             need_device_picker: false,
@@ -259,7 +279,7 @@ impl TuiApp {
         }
 
         self.auto_scroll = false;
-        self.copy_feedback = None;
+        self.status_feedback = None;
         let len = self.filtered_indices.len();
         let next = (self.selected_filtered_index as i32 + delta).clamp(0, len as i32 - 1) as usize;
         self.selected_filtered_index = next;
@@ -345,11 +365,47 @@ impl TuiApp {
     fn select_device(&mut self, serial: String) {
         self.selected_device = Some(serial);
         self.overlay = Overlay::None;
+        self.apply_current_app_filter();
         self.refresh_device_maps();
 
         if self.source_mode == SourceMode::Live {
             self.start_ingest(SourceMode::Live);
         }
+    }
+
+    /// `-c` needs a device to query; when none was known at startup, resolve on first selection.
+    fn apply_current_app_filter(&mut self) {
+        if self.current_app_resolved || !self.args.current_app {
+            return;
+        }
+        self.current_app_resolved = true;
+
+        let packages = current_app_packages(&self.args, self.selected_device.as_deref());
+        let existing = self.filter_input.split_whitespace().collect::<Vec<_>>();
+        let additions = packages
+            .iter()
+            .filter(|package| !package.contains(':'))
+            .map(|package| format!("package:{package}"))
+            .filter(|token| !existing.contains(&token.as_str()))
+            .collect::<Vec<_>>();
+        if additions.is_empty() {
+            return;
+        }
+
+        for package in packages {
+            if !self.catchall_packages.contains(&package) {
+                self.catchall_packages.push(package);
+            }
+        }
+        self.filter_input = std::iter::once(self.filter_input.trim().to_string())
+            .chain(additions)
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        self.filter_cursor = self.filter_input.chars().count();
+        self.tui_filters = TuiFilterSet::parse(&self.filter_input);
+        self.sync_shared_filters();
+        self.recompute_filtered();
     }
 
     fn open_device_picker(&mut self) {
@@ -379,9 +435,32 @@ impl TuiApp {
     }
 
     fn open_file_dialog(&mut self) {
+        self.show_file_dialog(FileDialogMode::Open, String::new());
+    }
+
+    fn open_export_dialog(&mut self) {
+        if self.entries.is_empty() {
+            return;
+        }
+        if self.export_job.is_some() {
+            self.status_feedback = Some("export already in progress".to_string());
+            return;
+        }
+        let file_name =
+            default_export_file_name(&self.source_mode, self.selected_device.as_deref());
+        self.show_file_dialog(FileDialogMode::Save, file_name);
+    }
+
+    fn show_file_dialog(&mut self, mode: FileDialogMode, file_name: String) {
         self.exit_select_mode();
         self.file_open_error = None;
-        let start_directory = default_browse_directory();
+        self.pending_overwrite = None;
+        self.file_dialog_mode = mode;
+        self.export_file_name = file_name.clone();
+        let start_directory = match mode {
+            FileDialogMode::Open => default_browse_directory(),
+            FileDialogMode::Save => default_export_directory(),
+        };
         self.file_path_input.reset();
         self.file_explorer = Some(
             FileExplorer::builder(start_directory.clone())
@@ -390,8 +469,26 @@ impl TuiApp {
                 .sort_mode(SortMode::Name)
                 .build(),
         );
-        self.set_file_path_input(directory_input(&start_directory));
-        self.overlay = Overlay::FileOpen;
+        self.set_file_path_input(directory_input(&start_directory) + &file_name);
+        self.overlay = Overlay::FileDialog;
+    }
+
+    fn start_export(&mut self, path: String) {
+        match ExportJob::start(path, self.entries.clone(), &self.state, &self.args) {
+            Ok(job) => {
+                self.status_feedback = Some(format!("exporting to {}...", job.path));
+                self.export_job = Some(job);
+            }
+            Err(err) => self.status_feedback = Some(err),
+        }
+    }
+
+    fn poll_export(&mut self) {
+        if self.export_job.as_ref().is_some_and(ExportJob::is_finished)
+            && let Some(job) = self.export_job.take()
+        {
+            self.status_feedback = Some(job.finish());
+        }
     }
 
     fn apply_filter(&mut self) {
@@ -403,7 +500,7 @@ impl TuiApp {
 
     fn scroll_up(&mut self, amount: usize) {
         self.auto_scroll = false;
-        self.copy_feedback = None;
+        self.status_feedback = None;
         self.scroll_offset = self.scroll_offset.saturating_sub(amount);
         if self.select_mode {
             self.sync_selection_to_viewport();
@@ -412,7 +509,7 @@ impl TuiApp {
 
     fn scroll_down(&mut self, amount: usize) {
         self.auto_scroll = false;
-        self.copy_feedback = None;
+        self.status_feedback = None;
         let max = self.max_scroll_offset();
         self.scroll_offset = (self.scroll_offset + amount).min(max);
 
@@ -458,7 +555,7 @@ impl TuiApp {
             return;
         }
 
-        if self.overlay == Overlay::FileOpen {
+        if self.overlay == Overlay::FileDialog {
             self.handle_file_open_key(key, modifiers);
             return;
         }
@@ -473,12 +570,18 @@ impl TuiApp {
             return;
         }
 
+        if key == KeyCode::Char('s') && modifiers.contains(KeyModifiers::CONTROL) {
+            self.filter_focused = false;
+            self.open_export_dialog();
+            return;
+        }
+
         if self.filter_focused {
             self.handle_filter_key(key);
             return;
         }
 
-        self.copy_feedback = None;
+        self.status_feedback = None;
 
         match key {
             KeyCode::Char('q') => set_running(false),
@@ -579,7 +682,7 @@ impl TuiApp {
         let feedback = copy_action_feedback(action, &self.args);
         let text = copy_text_for_entry(entry, &self.state, &self.args, action);
         self.overlay = Overlay::None;
-        self.copy_feedback = Some(match copy_to_clipboard(&text) {
+        self.status_feedback = Some(match copy_to_clipboard(&text) {
             Ok(()) => format!("copied {feedback}"),
             Err(err) => format!("copy failed: {err}"),
         });
@@ -651,6 +754,7 @@ impl TuiApp {
             HelpAction::RestartLive => self.switch_to_live(),
             HelpAction::OpenDevicePicker => self.open_device_picker(),
             HelpAction::OpenFileDialog => self.open_file_dialog(),
+            HelpAction::ExportEntries => self.open_export_dialog(),
             HelpAction::FocusFilter => {
                 self.filter_focused = true;
                 self.filter_cursor = self.filter_input.chars().count();
@@ -750,7 +854,7 @@ impl TuiApp {
                     );
                 }
             }
-            Overlay::FileOpen => {
+            Overlay::FileDialog => {
                 if let Some(explorer) = &mut self.file_explorer {
                     let command = if scroll_up {
                         ExplorerCommand::MoveUp
@@ -825,7 +929,10 @@ impl TuiApp {
         let input = &mut self.file_path_input;
         match key {
             KeyCode::Esc => self.close_file_dialog(),
-            KeyCode::Enter => self.confirm_file_path(),
+            KeyCode::Enter => match self.file_dialog_mode {
+                FileDialogMode::Open => self.confirm_file_path(),
+                FileDialogMode::Save => self.confirm_save_path(),
+            },
             KeyCode::Tab => self.complete_file_path(),
             KeyCode::Up => self.move_file_selection(ExplorerCommand::MoveUp),
             KeyCode::Down => self.move_file_selection(ExplorerCommand::MoveDown),
@@ -891,6 +998,7 @@ impl TuiApp {
         }
 
         self.file_open_error = None;
+        self.pending_overwrite = None;
         explorer.search_query = fragment;
         explorer.cursor = 0;
         explorer.reload();
@@ -922,6 +1030,41 @@ impl TuiApp {
         }
     }
 
+    fn confirm_save_path(&mut self) {
+        let typed = expand_path(self.file_path_input.query.trim());
+        let (directory, file_name) = split_path_input(&typed);
+
+        if file_name.is_empty() {
+            let with_name = typed + &self.export_file_name;
+            self.set_file_path_input(with_name);
+            return;
+        }
+
+        let target = Path::new(&typed);
+        if target.is_dir() {
+            self.set_file_path_input(directory_input(target));
+            return;
+        }
+
+        if let Some(directory) = directory
+            && !directory.is_dir()
+        {
+            self.file_open_error = Some(format!("directory not found: {}", directory.display()));
+            return;
+        }
+
+        if target.exists() && self.pending_overwrite.as_deref() != Some(typed.as_str()) {
+            self.file_open_error = Some(format!(
+                "file exists: {typed} (press enter again to overwrite)"
+            ));
+            self.pending_overwrite = Some(typed);
+            return;
+        }
+
+        self.close_file_dialog();
+        self.start_export(typed);
+    }
+
     fn open_log_file(&mut self, path: &str) {
         match validate_log_file(path) {
             Ok(valid_path) => {
@@ -937,6 +1080,7 @@ impl TuiApp {
         self.file_open_error = None;
         self.file_explorer = None;
         self.file_path_input.reset();
+        self.pending_overwrite = None;
     }
 }
 
@@ -953,9 +1097,6 @@ pub fn run_tui(args: &mut CliArgs) {
     args.tui_mode = true;
     args.all = true;
 
-    let (packages, catchall_packages, named_processes) = resolve_packages(args);
-    let _ = packages;
-
     let stdin_is_tty = stdin().is_terminal();
     let initial_source = if stdin_is_tty {
         SourceMode::Live
@@ -964,10 +1105,6 @@ pub fn run_tui(args: &mut CliArgs) {
     };
 
     let mut app = TuiApp::new(args.clone());
-    app.catchall_packages = catchall_packages.clone();
-    app.filter_input = seed_filter_input(&app.args);
-    app.tui_filters = TuiFilterSet::parse(&app.filter_input);
-    app.sync_shared_filters();
 
     if stdin_is_tty {
         app.devices = bootstrap_adb_tui(&app.args);
@@ -979,6 +1116,14 @@ pub fn run_tui(args: &mut CliArgs) {
             app.overlay = Overlay::DevicePicker;
         }
     }
+
+    let (packages, catchall_packages, named_processes) =
+        resolve_packages(&mut app.args, app.selected_device.as_deref());
+    app.current_app_resolved = app.selected_device.is_some();
+    app.catchall_packages = catchall_packages.clone();
+    app.filter_input = seed_filter_input(&app.args, &packages);
+    app.tui_filters = TuiFilterSet::parse(&app.filter_input);
+    app.sync_shared_filters();
 
     app.state = build_state(
         &app.args,
@@ -1035,6 +1180,7 @@ pub fn run_tui(args: &mut CliArgs) {
         }
 
         app.drain_ingest();
+        app.poll_export();
 
         terminal
             .draw(|frame| ui::render(frame, &mut app))
