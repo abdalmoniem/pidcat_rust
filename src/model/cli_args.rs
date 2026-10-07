@@ -3,12 +3,12 @@ use clap::ColorChoice;
 use clap::CommandFactory;
 use clap::FromArgMatches;
 use clap::Parser;
+use clap::ValueHint;
 
 use clap::builder::styling::AnsiColor;
 use clap::builder::styling::Styles;
 
 use clap_complete::Shell;
-
 use colored::Colorize;
 
 use crate::BUNDLED_THEMES;
@@ -79,6 +79,7 @@ pub struct CliArgs {
     #[arg(required = false)]
     #[arg(default_value = None)]
     #[arg(value_name = "ADB_PATH")]
+    #[arg(value_hint = ValueHint::FilePath)]
     #[arg(help_heading = ABOUT_OPTIONS)]
     #[arg(help = "Path to adb executable (if not in PATH)")]
     pub adb_path: Option<String>,
@@ -302,6 +303,7 @@ pub struct CliArgs {
     #[arg(required = false)]
     #[arg(default_value = None)]
     #[arg(value_name = "FILE_PATH")]
+    #[arg(value_hint = ValueHint::FilePath)]
     #[arg(help_heading = OUTPUT_OPTIONS)]
     #[arg(help = format!("Save output to {metavar}", metavar = "[FILE_PATH]".cyan().bold()))]
     pub output_path: Option<String>,
@@ -319,6 +321,7 @@ pub struct CliArgs {
     #[arg(required = false)]
     #[arg(default_value = None)]
     #[arg(value_name = "CONFIG_PATH")]
+    #[arg(value_hint = ValueHint::FilePath)]
     #[arg(help_heading = CONFIG_OPTIONS)]
     #[arg(help = CliArgs::get_config_help())]
     pub config_path: Option<String>,
@@ -330,6 +333,15 @@ pub struct CliArgs {
     #[arg(default_value = DEFAULT_THEME_NAME)]
     #[arg(help = CliArgs::get_theme_help())]
     pub theme: String,
+
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(long = "list-themes")]
+    #[arg(default_value_t = false)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = CONFIG_OPTIONS)]
+    #[arg(help = "List the bundled and custom themes in the themes directory and exit")]
+    pub list_themes: bool,
 
     #[arg(required = false)]
     #[arg(value_name = None)]
