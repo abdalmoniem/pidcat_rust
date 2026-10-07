@@ -5,8 +5,6 @@ use std::panic::PanicHookInfo;
 use std::process;
 
 use clap::CommandFactory;
-use clap_complete::generate;
-
 use colored::Color;
 
 use is_terminal::IsTerminal;
@@ -14,17 +12,20 @@ use is_terminal::IsTerminal;
 use pidcat::CliArgs;
 use pidcat::Config;
 use pidcat::ValueOrPanic;
+use pidcat::available_themes;
 use pidcat::colored;
 use pidcat::exit_with_error;
+use pidcat::format_columns;
 use pidcat::install_bundled_themes;
 use pidcat::load_theme;
+use pidcat::print_paged;
 use pidcat::run_plain;
 use pidcat::run_tui;
 use pidcat::set_active_theme;
 use pidcat::set_running;
+use pidcat::write_completions;
 
 use scope_functions::Run;
-
 fn panic_hook(info: &PanicHookInfo, show_colors: bool) {
     let err_loc = info.location().unwrap_or(panic::Location::caller());
     let err_msg = match info.payload().downcast_ref::<&str>() {
@@ -64,10 +65,8 @@ fn main() {
     ctrlc::set_handler(move || set_running(false)).unwrap_or_panic("Failed to set CTRL+C handler");
 
     if let Some(shell) = args.completions {
-        let mut cmd = CliArgs::command();
-        let bin_name = cmd.get_name().to_string();
-
-        generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
+        write_completions(shell, &mut CliArgs::command(), &mut std::io::stdout())
+            .unwrap_or_else(|err| exit_with_error(&err, show_colors));
 
         process::exit(0i32);
     }
@@ -79,6 +78,19 @@ fn main() {
     }
 
     install_bundled_themes();
+
+    if args.list_themes {
+        let themes = available_themes();
+
+        let listing = match std::io::stdout().is_terminal() {
+            true => format_columns(&themes),
+            false => themes.iter().map(|name| format!("{name}\n")).collect(),
+        };
+
+        print_paged(&listing);
+
+        process::exit(0i32);
+    }
 
     let (theme_file, theme) =
         load_theme(&args.theme).unwrap_or_else(|err| exit_with_error(&err, show_colors));
