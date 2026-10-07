@@ -148,7 +148,7 @@ pub const HELP_CATALOG: &[HelpEntry] = &[
     },
     HelpEntry {
         section: "filter bar",
-        keys: "left / right",
+        keys: "← / →",
         description: "move cursor in filter text",
         action: None,
     },
@@ -178,7 +178,7 @@ pub const HELP_CATALOG: &[HelpEntry] = &[
     },
     HelpEntry {
         section: "device picker",
-        keys: "j / k / up / down",
+        keys: "j / k / ↑ / ↓",
         description: "move selection",
         action: None,
     },
@@ -196,7 +196,7 @@ pub const HELP_CATALOG: &[HelpEntry] = &[
     },
     HelpEntry {
         section: "copy menu",
-        keys: "j / k / up / down",
+        keys: "j / k / ↑ / ↓",
         description: "move selection",
         action: None,
     },
@@ -214,7 +214,7 @@ pub const HELP_CATALOG: &[HelpEntry] = &[
     },
     HelpEntry {
         section: "export format",
-        keys: "j / k / up / down",
+        keys: "j / k / ↑ / ↓",
         description: "move selection",
         action: None,
     },
@@ -226,7 +226,7 @@ pub const HELP_CATALOG: &[HelpEntry] = &[
     },
     HelpEntry {
         section: "file explorer",
-        keys: "up / down / pgup / pgdn",
+        keys: "↑ / ↓ / pgup / pgdn",
         description: "move selection",
         action: None,
     },
