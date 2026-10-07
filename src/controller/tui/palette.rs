@@ -73,22 +73,32 @@ impl PaletteSearch {
         delta: i32,
         is_selectable: impl Fn(usize) -> bool,
     ) {
-        if row_count == 0 {
+        if row_count == 0 || delta == 0 {
             return;
         }
 
-        let start = self.selected;
-        let mut index = start as i32;
+        let last = row_count - 1;
+        let start = self.selected.min(last);
+        let target = start.saturating_add_signed(delta as isize).min(last);
 
-        loop {
-            index = (index + delta).clamp(0, row_count as i32 - 1);
-            if is_selectable(index as usize) {
-                self.selected = index as usize;
-                break;
-            }
-            if index as usize == start {
-                break;
-            }
+        // Prefer the first selectable row at or past the target; when the edge is reached
+        // without one, fall back to the selectable row closest to the target, else stay.
+        let found = match delta > 0 {
+            true => (target..=last)
+                .find(|&index| is_selectable(index))
+                .or_else(|| {
+                    (start + 1..target)
+                        .rev()
+                        .find(|&index| is_selectable(index))
+                }),
+            false => (0..=target)
+                .rev()
+                .find(|&index| is_selectable(index))
+                .or_else(|| (target + 1..start).find(|&index| is_selectable(index))),
+        };
+
+        if let Some(index) = found {
+            self.selected = index;
         }
     }
 
