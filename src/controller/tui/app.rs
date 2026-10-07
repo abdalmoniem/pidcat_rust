@@ -445,8 +445,19 @@ impl TuiApp {
         self.show_file_dialog(FileDialogMode::Open, String::new());
     }
 
+    pub(crate) fn has_exportable_entries(&self) -> bool {
+        !self.filtered_indices.is_empty()
+    }
+
+    pub(crate) fn export_scope(&self) -> &'static str {
+        match self.tui_filters.is_empty() {
+            true => "all",
+            false => "filtered",
+        }
+    }
+
     fn open_export_dialog(&mut self) {
-        if self.entries.is_empty() {
+        if !self.has_exportable_entries() {
             return;
         }
         if self.export_job.is_some() {
@@ -517,13 +528,13 @@ impl TuiApp {
     }
 
     fn start_export(&mut self, path: String) {
-        match ExportJob::start(
-            path,
-            self.export_format,
-            self.entries.clone(),
-            &self.state,
-            &self.args,
-        ) {
+        let entries = self
+            .filtered_indices
+            .iter()
+            .filter_map(|&index| self.entries.get(index).cloned())
+            .collect::<VecDeque<_>>();
+
+        match ExportJob::start(path, self.export_format, entries, &self.state, &self.args) {
             Ok(job) => {
                 self.status_feedback = Some(format!("exporting to {}...", job.path));
                 self.export_job = Some(job);
