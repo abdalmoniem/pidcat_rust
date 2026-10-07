@@ -254,7 +254,7 @@ fn refresh_log_view(app: &mut TuiApp, log_area: Rect) {
 
 fn render_log_table(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
     let columns = crate::tui_log_border_columns(&app.args);
-    let hints = theme::main_shortcut_hints(app.select_mode, !app.entries.is_empty());
+    let hints = theme::main_shortcut_hints(app.select_mode, app.has_exportable_entries());
     let inner = render_log_table_panel(frame, area, &columns, &hints);
     let viewport_lines = inner.height as usize;
     let total_lines = app.display_cache.rendered_line_count();
@@ -467,6 +467,7 @@ const FILE_SAVE_HINTS: &[(&str, &str)] = &[
 const FILE_PATH_PLACEHOLDER: &str = "type a path...";
 
 fn render_file_explorer_overlay(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
+    let export_scope = app.export_scope();
     let Some(explorer) = &mut app.file_explorer else {
         return;
     };
@@ -474,7 +475,10 @@ fn render_file_explorer_overlay(frame: &mut Frame, app: &mut TuiApp, area: Rect)
     let (title, hints) = match app.file_dialog_mode {
         FileDialogMode::Open => ("open log file".to_string(), FILE_OPEN_HINTS),
         FileDialogMode::Save => (
-            format!("export all entries as {}", app.export_format.label()),
+            format!(
+                "export {export_scope} entries as {}",
+                app.export_format.label()
+            ),
             FILE_SAVE_HINTS,
         ),
     };

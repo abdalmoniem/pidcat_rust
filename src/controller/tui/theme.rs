@@ -113,7 +113,7 @@ const EXPORT_HINT: (&str, &str) = ("^s", " export");
 
 pub fn main_shortcut_hints(
     select_mode: bool,
-    has_entries: bool,
+    can_export: bool,
 ) -> Vec<(&'static str, &'static str)> {
     let mut hints = if select_mode {
         vec![
@@ -139,7 +139,7 @@ pub fn main_shortcut_hints(
         ]
     };
 
-    if has_entries {
+    if can_export {
         let before_pause = hints.len() - 2;
         hints.insert(before_pause, EXPORT_HINT);
     }

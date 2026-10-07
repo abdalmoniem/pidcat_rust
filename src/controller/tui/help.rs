@@ -131,7 +131,7 @@ pub const HELP_CATALOG: &[HelpEntry] = &[
     HelpEntry {
         section: "log capture",
         keys: "ctrl+s",
-        description: "export all processed entries to a file",
+        description: "export entries matching the current filter to a file",
         action: Some(HelpAction::ExportEntries),
     },
     HelpEntry {
