@@ -2,6 +2,7 @@ mod config;
 mod controller;
 mod model;
 
+pub use config::completions::write_completions;
 pub use config::file::Config;
 pub use config::paths::CONFIG_FILE_NAME;
 pub use config::paths::THEMES_DIR_NAME;
@@ -39,7 +40,9 @@ pub use controller::adb::start_adb_server;
 
 pub use controller::util::colored;
 pub use controller::util::exit_with_error;
+pub use controller::util::format_columns;
 pub use controller::util::open_output_writer;
+pub use controller::util::print_paged;
 pub use controller::util::split_csv_values;
 pub use controller::util::trim_log_line;
 pub use controller::util::trim_log_line_bytes;
