@@ -1,6 +1,5 @@
 #![deny(clippy::unwrap_used)]
 
-use arboard::Clipboard;
 use ratatui::Frame;
 use ratatui::layout::Constraint;
 use ratatui::layout::Layout;
@@ -9,6 +8,7 @@ use ratatui::text::Line;
 use ratatui::text::Span;
 use ratatui::widgets::Paragraph;
 use strip_ansi_escapes::strip_str;
+use terminal_clipboard::set_string;
 
 use crate::CliArgs;
 use crate::LogEntry;
@@ -102,10 +102,7 @@ pub fn copy_action_feedback(action: CopyAction, args: &CliArgs) -> &'static str 
 }
 
 pub fn copy_to_clipboard(text: &str) -> Result<(), String> {
-    Clipboard::new()
-        .map_err(|err| err.to_string())?
-        .set_text(text.to_owned())
-        .map_err(|err| err.to_string())
+    set_string(text).map_err(|err| err.to_string())
 }
 
 /// Outer dialog height for a given entry preview line count and option count.
