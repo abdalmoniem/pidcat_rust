@@ -1,5 +1,8 @@
 #![deny(clippy::unwrap_used)]
 
+use std::thread;
+use std::thread::JoinHandle;
+
 use ratatui::Frame;
 use ratatui::layout::Constraint;
 use ratatui::layout::Layout;
@@ -101,8 +104,32 @@ pub fn copy_action_feedback(action: CopyAction, args: &CliArgs) -> &'static str 
         .map_or("text", |option| option.feedback)
 }
 
-pub fn copy_to_clipboard(text: &str) -> Result<(), String> {
-    set_string(text).map_err(|err| err.to_string())
+pub struct CopyJob {
+    feedback: &'static str,
+    handle: JoinHandle<Result<(), String>>,
+}
+
+impl CopyJob {
+    pub fn start(text: String, feedback: &'static str) -> Result<Self, String> {
+        let handle = thread::Builder::new()
+            .name(format!("{}-clipboard", env!("CARGO_PKG_NAME")))
+            .spawn(move || set_string(&text).map_err(|err| err.to_string()))
+            .map_err(|err| format!("cannot start copy: {err}"))?;
+
+        Ok(Self { feedback, handle })
+    }
+
+    pub fn is_finished(&self) -> bool {
+        self.handle.is_finished()
+    }
+
+    pub fn finish(self) -> String {
+        match self.handle.join() {
+            Ok(Ok(())) => format!("copied {}", self.feedback),
+            Ok(Err(err)) => format!("copy failed: {err}"),
+            Err(_) => format!("copy failed: {}", self.feedback),
+        }
+    }
 }
 
 /// Outer dialog height for a given entry preview line count and option count.
