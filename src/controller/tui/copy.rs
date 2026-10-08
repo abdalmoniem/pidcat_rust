@@ -202,7 +202,9 @@ pub fn render_copy_menu(
 
     let inner = render_dialog(frame, area, "copy log entry", COPY_HINTS, false);
 
-    let all_preview_lines = entry_preview_lines(entry, state, args, inner.width as i16);
+    // Match `render_labeled_panel` inner width (dialog inner minus panel borders).
+    let preview_width = inner.width.saturating_sub(2) as i16;
+    let all_preview_lines = entry_preview_lines(entry, state, args, preview_width);
     let full_preview_lines = all_preview_lines.len() as u16;
 
     let preview_borders = 2;

@@ -106,6 +106,9 @@ pub fn render(frame: &mut Frame, app: &mut TuiApp) {
 
 const EXPORT_FORMAT_DIALOG_WIDTH: u16 = 44;
 
+/// Reserved column so log lines are not drawn under the vertical scrollbar.
+const LOG_SCROLLBAR_GUTTER: u16 = 1;
+
 const FILTER_PLACEHOLDER: &str = "e.g. package:com.example tag:ActivityManager level:debug";
 
 fn render_filter_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
@@ -208,7 +211,7 @@ fn render_status_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
 
 fn log_panel_inner_dims(area: Rect) -> (i16, usize) {
     (
-        area.width.saturating_sub(2) as i16,
+        area.width.saturating_sub(2 + LOG_SCROLLBAR_GUTTER) as i16,
         area.height.saturating_sub(2) as usize,
     )
 }
@@ -283,9 +286,13 @@ fn render_log_table(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
         })
         .collect();
 
+    let content_area = Rect {
+        width: inner.width.saturating_sub(LOG_SCROLLBAR_GUTTER),
+        ..inner
+    };
     frame.render_widget(
         Paragraph::new(visible_lines).style(theme::app_background_style()),
-        inner,
+        content_area,
     );
 
     if total_lines > viewport_lines {
