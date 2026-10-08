@@ -15,5 +15,8 @@
           {{ commit.message | upper_first }}
     {%- endfor %}
 {% endfor -%}
+{% if version and previous and previous.version %}
+**Full Changelog**: [{{ previous.version }}...{{ version }}]({{ repo_url }}/compare/{{ previous.version }}...{{ version }})
+{% endif %}
 {% if not loop.last %}---
 {% endif %}
