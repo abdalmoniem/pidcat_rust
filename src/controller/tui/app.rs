@@ -1,5 +1,18 @@
 #![deny(clippy::unwrap_used)]
 
+use colored::control::set_override;
+use colored::control::unset_override;
+use crossterm::ExecutableCommand;
+use crossterm::event::DisableMouseCapture;
+use crossterm::event::EnableMouseCapture;
+use crossterm::event::Event;
+use crossterm::event::EventStream;
+use crossterm::event::KeyCode;
+use crossterm::event::KeyEventKind;
+use crossterm::event::KeyModifiers;
+use crossterm::event::MouseEventKind;
+use futures::StreamExt;
+use is_terminal::IsTerminal;
 use std::collections::VecDeque;
 use std::io::stdin;
 use std::io::stdout;
@@ -7,20 +20,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::sync::atomic::Ordering::Relaxed;
-use std::time::Duration;
-
-use colored::control::set_override;
-use colored::control::unset_override;
-use crossterm::ExecutableCommand;
-use crossterm::event::DisableMouseCapture;
-use crossterm::event::EnableMouseCapture;
-use crossterm::event::Event;
-use crossterm::event::KeyCode;
-use crossterm::event::KeyEventKind;
-use crossterm::event::KeyModifiers;
-use crossterm::event::MouseEventKind;
-use is_terminal::IsTerminal;
 
 use crate::AdbDevice;
 use crate::CliArgs;
@@ -43,18 +42,18 @@ use crate::controller::setup::resolve_packages;
 use crate::controller::setup::seed_filter_input;
 
 use super::copy::CopyAction;
-use super::copy::CopyJob;
 use super::copy::available_copy_options;
 use super::copy::copy_action_feedback;
 use super::copy::copy_action_for_key;
 use super::copy::copy_text_for_entry;
+use super::copy::run_copy;
 use super::device_picker::filter_device_indices;
 use super::device_picker::is_selectable;
 use super::display_cache::DisplayCache;
 use super::export::EXPORT_FORMAT_OPTIONS;
 use super::export::ExportFormat;
-use super::export::ExportJob;
 use super::export::default_export_file_name;
+use super::export::run_export;
 use super::file_source::default_browse_directory;
 use super::file_source::default_export_directory;
 use super::file_source::directory_input;
@@ -65,6 +64,7 @@ use super::help::HelpAction;
 use super::help::HelpRow;
 use super::help::build_help_rows;
 use super::help::row_action;
+use super::log_ingest::IngestUpdate;
 use super::log_ingest::LogIngest;
 use super::palette::PaletteKeyAction;
 use super::palette::PaletteSearch;
@@ -88,6 +88,12 @@ pub enum SourceMode {
 pub enum FileDialogMode {
     Open,
     Save,
+}
+
+pub enum StatusUpdate {
+    Message(String),
+    CopyFinished,
+    ExportFinished,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -133,8 +139,10 @@ pub struct TuiApp {
     export_file_name: String,
     pub export_format_palette: PaletteSearch,
     pub export_format: ExportFormat,
-    export_job: Option<ExportJob>,
-    copy_job: Option<CopyJob>,
+    copy_in_progress: bool,
+    export_in_progress: bool,
+    status_tx: tokio::sync::mpsc::UnboundedSender<StatusUpdate>,
+    ingest_update_rx: tokio::sync::mpsc::UnboundedReceiver<IngestUpdate>,
     pub explorer_theme: Theme,
     pub catchall_packages: Vec<String>,
     current_app_resolved: bool,
@@ -149,6 +157,9 @@ pub struct TuiApp {
 
 impl TuiApp {
     pub fn new(args: CliArgs) -> Self {
+        let (ingest, ingest_update_rx) = LogIngest::idle();
+        let (status_tx, _status_rx) = tokio::sync::mpsc::unbounded_channel();
+
         Self {
             args,
             state: State {
@@ -192,13 +203,15 @@ impl TuiApp {
             export_file_name: String::new(),
             export_format_palette: PaletteSearch::default(),
             export_format: ExportFormat::Pidcat,
-            export_job: None,
-            copy_job: None,
+            copy_in_progress: false,
+            export_in_progress: false,
+            status_tx,
+            ingest_update_rx,
             explorer_theme: theme::explorer_theme(),
             catchall_packages: Vec::default(),
             current_app_resolved: false,
             tokio_handle: None,
-            ingest: LogIngest::idle(),
+            ingest,
             need_device_picker: false,
             display_cache: DisplayCache::new(),
             filter_generation: 0,
@@ -296,7 +309,7 @@ impl TuiApp {
 
     fn set_paused(&mut self, paused: bool) {
         self.paused = paused;
-        self.ingest.paused_flag().store(paused, Relaxed);
+        self.ingest.set_paused(paused);
     }
 
     fn stop_ingest(&mut self) {
@@ -309,7 +322,7 @@ impl TuiApp {
             .as_ref()
             .unwrap_or_panic("tokio runtime handle is not set");
         self.ingest.stop();
-        self.ingest = LogIngest::start(
+        let (ingest, update_rx) = LogIngest::start(
             handle,
             source,
             self.args.clone(),
@@ -317,22 +330,29 @@ impl TuiApp {
             self.selected_device.clone(),
             Arc::clone(&self.filters_shared),
         );
-        self.ingest.paused_flag().store(self.paused, Relaxed);
+        self.ingest = ingest;
+        self.ingest_update_rx = update_rx;
+        self.ingest.set_paused(self.paused);
     }
 
-    fn drain_ingest(&mut self) {
-        if self.paused {
-            return;
+    fn apply_ingest_updates(&mut self, updates: &[IngestUpdate]) {
+        for update in updates {
+            self.entries.push_back(update.entry.clone());
+            if update.matches_filter {
+                self.filtered_indices.push(self.entries.len() - 1);
+            }
         }
 
-        while let Some(batch) = self.ingest.try_recv_batch() {
-            self.state = batch.state;
-            for item in batch.items {
-                self.entries.push_back(item.entry);
-                if item.matches_filter {
-                    self.filtered_indices.push(self.entries.len() - 1);
-                }
-            }
+        if let Some(last) = updates.last() {
+            self.state = last.state.clone();
+        }
+    }
+
+    fn handle_status_update(&mut self, update: StatusUpdate) {
+        match update {
+            StatusUpdate::Message(message) => self.status_feedback = Some(message),
+            StatusUpdate::CopyFinished => self.copy_in_progress = false,
+            StatusUpdate::ExportFinished => self.export_in_progress = false,
         }
     }
 
@@ -462,7 +482,7 @@ impl TuiApp {
         if !self.has_exportable_entries() {
             return;
         }
-        if self.export_job.is_some() {
+        if self.export_in_progress {
             self.status_feedback = Some("export already in progress".to_string());
             return;
         }
@@ -530,35 +550,27 @@ impl TuiApp {
     }
 
     fn start_export(&mut self, path: String) {
+        let Some(handle) = self.tokio_handle.as_ref() else {
+            return;
+        };
+
         let entries = self
             .filtered_indices
             .iter()
             .filter_map(|&index| self.entries.get(index).cloned())
             .collect::<VecDeque<_>>();
 
-        match ExportJob::start(path, self.export_format, entries, &self.state, &self.args) {
-            Ok(job) => {
-                self.status_feedback = Some(format!("exporting to {}...", job.path));
-                self.export_job = Some(job);
-            }
-            Err(err) => self.status_feedback = Some(err),
-        }
-    }
+        self.export_in_progress = true;
+        self.status_feedback = Some(format!("exporting to {path}..."));
 
-    fn poll_export(&mut self) {
-        if self.export_job.as_ref().is_some_and(ExportJob::is_finished)
-            && let Some(job) = self.export_job.take()
-        {
-            self.status_feedback = Some(job.finish());
-        }
-    }
+        let status_tx = self.status_tx.clone();
+        let format = self.export_format;
+        let state = self.state.clone();
+        let args = self.args.clone();
 
-    fn poll_copy(&mut self) {
-        if self.copy_job.as_ref().is_some_and(CopyJob::is_finished)
-            && let Some(job) = self.copy_job.take()
-        {
-            self.status_feedback = Some(job.finish());
-        }
+        handle.spawn(async move {
+            run_export(status_tx, path, format, entries, state, args).await;
+        });
     }
 
     fn apply_filter(&mut self) {
@@ -747,7 +759,7 @@ impl TuiApp {
     }
 
     fn execute_copy_action(&mut self, action: CopyAction) {
-        if self.copy_job.is_some() {
+        if self.copy_in_progress {
             self.status_feedback = Some("copy already in progress".to_string());
             return;
         }
@@ -759,17 +771,21 @@ impl TuiApp {
             return;
         };
 
+        let Some(handle) = self.tokio_handle.as_ref() else {
+            return;
+        };
+
         let feedback = copy_action_feedback(action, &self.args);
         let text = copy_text_for_entry(entry, &self.state, &self.args, action);
         self.overlay = Overlay::None;
 
-        match CopyJob::start(text, feedback) {
-            Ok(job) => {
-                self.status_feedback = Some(format!("copying {feedback}..."));
-                self.copy_job = Some(job);
-            }
-            Err(err) => self.status_feedback = Some(err),
-        }
+        self.copy_in_progress = true;
+        self.status_feedback = Some(format!("copying {feedback}..."));
+
+        let status_tx = self.status_tx.clone();
+        handle.spawn(async move {
+            run_copy(status_tx, text, feedback).await;
+        });
     }
 
     fn handle_filter_key(&mut self, key: KeyCode) {
@@ -1243,7 +1259,8 @@ pub fn run_tui(args: &mut CliArgs) {
         set_override(true);
     }
 
-    let mut terminal = ratatui::init();
+    let (status_tx, mut status_rx) = tokio::sync::mpsc::unbounded_channel();
+    app.status_tx = status_tx;
 
     match &initial_source {
         SourceMode::Pipe => app.start_ingest(SourceMode::Pipe),
@@ -1251,39 +1268,57 @@ pub fn run_tui(args: &mut CliArgs) {
         SourceMode::File(_) | SourceMode::Live => {}
     }
 
-    while crate::is_running() {
-        if crossterm::event::poll(Duration::from_millis(16)).unwrap_or(false) {
-            match crossterm::event::read().unwrap_or_panic("Failed to read event") {
-                Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    if key.code == KeyCode::Char('c')
-                        && key.modifiers.contains(KeyModifiers::CONTROL)
-                    {
-                        set_running(false);
-                    } else {
-                        app.handle_key(key.code, key.modifiers);
+    runtime.block_on(async {
+        let mut terminal = ratatui::init();
+        let mut events = EventStream::new();
+
+        while crate::is_running() {
+            tokio::select! {
+                event = events.next() => match event {
+                    Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
+                        if key.code == KeyCode::Char('c')
+                            && key.modifiers.contains(KeyModifiers::CONTROL)
+                        {
+                            set_running(false);
+                        } else {
+                            app.handle_key(key.code, key.modifiers);
+                        }
                     }
-                }
-                Event::Mouse(mouse) => match mouse.kind {
-                    MouseEventKind::ScrollUp => app.handle_mouse_scroll(true),
-                    MouseEventKind::ScrollDown => app.handle_mouse_scroll(false),
+                    Some(Ok(Event::Mouse(mouse))) => match mouse.kind {
+                        MouseEventKind::ScrollUp => app.handle_mouse_scroll(true),
+                        MouseEventKind::ScrollDown => app.handle_mouse_scroll(false),
+                        _ => {}
+                    },
+                    Some(Ok(Event::Resize(_, _))) => {}
+                    Some(Err(_)) | None => set_running(false),
                     _ => {}
                 },
-                _ => {}
+                    ingest = async {
+                        let mut updates = Vec::new();
+                        let count = app.ingest_update_rx.recv_many(&mut updates, 256).await;
+                        (count, updates)
+                    }, if !app.paused => {
+                        let (count, updates) = ingest;
+                        if count > 0 {
+                            app.apply_ingest_updates(&updates);
+                        }
+                    }
+                update = status_rx.recv() => match update {
+                    Some(update) => app.handle_status_update(update),
+                    None => set_running(false),
+                }
             }
+
+            terminal
+                .draw(|frame| ui::render(frame, &mut app))
+                .unwrap_or_panic("Failed to draw frame");
         }
 
-        app.drain_ingest();
-        app.poll_export();
-        app.poll_copy();
+        app.stop_ingest();
+        ratatui::restore();
+    });
 
-        terminal
-            .draw(|frame| ui::render(frame, &mut app))
-            .unwrap_or_panic("Failed to draw frame");
-    }
-
-    app.stop_ingest();
     drop(runtime);
-    ratatui::restore();
     let _ = stdout().execute(DisableMouseCapture);
 
     if !args.no_color {
