@@ -1,8 +1,10 @@
 #![deny(clippy::unwrap_used)]
 
-use std::thread;
-use std::thread::JoinHandle;
-
+use crate::CliArgs;
+use crate::LogEntry;
+use crate::LogEntryKind;
+use crate::State;
+use crate::render_entry_lines;
 use ratatui::Frame;
 use ratatui::layout::Constraint;
 use ratatui::layout::Layout;
@@ -13,12 +15,7 @@ use ratatui::widgets::Paragraph;
 use strip_ansi_escapes::strip_str;
 use terminal_clipboard::set_string;
 
-use crate::CliArgs;
-use crate::LogEntry;
-use crate::LogEntryKind;
-use crate::State;
-use crate::render_entry_lines;
-
+use super::app::StatusUpdate;
 use super::border::render_dialog;
 use super::border::render_labeled_panel;
 use super::palette::PaletteSearch;
@@ -104,32 +101,24 @@ pub fn copy_action_feedback(action: CopyAction, args: &CliArgs) -> &'static str 
         .map_or("text", |option| option.feedback)
 }
 
-pub struct CopyJob {
-    feedback: &'static str,
-    handle: JoinHandle<Result<(), String>>,
+pub async fn copy_to_clipboard(text: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || set_string(&text).map_err(|err| err.to_string()))
+        .await
+        .map_err(|_| "copy cancelled".to_string())?
 }
 
-impl CopyJob {
-    pub fn start(text: String, feedback: &'static str) -> Result<Self, String> {
-        let handle = thread::Builder::new()
-            .name(format!("{}-clipboard", env!("CARGO_PKG_NAME")))
-            .spawn(move || set_string(&text).map_err(|err| err.to_string()))
-            .map_err(|err| format!("cannot start copy: {err}"))?;
+pub async fn run_copy(
+    status_tx: tokio::sync::mpsc::UnboundedSender<StatusUpdate>,
+    text: String,
+    feedback: &'static str,
+) {
+    let message = match copy_to_clipboard(text).await {
+        Ok(()) => format!("copied {feedback}"),
+        Err(err) => format!("copy failed: {err}"),
+    };
 
-        Ok(Self { feedback, handle })
-    }
-
-    pub fn is_finished(&self) -> bool {
-        self.handle.is_finished()
-    }
-
-    pub fn finish(self) -> String {
-        match self.handle.join() {
-            Ok(Ok(())) => format!("copied {}", self.feedback),
-            Ok(Err(err)) => format!("copy failed: {err}"),
-            Err(_) => format!("copy failed: {}", self.feedback),
-        }
-    }
+    let _ = status_tx.send(StatusUpdate::Message(message));
+    let _ = status_tx.send(StatusUpdate::CopyFinished);
 }
 
 /// Outer dialog height for a given entry preview line count and option count.
