@@ -123,6 +123,16 @@ reinstall: fmt lint
     just post_install
 
 [arg('tag', help='the tag to show changelog for')]
+[doc('updates changelog and creats a new git tag')]
+[group('release')]
+tag tag:
+    @git-cliff --offline --body="$(cat cliff_body.tera)" "$(git describe --tags --abbrev=0)..HEAD" --tag=$tag | cat - CHANGELOG.md | tee temp.md
+    @mv temp.md CHANGELOG.md
+    @git add CHANGELOG.md
+    @git commit -sm 'chore(changelogs): update CHANGELOG.md'
+    @git tag $tag
+
+[arg('tag', help='the tag to show changelog for')]
 [doc('shows changelog for tag')]
 [group('changelog')]
 tag_changelog tag:
