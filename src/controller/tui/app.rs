@@ -43,11 +43,11 @@ use crate::controller::setup::resolve_packages;
 use crate::controller::setup::seed_filter_input;
 
 use super::copy::CopyAction;
+use super::copy::CopyJob;
 use super::copy::available_copy_options;
 use super::copy::copy_action_feedback;
 use super::copy::copy_action_for_key;
 use super::copy::copy_text_for_entry;
-use super::copy::copy_to_clipboard;
 use super::device_picker::filter_device_indices;
 use super::device_picker::is_selectable;
 use super::display_cache::DisplayCache;
@@ -134,6 +134,7 @@ pub struct TuiApp {
     pub export_format_palette: PaletteSearch,
     pub export_format: ExportFormat,
     export_job: Option<ExportJob>,
+    copy_job: Option<CopyJob>,
     pub explorer_theme: Theme,
     pub catchall_packages: Vec<String>,
     current_app_resolved: bool,
@@ -192,6 +193,7 @@ impl TuiApp {
             export_format_palette: PaletteSearch::default(),
             export_format: ExportFormat::Pidcat,
             export_job: None,
+            copy_job: None,
             explorer_theme: theme::explorer_theme(),
             catchall_packages: Vec::default(),
             current_app_resolved: false,
@@ -551,6 +553,14 @@ impl TuiApp {
         }
     }
 
+    fn poll_copy(&mut self) {
+        if self.copy_job.as_ref().is_some_and(CopyJob::is_finished)
+            && let Some(job) = self.copy_job.take()
+        {
+            self.status_feedback = Some(job.finish());
+        }
+    }
+
     fn apply_filter(&mut self) {
         self.tui_filters = TuiFilterSet::parse(&self.filter_input);
         self.filter_focused = false;
@@ -737,6 +747,11 @@ impl TuiApp {
     }
 
     fn execute_copy_action(&mut self, action: CopyAction) {
+        if self.copy_job.is_some() {
+            self.status_feedback = Some("copy already in progress".to_string());
+            return;
+        }
+
         let Some(&entry_index) = self.filtered_indices.get(self.selected_filtered_index) else {
             return;
         };
@@ -747,10 +762,14 @@ impl TuiApp {
         let feedback = copy_action_feedback(action, &self.args);
         let text = copy_text_for_entry(entry, &self.state, &self.args, action);
         self.overlay = Overlay::None;
-        self.status_feedback = Some(match copy_to_clipboard(&text) {
-            Ok(()) => format!("copied {feedback}"),
-            Err(err) => format!("copy failed: {err}"),
-        });
+
+        match CopyJob::start(text, feedback) {
+            Ok(job) => {
+                self.status_feedback = Some(format!("copying {feedback}..."));
+                self.copy_job = Some(job);
+            }
+            Err(err) => self.status_feedback = Some(err),
+        }
     }
 
     fn handle_filter_key(&mut self, key: KeyCode) {
@@ -1255,6 +1274,7 @@ pub fn run_tui(args: &mut CliArgs) {
 
         app.drain_ingest();
         app.poll_export();
+        app.poll_copy();
 
         terminal
             .draw(|frame| ui::render(frame, &mut app))
