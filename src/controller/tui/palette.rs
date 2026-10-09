@@ -1,3 +1,30 @@
+// Copyright (C) 2026 AbdAlMoniem AlHifnawy
+//
+// This file is part of pidcatrs.
+//
+// pidcatrs is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// pidcatrs is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with pidcatrs.  If not, see <https://www.gnu.org/licenses/>.
+//
+// Author: AbdAlMoniem AlHifnawy
+
+//! Shared "palette" widget state used by every searchable list dialog.
+//!
+//! The command palette, device picker, copy menu, export-format menu and file
+//! path input all share the same behavior: a single-line text field with a
+//! cursor above a list with a highlighted row. [`PaletteSearch`] stores that
+//! state, [`handle_palette_key`] translates key presses into state changes,
+//! and the remaining helpers implement token matching and field rendering.
+
 #![deny(clippy::unwrap_used)]
 
 use ratatui::Frame;
@@ -11,24 +38,43 @@ use crossterm::event::KeyModifiers;
 
 use super::theme;
 
+/// State of a palette-style search field and its result list.
+///
+/// All indices (`cursor`, `selected`, `list_top`) are expressed in
+/// characters / rows, not bytes.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PaletteSearch {
+    /// The text currently typed into the search field.
     pub query: String,
+    /// Cursor position inside `query`, measured in characters.
     pub cursor: usize,
+    /// Index of the highlighted row in the result list.
     pub selected: usize,
+    /// Index of the first visible row of the result list (scroll offset).
     pub list_top: usize,
 }
 
+/// The outcome of feeding a key press to [`handle_palette_key`].
+///
+/// The caller uses this to decide whether it needs to react (re-filter the
+/// list, activate the selection, close the dialog, ...).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PaletteKeyAction {
+    /// Nothing the caller needs to react to (cursor or selection moved, or
+    /// the key was ignored).
     None,
+    /// The user confirmed the highlighted row (`Enter`).
     Enter,
+    /// The user asked to close the dialog (`Esc` with an empty query).
     Close,
+    /// The query was cleared by `Esc`; the list should be reset.
     ClearSearch,
+    /// The query text changed; the list should be re-filtered.
     QueryChanged,
 }
 
 impl PaletteSearch {
+    /// Clears the query and resets cursor, selection and scroll to the start.
     pub fn reset(&mut self) {
         self.query.clear();
         self.cursor = 0;
@@ -36,17 +82,30 @@ impl PaletteSearch {
         self.list_top = 0;
     }
 
+    /// Highlights `first_row` and scrolls the list back to the top.
+    ///
+    /// # Arguments
+    ///
+    /// * `first_row` - Row index to select (typically the first selectable row).
     pub fn select_first(&mut self, first_row: usize) {
         self.selected = first_row;
         self.list_top = 0;
     }
 
+    /// Inserts `ch` at the cursor and advances the cursor by one character.
+    ///
+    /// # Arguments
+    ///
+    /// * `ch` - The character to insert.
     pub fn insert_char(&mut self, ch: char) {
         let byte_index = char_index_to_byte(&self.query, self.cursor);
         self.query.insert(byte_index, ch);
         self.cursor += 1;
     }
 
+    /// Deletes the character before the cursor (`Backspace`).
+    ///
+    /// Does nothing when the cursor is at the start of the query.
     pub fn delete_before_cursor(&mut self) {
         if self.cursor == 0 {
             return;
@@ -57,6 +116,9 @@ impl PaletteSearch {
         self.cursor -= 1;
     }
 
+    /// Deletes the character under the cursor (`Delete`).
+    ///
+    /// Does nothing when the cursor is at the end of the query.
     pub fn delete_at_cursor(&mut self) {
         let char_count = self.query.chars().count();
         if self.cursor >= char_count {
@@ -67,6 +129,20 @@ impl PaletteSearch {
         self.query.remove(byte_index);
     }
 
+    /// Moves the highlighted row by `delta`, skipping non-selectable rows.
+    ///
+    /// The target row is `selected + delta`, clamped to the list. The first
+    /// selectable row at or beyond the target (in the direction of travel) is
+    /// chosen; if the edge of the list is reached without finding one, the
+    /// selectable row closest to the target on the way back is used. If no
+    /// row qualifies the selection does not change.
+    ///
+    /// # Arguments
+    ///
+    /// * `row_count` - Total number of rows in the list.
+    /// * `delta` - Signed number of rows to move (negative moves up).
+    /// * `is_selectable` - Predicate telling whether a row index can be
+    ///   highlighted (e.g. section headers cannot).
     pub fn move_selection(
         &mut self,
         row_count: usize,
@@ -102,6 +178,12 @@ impl PaletteSearch {
         }
     }
 
+    /// Clamps the highlighted row into `0..row_count`.
+    ///
+    /// # Arguments
+    ///
+    /// * `row_count` - Total number of rows in the list; `0` resets the
+    ///   selection to row `0`.
     pub fn clamp_selection(&mut self, row_count: usize) {
         if row_count == 0 {
             self.selected = 0;
@@ -113,6 +195,11 @@ impl PaletteSearch {
         }
     }
 
+    /// Adjusts `list_top` so the highlighted row is inside the viewport.
+    ///
+    /// # Arguments
+    ///
+    /// * `list_height` - Number of rows visible at once; `0` is a no-op.
     pub fn ensure_list_top_visible(&mut self, list_height: usize) {
         if list_height == 0 {
             return;
@@ -126,6 +213,15 @@ impl PaletteSearch {
     }
 }
 
+/// Splits a search query into lowercase, whitespace-separated tokens.
+///
+/// # Arguments
+///
+/// * `query` - The raw text typed by the user.
+///
+/// # Returns
+///
+/// The ASCII-lowercased tokens; empty for a blank query.
 pub fn query_tokens(query: &str) -> Vec<String> {
     query
         .split_whitespace()
@@ -133,6 +229,20 @@ pub fn query_tokens(query: &str) -> Vec<String> {
         .collect()
 }
 
+/// Tests whether `haystack` contains every token of `query`.
+///
+/// Matching is case-insensitive (ASCII) and order-independent: each
+/// whitespace-separated token of the query must appear somewhere in the
+/// haystack.
+///
+/// # Arguments
+///
+/// * `query` - The user's search text.
+/// * `haystack` - The text to search in.
+///
+/// # Returns
+///
+/// `true` if all tokens match, or if the query has no tokens.
 pub fn matches_query(query: &str, haystack: &str) -> bool {
     let tokens = query_tokens(query);
     if tokens.is_empty() {
@@ -143,6 +253,30 @@ pub fn matches_query(query: &str, haystack: &str) -> bool {
     tokens.iter().all(|token| haystack.contains(token))
 }
 
+/// Applies a key press to a [`PaletteSearch`].
+///
+/// Handled keys:
+///
+/// - `Esc` — clears a non-empty query ([`PaletteKeyAction::ClearSearch`]) or
+///   asks to close ([`PaletteKeyAction::Close`]) when it is already empty;
+/// - `Enter` — [`PaletteKeyAction::Enter`];
+/// - `Backspace` / `Delete` / printable characters (without `Ctrl`) — edit the
+///   query ([`PaletteKeyAction::QueryChanged`]);
+/// - `Left` / `Right` / `Home` / `End` — move the text cursor;
+/// - `j` / `Down`, `k` / `Up`, `PageDown`, `PageUp` — move the highlighted
+///   row by 1 or 5 rows.
+///
+/// # Arguments
+///
+/// * `search` - The palette state to mutate.
+/// * `key` - The pressed key.
+/// * `modifiers` - The active modifier keys.
+/// * `row_count` - Number of rows in the result list.
+/// * `row_selectable` - Predicate telling whether a row can be highlighted.
+///
+/// # Returns
+///
+/// A [`PaletteKeyAction`] describing what the caller should do next.
 pub fn handle_palette_key(
     search: &mut PaletteSearch,
     key: KeyCode,
@@ -213,6 +347,17 @@ pub fn handle_palette_key(
     }
 }
 
+/// Renders the search field of a palette and positions the terminal cursor.
+///
+/// Shows `placeholder` while the query is empty; otherwise shows the part of
+/// the query that fits in `area`, scrolled so the cursor stays visible.
+///
+/// # Arguments
+///
+/// * `frame` - Frame to draw on (also receives the cursor position).
+/// * `area` - Single-row region of the field.
+/// * `search` - The palette state to display.
+/// * `placeholder` - Hint text shown while the query is empty.
 pub fn render_search_field(
     frame: &mut Frame,
     area: Rect,
@@ -237,6 +382,19 @@ pub fn render_search_field(
     frame.set_cursor_position((cursor_x, area.y));
 }
 
+/// Builds the visible line of a single-line text input.
+///
+/// # Arguments
+///
+/// * `input` - The full text of the input.
+/// * `placeholder` - Hint shown (dimmed) when `input` is empty.
+/// * `cursor_chars` - Cursor position in characters.
+/// * `visible_width` - Number of columns available for the text.
+///
+/// # Returns
+///
+/// A tuple of the line to draw and the number of leading characters that
+/// were scrolled out of view (needed to place the terminal cursor).
 pub fn input_field_line(
     input: &str,
     placeholder: &str,
@@ -257,6 +415,19 @@ pub fn input_field_line(
     (Line::from(Span::raw(display)), scroll_chars)
 }
 
+/// Computes the horizontal window of `input` that keeps the cursor visible.
+///
+/// # Arguments
+///
+/// * `input` - The full text of the input.
+/// * `cursor_chars` - Cursor position in characters (clamped to the text).
+/// * `width` - Number of columns available; `0` yields an empty window.
+///
+/// # Returns
+///
+/// `(scroll_chars, display)` where `scroll_chars` is the number of characters
+/// skipped from the start and `display` is the visible slice (at most `width`
+/// characters).
 fn input_viewport(input: &str, cursor_chars: usize, width: usize) -> (usize, String) {
     if width == 0 {
         return (0, String::new());
@@ -281,12 +452,33 @@ fn input_viewport(input: &str, cursor_chars: usize, width: usize) -> (usize, Str
     (scroll_chars, display)
 }
 
+/// Converts a character index into a byte index of `text`.
+///
+/// # Arguments
+///
+/// * `text` - The string to index.
+/// * `char_index` - Position in characters.
+///
+/// # Returns
+///
+/// The byte offset of that character, or `text.len()` if `char_index` is
+/// past the end.
 fn char_index_to_byte(text: &str, char_index: usize) -> usize {
     text.char_indices()
         .nth(char_index)
         .map_or(text.len(), |(index, _)| index)
 }
 
+/// Finds the first selectable row of a list.
+///
+/// # Arguments
+///
+/// * `row_count` - Total number of rows.
+/// * `is_selectable` - Predicate telling whether a row can be highlighted.
+///
+/// # Returns
+///
+/// The index of the first selectable row, or `0` if there is none.
 fn first_selectable_row(row_count: usize, is_selectable: &impl Fn(usize) -> bool) -> usize {
     (0..row_count)
         .find(|&index| is_selectable(index))
