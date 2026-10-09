@@ -1,3 +1,35 @@
+// Copyright (C) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+//! Cargo build script for the `pidcatrs` package.
+//!
+//! This script runs before the main crate is compiled. It wires compile-time artifacts and
+//! keeps release metadata aligned with [`CARGO_PKG_VERSION`](https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts).
+//!
+//! # Responsibilities
+//!
+//! - Registers `cargo:rerun-if-changed` for `Cargo.toml`, `resources.rc`, the Inno Setup script,
+//!   and bundled theme sources under `src/config/themes`.
+//! - Writes `$OUT_DIR/bundled_themes.rs`, a `BUNDLED_THEMES` table that embeds each
+//!   `*.toml` theme via [`include_str!`].
+//! - Updates `#define AppVersion` in `build/setup/setup.iss` when the package version changes.
+//! - Compiles Windows resource data from `resources.rc` with [`embed_resource`] (optional manifest).
+//!
+//! Build-script output uses the local `info!`, `warn!`, `error!`, and `note!` macros, which prefix
+//! lines with colored labels for easier scanning in verbose `cargo build` logs.
+
 use build_print::custom_println;
 use scope_functions::Apply;
 use scope_functions::Run;
