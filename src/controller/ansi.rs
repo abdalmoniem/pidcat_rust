@@ -1,3 +1,32 @@
+// Copyright (c) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+
+//! ANSI escape sequence handling for colored log text.
+//!
+//! This module provides two related facilities:
+//!
+//! - locating CSI escape sequences in a string and re-inserting them into slices of the plain
+//!   text (`get_ansi_segments`, `get_active_codes_at_pos`, `insert_ansi_codes_in_range`),
+//!   which is what line wrapping needs to keep colors intact across line breaks;
+//! - converting ANSI-colored text into a ratatui `Line` of styled `Span`s
+//!   (`line_from_ansi`) for display in the TUI.
+//!
+//! Only CSI sequences (`ESC [ ... <letter>`) are recognized. Positions are counted in
+//! characters of the visible text (escape sequences excluded).
+//!
+//! Note: this file is currently not declared as a module in `controller/mod.rs`, so it is not
+//! part of the compiled crate; equivalent helpers live in
+//! `log_processor` and the TUI.
+
 #![deny(clippy::unwrap_used)]
 
 use ratatui::style::Color;
@@ -9,11 +38,22 @@ use ratatui::text::Span;
 use crate::AnsiSegment;
 use crate::ValueOrPanic;
 
+/// One item produced while walking over text that may contain ANSI escape sequences.
 enum AnsiWalkEvent {
+    /// A visible character.
     Char(char),
-    Sequence { position: usize, code: String },
+    /// A complete escape sequence.
+    Sequence {
+        /// Number of visible characters that precede the sequence in the text.
+        position: usize,
+        /// The full sequence text, including the leading `\x1b`.
+        code: String,
+    },
 }
 
+/// Returns an iterator over `text` that yields visible characters and escape sequences in order.
+///
+/// See [`AnsiWalk`] for how sequences are recognized.
 fn iter_ansi_walk(text: &str) -> impl Iterator<Item = AnsiWalkEvent> + '_ {
     AnsiWalk {
         chars: text.chars().peekable(),
@@ -21,14 +61,26 @@ fn iter_ansi_walk(text: &str) -> impl Iterator<Item = AnsiWalkEvent> + '_ {
     }
 }
 
+/// Iterator state for [`iter_ansi_walk`].
+///
+/// A sequence starts at `\x1b` immediately followed by `[` and extends through the first ASCII
+/// alphabetic character after it (or to the end of the text if there is none). A lone `\x1b`
+/// that is not followed by `[` is treated as a visible character.
 struct AnsiWalk<'a> {
+    /// Remaining characters of the input, with one character of lookahead.
     chars: std::iter::Peekable<std::str::Chars<'a>>,
+    /// Count of visible characters yielded so far.
     position: usize,
 }
 
+/// Walks the text one visible character or escape sequence at a time.
 impl Iterator for AnsiWalk<'_> {
+    /// Either a visible character or a whole escape sequence.
     type Item = AnsiWalkEvent;
 
+    /// Yields the next visible character or escape sequence, or `None` at the end of the text.
+    ///
+    /// Escape sequences do not advance the visible `position`; characters do.
     fn next(&mut self) -> Option<Self::Item> {
         let ch = self.chars.next()?;
 
@@ -60,6 +112,12 @@ impl Iterator for AnsiWalk<'_> {
     }
 }
 
+/// Finds every escape sequence in `text` together with the index of the visible character it
+/// precedes.
+///
+/// The returned segments are in text order. A segment's `pos` is the number of visible
+/// characters before it, so sequences at the end of the text have `pos` equal to the visible
+/// length.
 pub fn get_ansi_segments(text: &str) -> Vec<AnsiSegment> {
     iter_ansi_walk(text)
         .filter_map(|event| match event {
@@ -71,6 +129,12 @@ pub fn get_ansi_segments(text: &str) -> Vec<AnsiSegment> {
         .collect()
 }
 
+/// Returns the escape sequences still in effect just before visible position `pos`.
+///
+/// Only segments strictly before `pos` are considered (iteration stops at the first segment with
+/// `pos >= pos`, so `segments` must be ordered). A segment containing `0m` is treated as a reset
+/// and clears everything collected so far; every other segment is appended. The result can be
+/// emitted at the start of a continuation line to restore the active colors.
 pub fn get_active_codes_at_pos(segments: &[AnsiSegment], pos: usize) -> Vec<String> {
     let mut active = Vec::default();
 
@@ -89,6 +153,14 @@ pub fn get_active_codes_at_pos(segments: &[AnsiSegment], pos: usize) -> Vec<Stri
     active
 }
 
+/// Rebuilds a colored slice of the text.
+///
+/// `plain_text` is the already-sliced visible text covering the visible range
+/// `start_pos..end_pos` of the original string. The output starts with all `active_codes`, then
+/// contains the characters of `plain_text` with each segment from `segments` re-inserted before
+/// the character at its original position. Segments positioned at or after `end_pos` are not
+/// inserted, and segments before `start_pos` are skipped (they are expected to be represented by
+/// `active_codes`).
 pub fn insert_ansi_codes_in_range(
     plain_text: &str,
     segments: &[AnsiSegment],
@@ -135,6 +207,11 @@ pub fn insert_ansi_codes_in_range(
     result
 }
 
+/// Converts ANSI-colored `text` into a ratatui [`Line`] of styled [`Span`]s.
+///
+/// Text between escape sequences becomes one span styled by the sequences seen so far (see
+/// `apply_ansi_code`); the escape sequences themselves do not appear in the output. The returned
+/// line owns its data (`'static`).
 pub fn line_from_ansi(text: &str) -> Line<'static> {
     let mut spans = Vec::default();
     let mut current = String::new();
@@ -159,6 +236,17 @@ pub fn line_from_ansi(text: &str) -> Line<'static> {
     Line::from(spans)
 }
 
+/// Applies one SGR escape sequence (`ESC [ ... m`) to `base` and returns the new style.
+///
+/// Supported parameters, which may be combined with `;` in a single sequence:
+///
+/// - `0` resets the style;
+/// - `38;2;r;g;b` / `48;2;r;g;b` set a true-color foreground / background;
+/// - `38;5;n` / `48;5;n` set a 256-color foreground / background;
+/// - everything else is passed to `apply_basic_sgr` (bold, 16 colors, default colors).
+///
+/// Sequences that do not start with `ESC [`, empty sequences, and parameters that cannot be
+/// parsed leave the style unchanged.
 fn apply_ansi_code(mut base: Style, code: &str) -> Style {
     if !code.starts_with("\x1b[") {
         return base;
@@ -231,6 +319,12 @@ fn apply_ansi_code(mut base: Style, code: &str) -> Style {
     base
 }
 
+/// Applies a single basic SGR parameter to `style`.
+///
+/// Handles bold on (`1`) and off (`22`), the eight standard foreground (`30`-`37`) and
+/// background (`40`-`47`) colors, their bright variants (`90`-`97`, `100`-`107`), and the
+/// default foreground (`39`) and background (`49`) colors. Bright white (`97`, `107`) maps to
+/// [`Color::White`]. Unknown parameters return `style` unchanged.
 fn apply_basic_sgr(style: Style, code: u16) -> Style {
     match code {
         1 => style.add_modifier(Modifier::BOLD),
@@ -273,6 +367,12 @@ fn apply_basic_sgr(style: Style, code: u16) -> Style {
     }
 }
 
+/// Converts an xterm 256-color palette `index` to a ratatui [`Color`].
+///
+/// - `0..=15` are the standard and bright colors, resolved through the corresponding basic SGR
+///   foreground codes (falling back to [`Color::White`]);
+/// - `16..=231` form a 6x6x6 RGB cube whose channel levels are `0` or `55 + 40 * level`;
+/// - `232..=255` are the 24-step grayscale ramp, `8 + 10 * step`.
 fn ansi256_to_color(index: u8) -> Color {
     match index {
         0..=15 => {
