@@ -1,5 +1,43 @@
+// Copyright (c) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+#![doc = "\
+pidcatrs library: a colorized Android logcat viewer with filtering, themes, and TUI.\n\
+\n\
+The crate re-exports the public API used by the `pidcatrs` binary and integration tests: \
+configuration and themes ([`Config`], [`Theme`]), ADB helpers, log parsing and rendering, \
+plain streaming and interactive TUI entry points, and core model types ([`LogEntry`], [`State`], \
+[`CliArgs`]).\n\
+\n\
+# Modes\n\
+\n\
+- **TUI** — [`run_tui`] when stdout is a terminal and `--plain` is not set.\n\
+- **Plain** — [`run_plain`] for pipes, files, or `--plain`.\n\
+\n\
+# Layout\n\
+\n\
+- **config** — paths, documented TOML config, JSON Schema, shell completions, themes.\n\
+- **controller** — adb, log processing, plain/TUI runners, terminal restore, output writers.\n\
+- **model** — CLI args, parsed log lines, filters, session state, ANSI segments.\
+"]
+
+/// Configuration paths, file format, JSON Schema, shell completions, and color themes.
 mod config;
+/// Runtime controllers: ADB, log processing, plain and TUI modes, and shared utilities.
 mod controller;
+/// Domain types for devices, log records, filtering, and session state.
 mod model;
 
 pub use config::completions::write_completions;
