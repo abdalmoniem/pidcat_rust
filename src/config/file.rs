@@ -176,7 +176,7 @@ pub const LOG_FORMAT_DOC: &[&str] = &[
     "Log format requested from adb (\"adb logcat -v\") and expected in piped input.",
     "values (case-insensitive): \"brief\" or \"B\", \"long\" or \"L\", \"process\" or \"P\",",
     "\"raw\" or \"R\", \"tag\" or \"T\", \"thread\" or \"Th\", \"threadtime\" or \"Tht\",",
-    "\"time\" or \"Ti\"; only \"brief\" and \"threadtime\" are currently implemented",
+    "\"time\" or \"Ti\"",
     "default: \"brief\"",
     "command line: -f, --log-format <FORMAT>",
     "example: log-format = \"threadtime\"",

@@ -1,6 +1,7 @@
+logs/**
+target/**
+build/setup/Output/**
+.vscode/*.log
 *.log
-/.vscode/*.log
-/target
-/build/setup/Output/
 *.svg
 *.json.gz

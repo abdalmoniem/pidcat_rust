@@ -116,6 +116,7 @@ pub fn build_state(
         catchall_packages: catchall_packages.to_vec(),
         token_colors,
         known_tokens: std::collections::HashMap::default(),
+        long_pending: None,
     }
 }
 

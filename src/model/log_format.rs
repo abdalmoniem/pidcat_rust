@@ -95,11 +95,67 @@ impl LogFormat {
                 tid_index: None,
                 msg_index: Some(5),
             },
-            LogFormatKind::Long => unimplemented!("Long LogFormatKind not implemented yet!"),
-            LogFormatKind::Process => unimplemented!("Process LogFormatKind not implemented yet!"),
-            LogFormatKind::Raw => unimplemented!("Raw LogFormatKind not implemented yet!"),
-            LogFormatKind::Tag => unimplemented!("Tag LogFormatKind not implemented yet!"),
-            LogFormatKind::Thread => unimplemented!("Thread LogFormatKind not implemented yet!"),
+            LogFormatKind::Long => LogFormatMatchConfig {
+                regex: Regex::new(
+                    r"^\[\s+(\d+-\d+)\s+((?:\d+:?)+(?:\.\d+)?)\s+(?:(\S+):\s+(\d+):\s*(\d+)|(\d+):\s*(\d+))\s+([A-Z])/(.+?)\s+\]\s*(.*)$",
+                )
+                .unwrap(),
+                date_index: Some(1),
+                time_index: Some(2),
+                level_index: Some(8),
+                tag_index: Some(9),
+                pid_index: Some(4),
+                uid_index: Some(3),
+                tid_index: Some(5),
+                msg_index: Some(10),
+            },
+            LogFormatKind::Process => LogFormatMatchConfig {
+                regex: Regex::new(
+                    r"^([A-Z])\(\s*(?:(\S+):\s*)?(\d+)\)\s+(.*?)(?:\s+\((.+?)\))?\s*$",
+                )
+                .unwrap(),
+                date_index: None,
+                time_index: None,
+                level_index: Some(1),
+                tag_index: Some(5),
+                pid_index: Some(3),
+                uid_index: Some(2),
+                tid_index: None,
+                msg_index: Some(4),
+            },
+            LogFormatKind::Raw => LogFormatMatchConfig {
+                regex: Regex::new(r"^(.*)$").unwrap(),
+                date_index: None,
+                time_index: None,
+                level_index: Some(9),
+                tag_index: Some(10),
+                pid_index: Some(11),
+                uid_index: Some(12),
+                tid_index: None,
+                msg_index: Some(1),
+            },
+            LogFormatKind::Tag => LogFormatMatchConfig {
+                regex: Regex::new(r"^([A-Z])/(.+?): (.*?)$").unwrap(),
+                date_index: None,
+                time_index: None,
+                level_index: Some(1),
+                tag_index: Some(2),
+                pid_index: Some(9),
+                uid_index: Some(10),
+                tid_index: None,
+                msg_index: Some(3),
+            },
+            LogFormatKind::Thread => LogFormatMatchConfig {
+                regex: Regex::new(r"^([A-Z])\(\s*(?:(\S+):\s*)?(\d+):\s*(\d+)\)\s*(.*?)$").unwrap(),
+                date_index: None,
+                time_index: None,
+                level_index: Some(1),
+                tag_index: Some(10),
+                pid_index: Some(3),
+                uid_index: Some(2),
+                tid_index: Some(4),
+                msg_index: Some(5),
+            },
             LogFormatKind::ThreadTime => LogFormatMatchConfig {
                 regex: Regex::new(
                     r"^(\d+-\d+)\s+((?:\d+:?)+(?:\.\d+)?)\s+(?:(\S+)\s+)?(\d+)\s+(\d+)\s+([A-Z])\s+(.*?):\s+(.*?)$"
@@ -113,7 +169,20 @@ impl LogFormat {
                 tid_index: Some(5),
                 msg_index: Some(8),
             },
-            LogFormatKind::Time => unimplemented!("Time LogFormatKind not implemented yet!"),
+            LogFormatKind::Time => LogFormatMatchConfig {
+                regex: Regex::new(
+                    r"^(\d+-\d+)\s+((?:\d+:?)+(?:\.\d+)?)\s+([A-Z])/(.+?)\(\s*(?:(\S+):\s*)?(\d+)\): (.*?)$",
+                )
+                .unwrap(),
+                date_index: Some(1),
+                time_index: Some(2),
+                level_index: Some(3),
+                tag_index: Some(4),
+                pid_index: Some(6),
+                uid_index: Some(5),
+                tid_index: None,
+                msg_index: Some(7),
+            },
         };
 
         Self { kind, match_cfg }
@@ -156,12 +225,35 @@ impl LogFormat {
     }
 
     /// ADB logcat `-v` format string, including `uid` when supported.
+    /// Owner ids from a `-v long` header (`uid:pid:tid` or `pid:tid`).
+    pub fn long_owner_ids(captures: &regex::Captures) -> (String, String) {
+        if captures.get(3).is_some() {
+            let uid = captures
+                .get(3)
+                .map_or(String::default(), |mat| mat.as_str().trim().to_string());
+            let pid = captures
+                .get(4)
+                .map_or(String::default(), |mat| mat.as_str().trim().to_string());
+            return (uid, pid);
+        }
+
+        let pid = captures
+            .get(6)
+            .map_or(String::default(), |mat| mat.as_str().trim().to_string());
+        (String::default(), pid)
+    }
+
     pub fn adb_verb(&self) -> String {
         match self.kind {
             LogFormatKind::Brief | LogFormatKind::ThreadTime => {
                 format!("{kind},uid", kind = self.kind)
             }
-            kind => format!("{kind}"),
+            LogFormatKind::Raw => format!("{kind}", kind = self.kind),
+            LogFormatKind::Long
+            | LogFormatKind::Process
+            | LogFormatKind::Tag
+            | LogFormatKind::Thread
+            | LogFormatKind::Time => format!("{kind},uid", kind = self.kind),
         }
     }
 }

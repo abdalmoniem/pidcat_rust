@@ -14,6 +14,8 @@ use crate::AnsiSegment;
 use crate::CliArgs;
 use crate::LogEntry;
 use crate::LogEntryKind;
+use crate::LogFormat;
+use crate::LogFormatKind;
 use crate::LogLevel;
 use crate::State;
 use crate::ValueOrPanic;
@@ -342,7 +344,7 @@ pub fn process_line(line: &str, state: &mut State, args: &CliArgs) -> Option<Log
 
     let log_line = log_line_regex.captures(line)?;
 
-    let pid = log_line
+    let mut pid = log_line
         .get(
             args.log_format
                 .pid_index()
@@ -408,7 +410,7 @@ pub fn process_line(line: &str, state: &mut State, args: &CliArgs) -> Option<Log
         });
     }
 
-    let uid = log_line
+    let mut uid = log_line
         .get(
             args.log_format
                 .uid_index()
@@ -417,6 +419,10 @@ pub fn process_line(line: &str, state: &mut State, args: &CliArgs) -> Option<Log
         .map_or(String::default(), |mat| mat.as_str().to_string())
         .trim()
         .to_string();
+
+    if args.log_format.kind == LogFormatKind::Long {
+        (uid, pid) = LogFormat::long_owner_ids(&log_line);
+    }
 
     let identify_by_uid = !uid.is_empty() && state.uids_map.contains_key(&uid);
     let owner = match identify_by_uid {
@@ -510,11 +516,102 @@ fn split_rendered_lines(text: &str) -> Vec<String> {
     lines
 }
 
-pub fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [Writer]) {
-    if let Some(entry) = process_line(line, state, args) {
-        render_entry(&entry, state, args, writers);
+fn finalize_long_log_entry(mut entry: LogEntry) -> LogEntry {
+    let header = entry.raw.clone();
+    let body = entry.message.clone();
+    entry.raw = if body.is_empty() {
+        format!("{header}\n\n")
+    } else {
+        format!("{header}\n{body}\n\n")
+    };
+    entry
+}
+
+fn long_passthrough_entry(line: &str, args: &CliArgs) -> LogEntry {
+    LogEntry {
+        kind: LogEntryKind::Normal,
+        timestamp: timestamp_from_log_line(args, line),
+        pid: String::default(),
+        uid: String::default(),
+        owner: String::default(),
+        package: String::default(),
+        tag: String::default(),
+        level: LogLevel::default(),
+        message: String::default(),
+        banner_text: String::default(),
+        raw: format!("{line}\n"),
+    }
+}
+
+fn process_long_log_line(line: &str, state: &mut State, args: &CliArgs) -> Vec<LogEntry> {
+    let mut finished = Vec::default();
+    let trimmed = line.trim_end_matches(['\r', '\n']);
+
+    if trimmed.is_empty() {
+        if let Some(entry) = state.long_pending.take() {
+            finished.push(finalize_long_log_entry(entry));
+        }
+        return finished;
+    }
+
+    if trimmed.starts_with("--------- beginning of") {
+        if let Some(entry) = state.long_pending.take() {
+            finished.push(finalize_long_log_entry(entry));
+        }
+        finished.push(long_passthrough_entry(trimmed, args));
+        return finished;
+    }
+
+    if args.log_format.regex().captures(trimmed).is_some() {
+        if let Some(prev) = state.long_pending.take() {
+            finished.push(finalize_long_log_entry(prev));
+        }
+        if let Some(entry) = process_line(trimmed, state, args) {
+            if entry.message.is_empty() {
+                state.long_pending = Some(entry);
+            } else {
+                finished.push(finalize_long_log_entry(entry));
+            }
+        }
+        return finished;
+    }
+
+    if let Some(pending) = &mut state.long_pending {
+        if !pending.message.is_empty() {
+            pending.message.push('\n');
+        }
+        pending.message.push_str(trimmed);
+    }
+
+    finished
+}
+
+pub fn process_log_input(line: &str, state: &mut State, args: &CliArgs) -> Vec<LogEntry> {
+    if args.log_format.kind == LogFormatKind::Long {
+        process_long_log_line(line, state, args)
+    } else if let Some(entry) = process_line(line, state, args) {
+        vec![entry]
+    } else {
+        Vec::default()
+    }
+}
+
+pub fn flush_long_log_entry(state: &mut State, args: &CliArgs, writers: &mut [Writer]) {
+    if args.log_format.kind != LogFormatKind::Long {
+        return;
+    }
+
+    if let Some(entry) = state.long_pending.take() {
+        render_entry(&finalize_long_log_entry(entry), state, args, writers);
         writers.iter_mut().for_each(Writer::flush);
     }
+}
+
+pub fn write_log_line(line: &str, state: &mut State, args: &CliArgs, writers: &mut [Writer]) {
+    for entry in process_log_input(line, state, args) {
+        render_entry(&entry, state, args, writers);
+    }
+    writers.iter_mut().for_each(Writer::flush);
 }
 
 pub fn format_process_start_messages(

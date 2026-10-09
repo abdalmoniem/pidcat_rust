@@ -41,6 +41,7 @@ impl DisplayCache {
                 catchall_packages: Vec::default(),
                 token_colors: Vec::default(),
                 known_tokens: Default::default(),
+                long_pending: None,
             },
             filter_generation: 0,
             width: 0,

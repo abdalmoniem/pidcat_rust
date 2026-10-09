@@ -47,7 +47,7 @@
       "type": "boolean"
     },
     "log-format": {
-      "description": "Log format requested from adb (\"adb logcat -v\") and expected in piped input.\nvalues (case-insensitive): \"brief\" or \"B\", \"long\" or \"L\", \"process\" or \"P\",\n\"raw\" or \"R\", \"tag\" or \"T\", \"thread\" or \"Th\", \"threadtime\" or \"Tht\",\n\"time\" or \"Ti\"; only \"brief\" and \"threadtime\" are currently implemented\ndefault: \"brief\"\ncommand line: -f, --log-format <FORMAT>\nexample: log-format = \"threadtime\"",
+      "description": "Log format requested from adb (\"adb logcat -v\") and expected in piped input.\nvalues (case-insensitive): \"brief\" or \"B\", \"long\" or \"L\", \"process\" or \"P\",\n\"raw\" or \"R\", \"tag\" or \"T\", \"thread\" or \"Th\", \"threadtime\" or \"Tht\",\n\"time\" or \"Ti\"\ndefault: \"brief\"\ncommand line: -f, --log-format <FORMAT>\nexample: log-format = \"threadtime\"",
       "enum": [
         "B",
         "brief",

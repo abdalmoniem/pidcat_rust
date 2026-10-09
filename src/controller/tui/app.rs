@@ -174,6 +174,7 @@ impl TuiApp {
                 catchall_packages: Vec::default(),
                 token_colors: Vec::default(),
                 known_tokens: Default::default(),
+                long_pending: None,
             },
             entries: VecDeque::default(),
             filtered_indices: Vec::default(),

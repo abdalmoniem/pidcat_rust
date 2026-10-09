@@ -22,6 +22,7 @@ use crate::controller::setup::bootstrap_adb_plain;
 use crate::controller::setup::build_state;
 use crate::controller::setup::normalize_cli_args;
 use crate::controller::setup::resolve_packages;
+use crate::flush_long_log_entry;
 use crate::open_output_writer;
 use crate::spawn_logcat;
 use crate::trim_log_line_bytes;
@@ -178,6 +179,8 @@ pub fn run_plain(args: &mut CliArgs) {
             .for_each(|writer| writer.width = Some(get_console_width()));
         write_log_line(&line, &mut state, args, writers);
     }
+
+    flush_long_log_entry(&mut state, args, writers);
 
     if let LogSource::Process(mut adb_child) = log_source {
         let kill_fail_msg = format!("Failed to kill child process {pid}", pid = adb_child.id())

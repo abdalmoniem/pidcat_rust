@@ -130,7 +130,9 @@ async fn write_raw_entries(path: &str, entries: &VecDeque<LogEntry>) -> Result<u
         file.write_all(entry.raw.as_bytes())
             .await
             .map_err(write_err)?;
-        file.write_all(b"\n").await.map_err(write_err)?;
+        if !entry.raw.ends_with('\n') {
+            file.write_all(b"\n").await.map_err(write_err)?;
+        }
     }
 
     file.flush().await.map_err(write_err)?;

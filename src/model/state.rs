@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::LogEntry;
 use crate::LogLevel;
 
 #[derive(Clone, Debug)]
@@ -13,4 +14,5 @@ pub struct State {
     pub catchall_packages: Vec<String>,
     pub token_colors: Vec<colored::Color>,
     pub known_tokens: HashMap<String, colored::Color>,
+    pub long_pending: Option<LogEntry>,
 }

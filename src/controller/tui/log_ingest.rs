@@ -21,7 +21,7 @@ use crate::TuiFilterSet;
 use crate::ValueOrPanic;
 use crate::build_logcat_command;
 use crate::open_output_writer;
-use crate::process_line;
+use crate::process_log_input;
 use crate::render_entry;
 use crate::trim_log_line;
 use crate::trim_log_line_bytes;
@@ -98,25 +98,23 @@ struct IngestContext {
 
 impl IngestContext {
     fn ingest_line(&mut self, line: String) {
-        let Some(entry) = process_line(&line, &mut self.state, &self.args) else {
-            return;
-        };
+        for entry in process_log_input(&line, &mut self.state, &self.args) {
+            let matches_filter = self
+                .filters
+                .read()
+                .unwrap_or_panic("filter lock poisoned")
+                .matches(&entry, &self.state);
 
-        let matches_filter = self
-            .filters
-            .read()
-            .unwrap_or_panic("filter lock poisoned")
-            .matches(&entry, &self.state);
+            if matches_filter && let Some(file_tx) = &self.file_tx {
+                let _ = file_tx.send(entry.clone());
+            }
 
-        if matches_filter && let Some(file_tx) = &self.file_tx {
-            let _ = file_tx.send(entry.clone());
+            let _ = self.update_tx.send(IngestUpdate {
+                entry,
+                matches_filter,
+                state: self.state.clone(),
+            });
         }
-
-        let _ = self.update_tx.send(IngestUpdate {
-            entry,
-            matches_filter,
-            state: self.state.clone(),
-        });
     }
 
     async fn wait_if_paused(&self) {
