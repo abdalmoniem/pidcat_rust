@@ -12,4 +12,4 @@ anyhow = "1.0.102"
 scope-functions = "1.1.0"
 xshell = { path = "../xshell" }
 clap = { version = "4.5.60", features = ["derive"] }
-pidcatrs = { version = "1.2.1", path = "../.." }
+pidcatrs = { path = "../.." }

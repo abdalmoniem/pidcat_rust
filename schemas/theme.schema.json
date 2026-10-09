@@ -97,7 +97,8 @@
         "match",
         "keys",
         "selection"
-      ]
+      ],
+      "description": "Required `[ui]` table in a theme file."
     },
     "LogSection": {
       "type": "object",
@@ -185,7 +186,8 @@
         "gc-free",
         "gc-unit",
         "tokens"
-      ]
+      ],
+      "description": "Required `[log]` table in a theme file."
     }
   }
 }

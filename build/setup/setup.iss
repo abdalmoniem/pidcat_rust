@@ -1,5 +1,5 @@
 #define AppName "pidcatrs"
-#define AppVersion "1.2.1"
+#define AppVersion "2.0.0"
 #define AppPublisher "AbdElMoniem ElHifnawy"
 #define AppURL "https://abdalmoniem-alhifnawy.is-a.dev"
 #define AppExeName "pidcatrs.exe"
