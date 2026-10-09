@@ -1,4 +1,21 @@
+// Copyright (C) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #![deny(clippy::unwrap_used)]
+
+//! Generates shell completion scripts and patches them for dynamic theme and option values.
 
 use std::io::Write;
 
@@ -11,11 +28,16 @@ use clap_complete::generate;
 
 use itertools::Itertools;
 
+/// Long flag name used to locate theme completion hooks in generated scripts.
 const THEME_FLAG: &str = "--theme";
+/// Placeholder replaced with the CLI binary name in embedded script fragments.
 const BIN_PLACEHOLDER: &str = "{bin}";
 
+/// Default zsh value action appended to clap-generated specs when no custom completion exists.
 const ZSH_DEFAULT_ACTION: &str = ":_default' \\";
+/// zsh completion action that delegates theme values to `_{bin}_themes`.
 const ZSH_THEME_ACTION: &str = ":_{bin}_themes' \\";
+/// zsh function body listing themes via `{bin} --list-themes` or completing `.toml` paths.
 const ZSH_THEME_FUNCTION: &str = r#"(( $+functions[_{bin}_themes] )) ||
 _{bin}_themes() {
     if [[ $PREFIX == */* ]]; then
@@ -30,19 +52,26 @@ _{bin}_themes() {
 }
 "#;
 
+/// Default bash file completion line replaced for `--theme`.
 const BASH_FILE_COMPLETION: &str = r#"COMPREPLY=($(compgen -f "${cur}"))"#;
+/// bash completion block for `--theme`: files when the value looks like a path, else theme names.
 const BASH_THEME_COMPLETION: &str = r#"if [[ ${cur} == */* ]]; then
     COMPREPLY=($(compgen -f "${cur}"))
 else
     COMPREPLY=($(compgen -W "$({bin} --list-themes 2>/dev/null)" -- "${cur}"))
 fi"#;
 
+/// fish `-a` argument list suffix for `--theme`: live theme names plus `.toml` file completion.
 const FISH_THEME_VALUES: &str =
     r#" -f -a "({bin} --list-themes 2>/dev/null; __fish_complete_suffix .toml)""#;
 
+/// Elvish import line used as an insertion anchor before adding `use os;`.
 const ELVISH_STR_IMPORT: &str = "use str;";
+/// Elvish import inserted after [`ELVISH_STR_IMPORT`].
 const ELVISH_OS_IMPORT: &str = "use os;";
+/// Elvish variable assignment anchoring insertion of custom completers.
 const ELVISH_COMMAND: &str = "var command = '{bin}'";
+/// Shared Elvish helpers for file and theme path completion.
 const ELVISH_SHARED_COMPLETERS: &str = r#"var complete-files = {|prefix value|
     edit:complete-filename $value | each {|file| edit:complex-candidate $prefix$file[stem] }
 }
@@ -55,6 +84,7 @@ var complete-themes = {|prefix value|
         } catch { }
     }
 }"#;
+/// Elvish dispatch logic routing the current word to a value completer by flag name.
 const ELVISH_DISPATCH: &str = r#"var value-option = $nil
 var value-prefix = ''
 var value = $words[-1]
@@ -73,7 +103,9 @@ if (not-eq $value-option $nil) {
     return
 }"#;
 
+/// PowerShell `param(...)` line used as the insertion anchor for custom completers.
 const POWERSHELL_PARAMS: &str = "param($wordToComplete, $commandAst, $cursorPosition)";
+/// Shared PowerShell scriptblocks for file and theme completion.
 const POWERSHELL_SHARED_COMPLETERS: &str = r#"$completeFiles = {
     param($prefix, $value)
     [CompletionCompleters]::CompleteFilename($value) | ForEach-Object {
@@ -91,6 +123,7 @@ $completeThemes = {
     }
 }
 $valueCompleters = [System.Collections.Generic.Dictionary[string, scriptblock]]::new([System.StringComparer]::Ordinal)"#;
+/// PowerShell dispatch logic matching Elvish flag and `--flag=value` handling.
 const POWERSHELL_DISPATCH: &str = r#"$valueOption = $null
 $valuePrefix = ''
 $value = $wordToComplete
@@ -108,21 +141,27 @@ if ($valueOption) {
     return
 }"#;
 
-/// How the value of an option is completed in the Elvish and PowerShell scripts, which clap
-/// generates without any option value completion.
+/// How the value of a CLI option is completed in Elvish and PowerShell scripts.
 enum ValueCompletion {
+    /// Theme name or path to a `.toml` theme file.
     Themes,
+    /// Arbitrary file or directory path.
     Files,
+    /// Fixed clap enumerated values with optional help text.
     Values(Vec<(String, String)>),
 }
 
+/// One CLI option that takes a value and needs custom shell completion.
 struct ValueOption {
+    /// clap argument id used to name generated completer functions.
     id: String,
+    /// Short and long flag strings that map to this completer.
     flags: Vec<String>,
+    /// Completion strategy for the option's value.
     completion: ValueCompletion,
 }
 
-/// Writes the clap generated completion script for `shell`, with `--theme` values completed
+/// Writes the clap-generated completion script for `shell`, with `--theme` values completed
 /// from `<bin> --list-themes` at completion time, so themes added to the themes directory show
 /// up without regenerating the script. Elvish and PowerShell scripts also get the possible
 /// values and file paths of every other option, which the other shells already complete.
@@ -156,14 +195,17 @@ pub fn write_completions(
         .map_err(|err| err.to_string())
 }
 
+/// Substitutes [`BIN_PLACEHOLDER`] in `template` with `bin`.
 fn with_bin(template: &str, bin: &str) -> String {
     template.replace(BIN_PLACEHOLDER, bin)
 }
 
+/// Joins lines with trailing newlines into one script string.
 fn join_lines(lines: Vec<String>) -> String {
     lines.into_iter().map(|line| format!("{line}\n")).collect()
 }
 
+/// Patches a zsh completion script to add theme completion function and spec action.
 fn zsh_with_theme_values(script: &str, bin: &str) -> Option<String> {
     let theme_spec = format!("'{THEME_FLAG}=[");
     let dispatch = format!("if [ \"$funcstack[1]\" = \"_{bin}\" ]; then");
@@ -192,6 +234,7 @@ fn zsh_with_theme_values(script: &str, bin: &str) -> Option<String> {
     (has_spec && has_dispatch).then(|| join_lines(lines))
 }
 
+/// Patches a bash completion script to replace default file completion for `--theme`.
 fn bash_with_theme_values(script: &str, bin: &str) -> Option<String> {
     let theme_case = format!("{THEME_FLAG})");
     let theme_completion = with_bin(BASH_THEME_COMPLETION, bin);
@@ -247,6 +290,7 @@ fn insert_after_lines(script: &str, insertions: &[(&str, &str)]) -> Option<Strin
         .then(|| join_lines(lines))
 }
 
+/// Collects every visible clap option that takes a value and supports custom completion.
 fn value_options(cmd: &Command) -> Vec<ValueOption> {
     cmd.get_arguments()
         .filter(|arg| !arg.is_positional() && !arg.is_hide_set() && arg.get_action().takes_values())
@@ -274,6 +318,7 @@ fn value_options(cmd: &Command) -> Vec<ValueOption> {
         .collect()
 }
 
+/// Derives the completion kind for one clap [`Arg`], if any.
 fn value_completion(arg: &Arg) -> Option<ValueCompletion> {
     if arg.get_long() == Some(THEME_FLAG.trim_start_matches('-')) {
         return Some(ValueCompletion::Themes);
@@ -307,11 +352,12 @@ fn value_completion(arg: &Arg) -> Option<ValueCompletion> {
     }
 }
 
-/// Quotes `text` as a single quoted Elvish or PowerShell string.
+/// Quotes `text` as a single-quoted Elvish or PowerShell string.
 fn single_quoted(text: &str) -> String {
     format!("'{}'", text.replace('\'', "''"))
 }
 
+/// Builds the Elvish value-completer definitions and dispatch table for `options`.
 fn elvish_value_block(bin: &str, options: &[ValueOption]) -> String {
     let completers = options.iter().map(|option| {
         let body = match &option.completion {
@@ -354,6 +400,7 @@ fn elvish_value_block(bin: &str, options: &[ValueOption]) -> String {
     )
 }
 
+/// Builds the PowerShell value-completer scriptblocks and dispatch for `options`.
 fn powershell_value_block(bin: &str, options: &[ValueOption]) -> String {
     let completers = options.iter().map(|option| {
         let body = match &option.completion {
@@ -405,6 +452,7 @@ fn powershell_value_block(bin: &str, options: &[ValueOption]) -> String {
     )
 }
 
+/// Patches an Elvish completion script with shared and per-option value completers.
 fn elvish_with_values(script: &str, bin: &str, options: &[ValueOption]) -> Option<String> {
     let command = with_bin(ELVISH_COMMAND, bin);
     let values = elvish_value_block(bin, options);
@@ -415,12 +463,14 @@ fn elvish_with_values(script: &str, bin: &str, options: &[ValueOption]) -> Optio
     )
 }
 
+/// Patches a PowerShell completion script with shared and per-option value completers.
 fn powershell_with_values(script: &str, bin: &str, options: &[ValueOption]) -> Option<String> {
     let values = powershell_value_block(bin, options);
 
     insert_after_lines(script, &[(POWERSHELL_PARAMS, &values)])
 }
 
+/// Patches a fish completion script to add dynamic theme names and `.toml` suffix completion.
 fn fish_with_theme_values(script: &str, bin: &str) -> Option<String> {
     let theme_option = format!(
         "complete -c {bin} -l {} ",
