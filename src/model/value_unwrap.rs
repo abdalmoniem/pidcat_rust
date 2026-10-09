@@ -1,6 +1,23 @@
+// Copyright (c) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+
+//! Panic helpers that replace `unwrap` with caller-chosen messages (and optional styling).
+
 use colored::ColoredString;
 
-/// Trait to extend `Result` or `Option` with custom unwrap methods that panic with styled messages.
+/// Unwrap [`Result`] or [`Option`] values with explicit panic messages.
+///
+/// Implemented for [`Option`] in [`crate::model::option_unwrap`] and [`Result`] in
+/// [`crate::model::result_unwrap`].
 ///
 /// ### Example
 ///
@@ -21,9 +38,7 @@ use colored::ColoredString;
 /// let value = option.unwrap_or_panic_with("Custom panic message", |msg| msg.red().bold());
 /// ```
 pub trait ValueOrPanic<T> {
-    /// Unwraps a `Result` or an `Option` with a custom panic message.
-    ///
-    /// Instead of panicking with a default message, this method panics with a custom message.
+    /// Unwraps with `msg` as the panic payload (styled by the type's implementation).
     ///
     /// ### Example
     ///
@@ -36,11 +51,10 @@ pub trait ValueOrPanic<T> {
     /// let option: Option<i32> = None;
     /// let value = option.unwrap_or_panic("Custom panic message");
     /// ```
-    ///
     #[track_caller]
     fn unwrap_or_panic(self, msg: &str) -> T;
 
-    /// Unwraps a `Result` or an `Option` with a custom panic message and style.
+    /// Unwraps with `msg` and applies `style` before panicking.
     ///
     /// ### Example
     ///
@@ -54,7 +68,6 @@ pub trait ValueOrPanic<T> {
     /// let option: Option<i32> = None;
     /// let value = option.unwrap_or_panic_with("Custom panic message", |msg| msg.red().bold());
     /// ```
-    ///
     #[track_caller]
     fn unwrap_or_panic_with(self, msg: &str, style: fn(&str) -> ColoredString) -> T;
 }
