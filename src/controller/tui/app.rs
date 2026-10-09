@@ -1,3 +1,33 @@
+// Copyright (C) 2026 AbdAlMoniem AlHifnawy
+//
+// This file is part of pidcatrs.
+//
+// pidcatrs is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// pidcatrs is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with pidcatrs.  If not, see <https://www.gnu.org/licenses/>.
+//
+// Author: AbdAlMoniem AlHifnawy
+
+//! Application state and event loop of the TUI.
+//!
+//! [`TuiApp`] holds everything the interface needs: the buffered log
+//! entries, the active filter, scroll/selection state, the open overlay and
+//! the handles to background work (log ingestion, clipboard, export). Input
+//! events are translated into state changes by its `handle_*` methods, and
+//! [`run_tui`] drives the whole thing: it prepares the terminal, starts log
+//! ingestion, and then runs an event loop that multiplexes keyboard/mouse
+//! input, newly ingested entries and status updates, redrawing after every
+//! iteration.
+
 #![deny(clippy::unwrap_used)]
 
 use colored::control::set_override;
@@ -79,85 +109,165 @@ use tui_file_explorer::FileExplorer;
 use tui_file_explorer::SortMode;
 use tui_file_explorer::Theme;
 
+/// Where the log lines shown in the TUI come from.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SourceMode {
+    /// A live `adb logcat` stream from the selected device.
     Live,
+    /// Standard input (logs piped into `pidcatrs`).
     Pipe,
+    /// A previously saved log file, identified by its path.
     File(String),
 }
 
+/// Purpose of the file dialog.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FileDialogMode {
+    /// Choose an existing log file to view.
     Open,
+    /// Choose a destination file for an export.
     Save,
 }
 
+/// A message sent from a background task (copy/export) to the UI loop.
 pub enum StatusUpdate {
+    /// Text to display as the transient status feedback.
     Message(String),
+    /// The clipboard copy task has finished (successfully or not).
     CopyFinished,
+    /// The export task has finished (successfully or not).
     ExportFinished,
 }
 
+/// The modal dialog currently shown above the log view, if any.
+///
+/// While an overlay is open it receives all keyboard input.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Overlay {
+    /// No overlay; the log view and filter bar handle input.
     None,
+    /// The "select device" dialog.
     DevicePicker,
+    /// The open-file or export-destination dialog (see [`FileDialogMode`]).
     FileDialog,
+    /// The command palette / help dialog.
     Help,
+    /// The "copy log entry" menu.
     CopyMenu,
+    /// The "export format" menu.
     ExportFormat,
 }
 
+/// Complete state of the interactive viewer.
+///
+/// The UI layer reads most fields directly when drawing; mutation happens
+/// through the key/mouse handlers and the ingest/status update methods.
 pub struct TuiApp {
+    /// The active CLI arguments (normalized for TUI use).
     pub args: CliArgs,
+    /// Parser/render state as of the most recently ingested entry.
     pub state: State,
+    /// All buffered log entries, oldest first.
     pub entries: VecDeque<LogEntry>,
+    /// Indices into `entries` of the entries that pass the current filter.
     pub filtered_indices: Vec<usize>,
+    /// Text currently in the filter input.
     pub filter_input: String,
+    /// Cursor position within `filter_input`, in characters.
     pub filter_cursor: usize,
+    /// Whether the filter input has keyboard focus.
     pub filter_focused: bool,
+    /// The parsed, applied filter.
     pub tui_filters: TuiFilterSet,
+    /// Copy of the applied filter shared with the ingest task.
     filters_shared: Arc<RwLock<TuiFilterSet>>,
+    /// Whether ingestion is paused.
     pub paused: bool,
+    /// Index of the first visible display line.
     pub scroll_offset: usize,
+    /// Largest valid `scroll_offset` (updated every frame).
     pub max_scroll: usize,
+    /// Whether the view follows the newest entries ("live tail").
     pub auto_scroll: bool,
+    /// Index (into the filtered list) of the entry selected in select mode.
     pub selected_filtered_index: usize,
+    /// Number of log lines visible in the viewport (updated every frame).
     pub viewport_lines: usize,
+    /// Selection state of the copy menu.
     pub copy_palette: PaletteSearch,
+    /// Transient status message shown in the status bar.
     pub status_feedback: Option<String>,
+    /// Whether select mode (entry-wise navigation and copy) is active.
     pub select_mode: bool,
+    /// Where log lines currently come from.
     pub source_mode: SourceMode,
+    /// Serial of the selected adb device, if any.
     pub selected_device: Option<String>,
+    /// Devices found by the last `adb devices` query.
     pub devices: Vec<AdbDevice>,
+    /// The overlay currently shown.
     pub overlay: Overlay,
+    /// Search/selection state of the command palette.
     pub help_palette: PaletteSearch,
+    /// Search/selection state of the device picker.
     pub device_palette: PaletteSearch,
+    /// File explorer of the open file dialog (`Some` while it is open).
     pub file_explorer: Option<FileExplorer>,
+    /// Error displayed inside the file dialog, if any.
     pub file_open_error: Option<String>,
+    /// Path input of the file dialog.
     pub file_path_input: PaletteSearch,
+    /// Whether the file dialog is opening a file or saving an export.
     pub file_dialog_mode: FileDialogMode,
+    /// Path the user must confirm a second time to overwrite it.
     pending_overwrite: Option<String>,
+    /// Suggested file name for the pending export.
     export_file_name: String,
+    /// Selection state of the export format menu.
     pub export_format_palette: PaletteSearch,
+    /// The export format chosen for the pending export.
     pub export_format: ExportFormat,
+    /// Whether a clipboard copy is currently running.
     copy_in_progress: bool,
+    /// Whether an export is currently running.
     export_in_progress: bool,
+    /// Sender cloned into background tasks to report status updates.
     status_tx: tokio::sync::mpsc::UnboundedSender<StatusUpdate>,
+    /// Receiver for entries produced by the ingest task.
     ingest_update_rx: tokio::sync::mpsc::UnboundedReceiver<IngestUpdate>,
+    /// Color theme of the file explorer widget.
     pub explorer_theme: Theme,
+    /// Catch-all packages resolved at startup or from the current app.
     pub catchall_packages: Vec<String>,
+    /// Whether the current-app (`-c`) packages have been resolved on a device.
     current_app_resolved: bool,
+    /// Handle of the Tokio runtime used to spawn background tasks.
     pub tokio_handle: Option<tokio::runtime::Handle>,
+    /// Controller of the running log ingestion task.
     pub ingest: LogIngest,
+    /// Whether the device picker was opened because no device was found at startup.
     pub need_device_picker: bool,
+    /// Cache of the rendered log lines.
     pub display_cache: DisplayCache,
+    /// Counter bumped whenever the filtered list is recomputed from scratch.
     pub filter_generation: u64,
+    /// Number of filtered entries rendered so far (shown in the status bar).
     pub shown_entry_count: usize,
+    /// Total number of buffered entries (shown in the status bar).
     pub total_entry_count: usize,
 }
 
 impl TuiApp {
+    /// Creates the application in its initial state.
+    ///
+    /// The app starts in live mode with no device, no filter, auto-scroll
+    /// enabled, an idle ingest controller and no runtime handle. The caller
+    /// is expected to fill in the device, filter and runtime before starting
+    /// ingestion (see [`run_tui`]).
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The CLI arguments to run with.
     pub fn new(args: CliArgs) -> Self {
         let (ingest, ingest_update_rx) = LogIngest::idle();
         let (status_tx, _status_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -223,6 +333,12 @@ impl TuiApp {
         }
     }
 
+    /// Re-evaluates the filter against every buffered entry.
+    ///
+    /// Bumps the filter generation, invalidates the display cache and
+    /// rebuilds `filtered_indices`. With auto-scroll the selection jumps to
+    /// the last entry; otherwise the selection and scroll offset are clamped
+    /// into the new range.
     fn recompute_filtered(&mut self) {
         self.filter_generation += 1;
         self.display_cache.invalidate();
@@ -243,16 +359,24 @@ impl TuiApp {
         }
     }
 
+    /// Returns the largest valid scroll offset as of the last rendered frame.
     fn max_scroll_offset(&self) -> usize {
         self.max_scroll
     }
 
+    /// Returns the entry currently selected in select mode.
+    ///
+    /// # Returns
+    ///
+    /// The selected entry, or `None` if the filtered list is empty or the
+    /// selection is out of range.
     pub(crate) fn selected_log_entry(&self) -> Option<&LogEntry> {
         self.filtered_indices
             .get(self.selected_filtered_index)
             .and_then(|index| self.entries.get(*index))
     }
 
+    /// Clamps the selected entry index into the filtered list (`0` if empty).
     pub(crate) fn clamp_selected_filtered_index(&mut self) {
         if self.filtered_indices.is_empty() {
             self.selected_filtered_index = 0;
@@ -263,6 +387,11 @@ impl TuiApp {
         }
     }
 
+    /// Scrolls the minimum amount needed to bring the selected entry into view.
+    ///
+    /// Uses the display cache to find the lines the entry occupies. Does
+    /// nothing when there are no entries, the viewport is empty or the entry
+    /// has not been rendered yet.
     pub(crate) fn ensure_selection_visible(&mut self) {
         if self.filtered_indices.is_empty() || self.viewport_lines == 0 {
             return;
@@ -283,6 +412,10 @@ impl TuiApp {
         }
     }
 
+    /// Selects the entry displayed in the middle of the viewport.
+    ///
+    /// Keeps the selection in sync with the view when the user scrolls (or
+    /// enters select mode) so the highlighted entry is always on screen.
     fn sync_selection_to_viewport(&mut self) {
         if self.viewport_lines == 0 {
             return;
@@ -298,6 +431,14 @@ impl TuiApp {
         }
     }
 
+    /// Moves the select-mode selection by `delta` entries.
+    ///
+    /// Disables auto-scroll and clears the status feedback. The result is
+    /// clamped to the filtered list.
+    ///
+    /// # Arguments
+    ///
+    /// * `delta` - Signed number of entries to move (negative moves up).
     fn move_entry_selection(&mut self, delta: i32) {
         if self.filtered_indices.is_empty() {
             return;
@@ -310,15 +451,33 @@ impl TuiApp {
         self.selected_filtered_index = next;
     }
 
+    /// Pauses or resumes the app and the ingest task.
+    ///
+    /// # Arguments
+    ///
+    /// * `paused` - `true` to pause, `false` to resume.
     fn set_paused(&mut self, paused: bool) {
         self.paused = paused;
         self.ingest.set_paused(paused);
     }
 
+    /// Stops the running ingest task, if any.
     fn stop_ingest(&mut self) {
         self.ingest.stop();
     }
 
+    /// Stops any running ingestion and starts reading from `source`.
+    ///
+    /// The new task inherits the current parser state, device, shared filter
+    /// and pause flag.
+    ///
+    /// # Arguments
+    ///
+    /// * `source` - The new log source.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the Tokio runtime handle has not been set.
     fn start_ingest(&mut self, source: SourceMode) {
         let handle = self
             .tokio_handle
@@ -338,6 +497,14 @@ impl TuiApp {
         self.ingest.set_paused(self.paused);
     }
 
+    /// Appends a batch of ingested entries to the buffer.
+    ///
+    /// Entries that match the filter are also added to the filtered list, and
+    /// the parser state is replaced by the one from the last update.
+    ///
+    /// # Arguments
+    ///
+    /// * `updates` - Updates received from the ingest task, oldest first.
     fn apply_ingest_updates(&mut self, updates: &[IngestUpdate]) {
         for update in updates {
             self.entries.push_back(update.entry.clone());
@@ -351,6 +518,11 @@ impl TuiApp {
         }
     }
 
+    /// Applies a status update from a background task.
+    ///
+    /// # Arguments
+    ///
+    /// * `update` - Message to show, or notification that a task finished.
     fn handle_status_update(&mut self, update: StatusUpdate) {
         match update {
             StatusUpdate::Message(message) => self.status_feedback = Some(message),
@@ -359,12 +531,16 @@ impl TuiApp {
         }
     }
 
+    /// Publishes the applied filter to the ingest task.
+    ///
+    /// Silently skipped if the shared lock is poisoned.
     fn sync_shared_filters(&self) {
         if let Ok(mut shared) = self.filters_shared.write() {
             *shared = self.tui_filters.clone();
         }
     }
 
+    /// Reloads the PID/UID/package maps for the selected device.
     fn refresh_device_maps(&mut self) {
         refresh_process_maps(
             &mut self.state,
@@ -374,6 +550,10 @@ impl TuiApp {
         );
     }
 
+    /// Clears the buffer and (re)starts live capture from the selected device.
+    ///
+    /// If no device is selected and a device is required, the device picker
+    /// is opened instead.
     fn switch_to_live(&mut self) {
         if self.selected_device.is_none() && self.need_device_picker {
             self.overlay = Overlay::DevicePicker;
@@ -387,6 +567,11 @@ impl TuiApp {
         self.recompute_filtered();
     }
 
+    /// Clears the buffer and loads the log file at `path`.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path of an already validated log file.
     fn switch_to_file(&mut self, path: String) {
         self.entries.clear();
         self.source_mode = SourceMode::File(path.clone());
@@ -394,6 +579,14 @@ impl TuiApp {
         self.recompute_filtered();
     }
 
+    /// Makes `serial` the active device and closes the overlay.
+    ///
+    /// Resolves the current-app filter if needed, refreshes the process maps
+    /// and restarts live ingestion when currently in live mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `serial` - Serial number of the chosen device.
     fn select_device(&mut self, serial: String) {
         self.selected_device = Some(serial);
         self.overlay = Overlay::None;
@@ -405,7 +598,13 @@ impl TuiApp {
         }
     }
 
-    /// `-c` needs a device to query; when none was known at startup, resolve on first selection.
+    /// Resolves the current-app (`-c`) filter once a device is available.
+    ///
+    /// `-c` needs a device to query; when none was known at startup, it is
+    /// resolved on first selection. The foreground app's packages are added
+    /// to the filter as `package:<name>` tokens (skipping ones already
+    /// present), the filter is re-applied and the buffer re-filtered. Runs at
+    /// most once and only when `-c` was requested.
     fn apply_current_app_filter(&mut self) {
         if self.current_app_resolved || !self.args.current_app {
             return;
@@ -440,6 +639,10 @@ impl TuiApp {
         self.recompute_filtered();
     }
 
+    /// Opens the device picker with a freshly queried device list.
+    ///
+    /// Leaves select mode and resets the picker's search field. If querying
+    /// `adb devices` fails the list is empty.
     fn open_device_picker(&mut self) {
         self.exit_select_mode();
         let base = build_adb_command(&self.args, None);
@@ -448,6 +651,10 @@ impl TuiApp {
         self.overlay = Overlay::DevicePicker;
     }
 
+    /// Selects the highlighted device in the picker.
+    ///
+    /// Ignored when the highlighted device is not selectable (e.g. offline).
+    /// If the app is not showing live logs it switches back to live mode.
     fn confirm_device_picker(&mut self) {
         let filtered = filter_device_indices(&self.devices, &self.device_palette.query);
         let Some(&device_index) = filtered.get(self.device_palette.selected) else {
@@ -466,14 +673,25 @@ impl TuiApp {
         }
     }
 
+    /// Opens the "open log file" dialog.
     fn open_file_dialog(&mut self) {
         self.show_file_dialog(FileDialogMode::Open, String::new());
     }
 
+    /// Tells whether there is anything to export.
+    ///
+    /// # Returns
+    ///
+    /// `true` if at least one entry passes the current filter.
     pub(crate) fn has_exportable_entries(&self) -> bool {
         !self.filtered_indices.is_empty()
     }
 
+    /// Describes which entries an export would include.
+    ///
+    /// # Returns
+    ///
+    /// `"all"` when no filter is applied, otherwise `"filtered"`.
     pub(crate) fn export_scope(&self) -> &'static str {
         match self.tui_filters.is_empty() {
             true => "all",
@@ -481,6 +699,10 @@ impl TuiApp {
         }
     }
 
+    /// Opens the export format menu.
+    ///
+    /// Does nothing if there are no entries to export. If an export is
+    /// already running only a status message is shown.
     fn open_export_dialog(&mut self) {
         if !self.has_exportable_entries() {
             return;
@@ -495,6 +717,15 @@ impl TuiApp {
         self.overlay = Overlay::ExportFormat;
     }
 
+    /// Handles a key press while the export format menu is open.
+    ///
+    /// A format's shortcut key chooses it immediately; other keys are
+    /// processed by the shared palette handler (navigation, `Enter`, `Esc`).
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The pressed key.
+    /// * `modifiers` - The active modifier keys.
     fn handle_export_format_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         if let KeyCode::Char(ch) = key
             && let Some(format) = ExportFormat::for_key(ch)
@@ -523,6 +754,13 @@ impl TuiApp {
         }
     }
 
+    /// Records the chosen export format and opens the save dialog.
+    ///
+    /// The dialog is pre-filled with a default file name for the format.
+    ///
+    /// # Arguments
+    ///
+    /// * `format` - The format to export in.
     fn choose_export_format(&mut self, format: ExportFormat) {
         self.export_format = format;
         let file_name =
@@ -530,6 +768,17 @@ impl TuiApp {
         self.show_file_dialog(FileDialogMode::Save, file_name);
     }
 
+    /// Opens the file dialog in the given mode.
+    ///
+    /// Leaves select mode, clears any previous error or pending overwrite,
+    /// creates a file explorer in the mode's start directory (the home
+    /// directory to open, the working directory to save) and pre-fills the
+    /// path input with that directory plus `file_name`.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - Whether the dialog opens or saves a file.
+    /// * `file_name` - Initial file name appended to the directory (may be empty).
     fn show_file_dialog(&mut self, mode: FileDialogMode, file_name: String) {
         self.exit_select_mode();
         self.file_open_error = None;
@@ -552,6 +801,14 @@ impl TuiApp {
         self.overlay = Overlay::FileDialog;
     }
 
+    /// Starts exporting the filtered entries to `path` in the background.
+    ///
+    /// Snapshots the filtered entries, marks an export as in progress and
+    /// spawns [`run_export`]. Does nothing if no runtime handle is set.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Destination file path.
     fn start_export(&mut self, path: String) {
         let Some(handle) = self.tokio_handle.as_ref() else {
             return;
@@ -576,6 +833,10 @@ impl TuiApp {
         });
     }
 
+    /// Parses and applies the text in the filter input.
+    ///
+    /// Removes focus from the input, publishes the filter to the ingest task
+    /// and re-filters the buffer.
     fn apply_filter(&mut self) {
         self.tui_filters = TuiFilterSet::parse(&self.filter_input);
         self.filter_focused = false;
@@ -583,6 +844,13 @@ impl TuiApp {
         self.recompute_filtered();
     }
 
+    /// Scrolls the log view up by `amount` lines.
+    ///
+    /// Disables auto-scroll and, in select mode, moves the selection along.
+    ///
+    /// # Arguments
+    ///
+    /// * `amount` - Number of lines to scroll.
     fn scroll_up(&mut self, amount: usize) {
         self.auto_scroll = false;
         self.status_feedback = None;
@@ -592,6 +860,14 @@ impl TuiApp {
         }
     }
 
+    /// Scrolls the log view down by `amount` lines.
+    ///
+    /// Reaching the bottom re-enables auto-scroll (live tail). In select mode
+    /// the selection follows the view.
+    ///
+    /// # Arguments
+    ///
+    /// * `amount` - Number of lines to scroll.
     fn scroll_down(&mut self, amount: usize) {
         self.auto_scroll = false;
         self.status_feedback = None;
@@ -608,6 +884,7 @@ impl TuiApp {
         }
     }
 
+    /// Jumps to the newest entry and resumes live tailing.
     fn scroll_to_bottom(&mut self) {
         self.auto_scroll = true;
         if self.select_mode {
@@ -615,6 +892,10 @@ impl TuiApp {
         }
     }
 
+    /// Toggles select mode.
+    ///
+    /// Entering syncs the selection to the viewport; leaving closes the copy
+    /// menu if it is open.
     fn toggle_select_mode(&mut self) {
         self.select_mode = !self.select_mode;
         if self.select_mode {
@@ -624,6 +905,7 @@ impl TuiApp {
         }
     }
 
+    /// Leaves select mode if active, closing the copy menu if it is open.
     fn exit_select_mode(&mut self) {
         if !self.select_mode {
             return;
@@ -634,6 +916,17 @@ impl TuiApp {
         }
     }
 
+    /// Dispatches a key press to the right handler.
+    ///
+    /// Priority order: the open overlay (which captures all input), the
+    /// global `Ctrl+S` export shortcut, the focused filter input, and finally
+    /// the main log view bindings (quit, pause, filter focus, pickers, help,
+    /// select mode, scrolling and jumping to top/bottom).
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The pressed key.
+    /// * `modifiers` - The active modifier keys.
     fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         if self.overlay == Overlay::DevicePicker {
             self.handle_device_picker_key(key, modifiers);
@@ -717,6 +1010,9 @@ impl TuiApp {
         }
     }
 
+    /// Opens the copy menu for the selected entry.
+    ///
+    /// Does nothing when there are no filtered entries.
     fn open_copy_menu(&mut self) {
         if self.filtered_indices.is_empty() {
             return;
@@ -728,6 +1024,15 @@ impl TuiApp {
         self.overlay = Overlay::CopyMenu;
     }
 
+    /// Handles a key press while the copy menu is open.
+    ///
+    /// An option's shortcut key runs it immediately; other keys are processed
+    /// by the shared palette handler (navigation, `Enter`, `Esc`).
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The pressed key.
+    /// * `modifiers` - The active modifier keys.
     fn handle_copy_menu_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         let options = available_copy_options(&self.args);
 
@@ -753,6 +1058,7 @@ impl TuiApp {
         }
     }
 
+    /// Runs the copy option highlighted in the menu.
     fn execute_copy_selected_option(&mut self) {
         let options = available_copy_options(&self.args);
         let Some(option) = options.get(self.copy_palette.selected) else {
@@ -761,6 +1067,15 @@ impl TuiApp {
         self.execute_copy_action(option.action);
     }
 
+    /// Copies part of the selected entry to the clipboard in the background.
+    ///
+    /// Closes the menu, marks a copy as in progress and spawns [`run_copy`].
+    /// If a copy is already running only a status message is shown. Does
+    /// nothing when there is no selected entry or no runtime handle.
+    ///
+    /// # Arguments
+    ///
+    /// * `action` - Which part of the entry to copy.
     fn execute_copy_action(&mut self, action: CopyAction) {
         if self.copy_in_progress {
             self.status_feedback = Some("copy already in progress".to_string());
@@ -791,6 +1106,15 @@ impl TuiApp {
         });
     }
 
+    /// Handles a key press while the filter input has focus.
+    ///
+    /// `Esc` drops focus, `Enter` applies the filter, the cursor keys move
+    /// the cursor, and printable characters / `Backspace` / `Delete` edit
+    /// the text.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The pressed key.
     fn handle_filter_key(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => self.filter_focused = false,
@@ -806,12 +1130,18 @@ impl TuiApp {
         }
     }
 
+    /// Inserts `ch` into the filter input at the cursor.
+    ///
+    /// # Arguments
+    ///
+    /// * `ch` - The character to insert.
     fn insert_filter_char(&mut self, ch: char) {
         let byte_index = char_index_to_byte(&self.filter_input, self.filter_cursor);
         self.filter_input.insert(byte_index, ch);
         self.filter_cursor += 1;
     }
 
+    /// Deletes the filter character before the cursor (`Backspace`).
     fn delete_filter_char_before_cursor(&mut self) {
         if self.filter_cursor == 0 {
             return;
@@ -822,6 +1152,7 @@ impl TuiApp {
         self.filter_cursor -= 1;
     }
 
+    /// Deletes the filter character under the cursor (`Delete`).
     fn delete_filter_char_at_cursor(&mut self) {
         let char_count = self.filter_input.chars().count();
         if self.filter_cursor >= char_count {
@@ -832,10 +1163,12 @@ impl TuiApp {
         self.filter_input.remove(byte_index);
     }
 
+    /// Moves the filter cursor one character left (stops at the start).
     fn move_filter_cursor_left(&mut self) {
         self.filter_cursor = self.filter_cursor.saturating_sub(1);
     }
 
+    /// Moves the filter cursor one character right (stops at the end).
     fn move_filter_cursor_right(&mut self) {
         let char_count = self.filter_input.chars().count();
         if self.filter_cursor < char_count {
@@ -843,6 +1176,7 @@ impl TuiApp {
         }
     }
 
+    /// Opens the command palette with an empty query.
     fn open_help(&mut self) {
         self.exit_select_mode();
         self.help_palette.reset();
@@ -850,6 +1184,11 @@ impl TuiApp {
         self.help_reset_selection();
     }
 
+    /// Runs a command chosen in the command palette.
+    ///
+    /// # Arguments
+    ///
+    /// * `action` - The command to execute.
     fn execute_help_action(&mut self, action: HelpAction) {
         match action {
             HelpAction::Quit => set_running(false),
@@ -865,10 +1204,12 @@ impl TuiApp {
         }
     }
 
+    /// Returns the command palette rows for the current query.
     fn help_rows(&self) -> Vec<HelpRow> {
         build_help_rows(&self.help_palette.query)
     }
 
+    /// Moves the palette highlight to the first entry row (skipping headings).
     fn help_reset_selection(&mut self) {
         let rows = self.help_rows();
         let first = rows
@@ -878,6 +1219,10 @@ impl TuiApp {
         self.help_palette.select_first(first);
     }
 
+    /// Executes the highlighted palette row, if it has an action.
+    ///
+    /// Closes the palette before running the command. Informational entries
+    /// and headings are ignored.
     fn help_execute_selected(&mut self) {
         let rows = self.help_rows();
         let Some(row) = rows.get(self.help_palette.selected) else {
@@ -890,6 +1235,15 @@ impl TuiApp {
         }
     }
 
+    /// Handles a key press while the command palette is open.
+    ///
+    /// `?` closes the palette (or clears a non-empty query); everything else
+    /// goes to the shared palette handler, with only entry rows selectable.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The pressed key.
+    /// * `modifiers` - The active modifier keys.
     fn handle_help_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         if matches!(key, KeyCode::Char('?')) {
             if self.help_palette.query.is_empty() {
@@ -920,6 +1274,11 @@ impl TuiApp {
         }
     }
 
+    /// Moves the palette highlight up by `amount` entry rows.
+    ///
+    /// # Arguments
+    ///
+    /// * `amount` - Number of selectable rows to move.
     fn scroll_help_up(&mut self, amount: usize) {
         let rows = self.help_rows();
         for _ in 0..amount {
@@ -929,6 +1288,11 @@ impl TuiApp {
         }
     }
 
+    /// Moves the palette highlight down by `amount` entry rows.
+    ///
+    /// # Arguments
+    ///
+    /// * `amount` - Number of selectable rows to move.
     fn scroll_help_down(&mut self, amount: usize) {
         let rows = self.help_rows();
         for _ in 0..amount {
@@ -938,6 +1302,15 @@ impl TuiApp {
         }
     }
 
+    /// Handles a mouse wheel event.
+    ///
+    /// The wheel moves the selection of the open overlay by 3 rows, or
+    /// scrolls the log view by 3 lines when no overlay is open and the
+    /// filter input is not focused.
+    ///
+    /// # Arguments
+    ///
+    /// * `scroll_up` - `true` for wheel up, `false` for wheel down.
     fn handle_mouse_scroll(&mut self, scroll_up: bool) {
         match self.overlay {
             Overlay::Help => {
@@ -999,6 +1372,16 @@ impl TuiApp {
         }
     }
 
+    /// Handles a key press while the device picker is open.
+    ///
+    /// `Ctrl+R` refreshes the device list, `o` (with an empty query) switches
+    /// to the open-file dialog; everything else goes to the shared palette
+    /// handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The pressed key.
+    /// * `modifiers` - The active modifier keys.
     fn handle_device_picker_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         if key == KeyCode::Char('r') && modifiers.contains(KeyModifiers::CONTROL) {
             self.open_device_picker();
@@ -1032,6 +1415,17 @@ impl TuiApp {
         }
     }
 
+    /// Handles a key press while the file dialog (open or save) is open.
+    ///
+    /// `Esc` closes, `Enter` confirms according to the dialog mode, `Tab`
+    /// completes the path from the explorer selection, the arrow/page keys
+    /// move the explorer selection, and the remaining keys edit the path
+    /// input (which keeps the explorer in sync).
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The pressed key.
+    /// * `modifiers` - The active modifier keys.
     fn handle_file_open_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         if self.file_explorer.is_none() {
             self.overlay = Overlay::None;
@@ -1070,12 +1464,23 @@ impl TuiApp {
         }
     }
 
+    /// Sends a navigation command to the file explorer, if one is open.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The explorer command (move up/down, page up/down).
     fn move_file_selection(&mut self, command: ExplorerCommand) {
         if let Some(explorer) = &mut self.file_explorer {
             let _ = explorer.handle_command(command);
         }
     }
 
+    /// Returns the entry highlighted in the file explorer.
+    ///
+    /// # Returns
+    ///
+    /// `(path, is_dir)` of the entry, or `None` if there is no explorer or
+    /// nothing is highlighted.
     fn selected_file_entry(&self) -> Option<(PathBuf, bool)> {
         self.file_explorer
             .as_ref()
@@ -1083,12 +1488,25 @@ impl TuiApp {
             .map(|entry| (entry.path.clone(), entry.is_dir))
     }
 
+    /// Replaces the file dialog's path input and syncs the explorer to it.
+    ///
+    /// The cursor is moved to the end of the new text.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The new path text.
     fn set_file_path_input(&mut self, value: String) {
         self.file_path_input.cursor = value.chars().count();
         self.file_path_input.query = value;
         self.sync_file_explorer_to_input();
     }
 
+    /// Makes the file explorer reflect the typed path.
+    ///
+    /// Navigates to the typed directory (setting `file_open_error` if it does
+    /// not exist or cannot be entered) and uses the trailing file-name
+    /// fragment as the explorer's search query. Clears the error and any
+    /// pending overwrite confirmation on success.
     fn sync_file_explorer_to_input(&mut self) {
         let Some(explorer) = &mut self.file_explorer else {
             return;
@@ -1116,6 +1534,9 @@ impl TuiApp {
         explorer.reload();
     }
 
+    /// Completes the typed path with the highlighted explorer entry.
+    ///
+    /// Directories get a trailing separator so typing can continue inside.
     fn complete_file_path(&mut self) {
         let Some((path, is_dir)) = self.selected_file_entry() else {
             return;
@@ -1128,6 +1549,12 @@ impl TuiApp {
         self.set_file_path_input(completed);
     }
 
+    /// Confirms the open-file dialog (`Enter`).
+    ///
+    /// If the typed path is an existing file it is opened. Otherwise the
+    /// highlighted explorer entry is used: directories are entered, files are
+    /// opened. With nothing highlighted the typed path is tried (and its
+    /// validation error shown).
     fn confirm_file_path(&mut self) {
         let typed = expand_path(self.file_path_input.query.trim());
         if Path::new(&typed).is_file() {
@@ -1142,6 +1569,14 @@ impl TuiApp {
         }
     }
 
+    /// Confirms the save dialog (`Enter`).
+    ///
+    /// - If only a directory is typed, the default file name is appended.
+    /// - If the path is an existing directory, the dialog navigates into it.
+    /// - If the parent directory does not exist, an error is shown.
+    /// - If the file already exists, an error asks the user to press `Enter`
+    ///   again; the second confirmation overwrites it.
+    /// - Otherwise the dialog closes and the export starts.
     fn confirm_save_path(&mut self) {
         let typed = expand_path(self.file_path_input.query.trim());
         let (directory, file_name) = split_path_input(&typed);
@@ -1177,6 +1612,14 @@ impl TuiApp {
         self.start_export(typed);
     }
 
+    /// Opens `path` as the log source after validating it.
+    ///
+    /// On success the dialog closes and the app switches to the file; on
+    /// failure the validation error is shown in the dialog.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to open.
     fn open_log_file(&mut self, path: &str) {
         match validate_log_file(path) {
             Ok(valid_path) => {
@@ -1187,6 +1630,7 @@ impl TuiApp {
         }
     }
 
+    /// Closes the file dialog and discards its transient state.
     fn close_file_dialog(&mut self) {
         self.overlay = Overlay::None;
         self.file_open_error = None;
@@ -1196,12 +1640,50 @@ impl TuiApp {
     }
 }
 
+/// Converts a character index into a byte index of `text`.
+///
+/// # Arguments
+///
+/// * `text` - The string to index.
+/// * `char_index` - Position in characters.
+///
+/// # Returns
+///
+/// The byte offset of that character, or `text.len()` if `char_index` is
+/// past the end.
 fn char_index_to_byte(text: &str, char_index: usize) -> usize {
     text.char_indices()
         .nth(char_index)
         .map_or(text.len(), |(index, _)| index)
 }
 
+/// Runs the interactive TUI until the user quits.
+///
+/// Startup sequence:
+///
+/// 1. Normalizes the CLI arguments and forces "capture everything"
+///    (`tui_mode`, `all`), because filtering is done in the filter bar.
+/// 2. Chooses the source: live logcat when stdin is a terminal, otherwise
+///    the piped input. For live mode it bootstraps adb, resolves the device
+///    and optionally clears logcat; without a device the device picker opens.
+/// 3. Resolves the packages, seeds the filter input, builds the parser state
+///    and starts a multi-threaded Tokio runtime.
+/// 4. Enables mouse capture and color overrides, initializes the terminal and
+///    starts ingestion.
+///
+/// The event loop then waits on keyboard/mouse events, batches of ingested
+/// entries (not while paused) and background status updates, and redraws
+/// after each one. When the loop ends the ingest task is stopped and the
+/// terminal is restored.
+///
+/// # Arguments
+///
+/// * `args` - The CLI arguments; normalized and modified in place.
+///
+/// # Panics
+///
+/// Panics if the Tokio runtime cannot be created, mouse capture cannot be
+/// enabled, or a frame cannot be drawn.
 pub fn run_tui(args: &mut CliArgs) {
     normalize_cli_args(args);
 
