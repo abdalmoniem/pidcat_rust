@@ -1,3 +1,31 @@
+// Copyright (C) 2026 AbdAlMoniem AlHifnawy
+//
+// This file is part of pidcatrs.
+//
+// pidcatrs is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// pidcatrs is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with pidcatrs.  If not, see <https://www.gnu.org/licenses/>.
+//
+// Author: AbdAlMoniem AlHifnawy
+
+//! Rendering of the TUI.
+//!
+//! [`render`] draws one complete frame: the filter bar on top, a one-line
+//! status bar, the scrollable log table, and — if one is active — a modal
+//! overlay (device picker, file dialog, command palette, copy menu or export
+//! format menu). The module also hosts the ANSI-to-ratatui conversion
+//! ([`line_from_ansi`]) used to turn pre-colored log output into styled
+//! [`Line`]s.
+
 #![deny(clippy::unwrap_used)]
 
 use ratatui::Frame;
@@ -37,6 +65,19 @@ use super::theme;
 
 use crate::controller::util::format_usize_separated;
 
+/// Draws one complete frame of the application.
+///
+/// The screen is split into the filter bar (3 rows), the status bar (1 row)
+/// and the log table (the rest). The log view is refreshed first so the
+/// display cache, scroll limits and viewport size are up to date, then the
+/// panels are drawn, and finally the active [`Overlay`] (if any) is drawn on
+/// top.
+///
+/// # Arguments
+///
+/// * `frame` - The ratatui frame to draw on.
+/// * `app` - The application state; mutated to update caches, scroll
+///   positions and list selections as a side effect of rendering.
 pub fn render(frame: &mut Frame, app: &mut TuiApp) {
     let chunks = Layout::vertical([
         Constraint::Length(3),
@@ -104,13 +145,25 @@ pub fn render(frame: &mut Frame, app: &mut TuiApp) {
     }
 }
 
+/// Fixed width (in columns) of the export format dialog.
 const EXPORT_FORMAT_DIALOG_WIDTH: u16 = 44;
 
 /// Reserved column so log lines are not drawn under the vertical scrollbar.
 const LOG_SCROLLBAR_GUTTER: u16 = 1;
 
+/// Placeholder shown in the empty filter input.
 const FILTER_PLACEHOLDER: &str = "e.g. package:com.example tag:ActivityManager level:debug";
 
+/// Draws the `filter` panel containing the filter input.
+///
+/// When the filter has focus the terminal cursor is placed at the edit
+/// position, taking horizontal scrolling of long input into account.
+///
+/// # Arguments
+///
+/// * `frame` - Frame to draw on.
+/// * `app` - Application state (filter text, cursor and focus).
+/// * `area` - Outer rectangle of the panel, including its border.
 fn render_filter_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
     let inner = render_labeled_panel(frame, area, Some("filter"), app.filter_focused);
     let visible_width = inner.width as usize;
@@ -136,6 +189,18 @@ fn render_filter_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
     }
 }
 
+/// Draws the one-line status bar.
+///
+/// Segments, separated by `│`: run state (`running`/`paused`/`idle`/`pipe`/
+/// `file`), source detail (`live` or the file path), the selected device
+/// serial and state, `shown/total entries`, and the transient status
+/// feedback message when present.
+///
+/// # Arguments
+///
+/// * `frame` - Frame to draw on.
+/// * `app` - Application state to summarize.
+/// * `area` - Single-row region of the status bar.
 fn render_status_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
     let waiting_for_device =
         matches!(app.source_mode, SourceMode::Live) && app.selected_device.is_none();
@@ -209,6 +274,17 @@ fn render_status_bar(frame: &mut Frame, app: &TuiApp, area: Rect) {
     frame.render_widget(Paragraph::new(line).style(theme::status_style()), area);
 }
 
+/// Computes the usable content size of the log panel.
+///
+/// # Arguments
+///
+/// * `area` - Outer rectangle of the log panel, including its border.
+///
+/// # Returns
+///
+/// `(width, height)` where `width` excludes the borders and the scrollbar
+/// gutter (the width log lines are rendered at) and `height` is the number
+/// of visible lines.
 fn log_panel_inner_dims(area: Rect) -> (i16, usize) {
     (
         area.width.saturating_sub(2 + LOG_SCROLLBAR_GUTTER) as i16,
@@ -216,6 +292,17 @@ fn log_panel_inner_dims(area: Rect) -> (i16, usize) {
     )
 }
 
+/// Brings the log view's derived state up to date before drawing it.
+///
+/// Records the viewport height, lets the display cache render a bounded
+/// batch of new entries (none while paused), updates the entry counters and
+/// the maximum scroll offset, and then either follows the tail (auto-scroll)
+/// or clamps the manual scroll offset and keeps the selected entry visible.
+///
+/// # Arguments
+///
+/// * `app` - Application state to update.
+/// * `log_area` - Outer rectangle of the log panel.
 fn refresh_log_view(app: &mut TuiApp, log_area: Rect) {
     use super::display_cache::DISPLAY_BUILD_BUDGET;
 
@@ -255,6 +342,18 @@ fn refresh_log_view(app: &mut TuiApp, log_area: Rect) {
     }
 }
 
+/// Draws the log table: bordered panel, visible lines and scrollbar.
+///
+/// The top border shows the column headers and the bottom border shows
+/// context-dependent shortcut hints. In select mode (with no overlay open)
+/// every line of the selected entry is highlighted. A scrollbar is drawn only
+/// when the content is taller than the viewport.
+///
+/// # Arguments
+///
+/// * `frame` - Frame to draw on.
+/// * `app` - Application state (display cache, scroll offset, selection).
+/// * `area` - Outer rectangle of the table, including its border.
 fn render_log_table(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
     let columns = crate::tui_log_border_columns(&app.args);
     let hints = theme::main_shortcut_hints(app.select_mode, app.has_exportable_entries());
@@ -300,6 +399,18 @@ fn render_log_table(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
     }
 }
 
+/// Applies the selection background to every span of a line.
+///
+/// Spans without an explicit foreground color fall back to the theme text
+/// color so they stay readable on the selection background.
+///
+/// # Arguments
+///
+/// * `line` - The line to highlight.
+///
+/// # Returns
+///
+/// A highlighted copy of the line.
 fn highlight_selected_line(line: &Line<'static>) -> Line<'static> {
     let bg = theme::selection_line_style();
     Line::from(
@@ -318,6 +429,18 @@ fn highlight_selected_line(line: &Line<'static>) -> Line<'static> {
     .style(bg)
 }
 
+/// Draws the vertical scrollbar on the right edge of the log panel.
+///
+/// The track starts one row below the top border so it does not overlap the
+/// column header line.
+///
+/// # Arguments
+///
+/// * `frame` - Frame to draw on.
+/// * `area` - Outer rectangle of the log panel, including its border.
+/// * `scroll_offset` - Index of the first visible line.
+/// * `total_lines` - Total number of lines in the log view.
+/// * `viewport_lines` - Number of lines visible at once.
 fn render_log_scrollbar(
     frame: &mut Frame,
     area: Rect,
@@ -356,6 +479,19 @@ fn render_log_scrollbar(
 
 /// Ratatui's scrollbar uses `position = content_length - 1` for the bottom of the track,
 /// while our log view uses `scroll_offset = total_lines - viewport_lines` as the last page.
+///
+/// The mapping is linear between the two ends, and the bottom of the log
+/// always maps to the bottom of the track.
+///
+/// # Arguments
+///
+/// * `scroll_offset` - Index of the first visible log line.
+/// * `max_scroll` - Largest valid `scroll_offset`.
+/// * `content_length` - Total number of lines in the log view.
+///
+/// # Returns
+///
+/// The position to give to [`ScrollbarState::position`].
 fn map_scroll_offset_to_scrollbar_position(
     scroll_offset: usize,
     max_scroll: usize,
@@ -378,14 +514,23 @@ fn map_scroll_offset_to_scrollbar_position(
     scroll_offset * last_position / max_scroll
 }
 
+/// Width (in characters) of the key-binding column in the command palette.
 const HELP_KEYS_WIDTH: usize = 22;
 
+/// Shortcut hints shown in the bottom border of the command palette.
 const HELP_HINTS: &[(&str, &str)] = &[
     ("↑↓", " navigate"),
     ("enter", " execute"),
     ("esc", " close"),
 ];
 
+/// Draws the command palette dialog: a search field above the help list.
+///
+/// # Arguments
+///
+/// * `frame` - Frame to draw on.
+/// * `app` - Application state (palette query and selection).
+/// * `area` - Outer rectangle of the dialog.
 fn render_help(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
     let inner = render_dialog(frame, area, "command palette", HELP_HINTS, false);
 
@@ -400,6 +545,17 @@ fn render_help(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
     render_help_list(frame, app, chunks[1usize]);
 }
 
+/// Draws the scrollable list of command palette rows.
+///
+/// Shows a "no matching commands" notice when the query matches nothing.
+/// Otherwise clamps the selection, scrolls the list so the selection is
+/// visible and draws the visible rows.
+///
+/// # Arguments
+///
+/// * `frame` - Frame to draw on.
+/// * `app` - Application state (palette query, selection and scroll).
+/// * `area` - Region of the list.
 fn render_help_list(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
     let rows = build_help_rows(&app.help_palette.query);
     let list_height = area.height as usize;
@@ -433,6 +589,25 @@ fn render_help_list(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
     );
 }
 
+/// Builds the display line of one command palette row.
+///
+/// Section rows are drawn as headings. Entry rows show the key binding and
+/// description; entries without an action are dimmed, and the selected row
+/// uses the selection style.
+///
+/// # Arguments
+///
+/// * `row` - The row to display.
+/// * `selected` - Whether the row is currently highlighted.
+///
+/// # Returns
+///
+/// The styled line.
+///
+/// # Panics
+///
+/// Panics if `row` is a [`HelpRow::Entry`] with an index outside
+/// [`HELP_CATALOG`].
 fn help_row_line(row: &HelpRow, selected: bool) -> Line<'static> {
     match row {
         HelpRow::Section(section) => Line::from(Span::styled(*section, theme::heading_style())),
@@ -457,6 +632,7 @@ fn help_row_line(row: &HelpRow, selected: bool) -> Line<'static> {
     }
 }
 
+/// Shortcut hints of the file dialog in "open" mode.
 const FILE_OPEN_HINTS: &[(&str, &str)] = &[
     ("↑↓", " select"),
     ("tab", " complete"),
@@ -464,6 +640,7 @@ const FILE_OPEN_HINTS: &[(&str, &str)] = &[
     ("esc", " close"),
 ];
 
+/// Shortcut hints of the file dialog in "save" (export) mode.
 const FILE_SAVE_HINTS: &[(&str, &str)] = &[
     ("↑↓", " select"),
     ("tab", " complete"),
@@ -471,8 +648,21 @@ const FILE_SAVE_HINTS: &[(&str, &str)] = &[
     ("esc", " close"),
 ];
 
+/// Placeholder shown in the empty path input of the file dialog.
 const FILE_PATH_PLACEHOLDER: &str = "type a path...";
 
+/// Draws the open/save file dialog.
+///
+/// Layout, top to bottom: the `path` input, an optional `error` panel (only
+/// when there is an error to show) and the file explorer listing. The title
+/// and hints depend on the dialog mode; in save mode the title names the
+/// export scope and format. Does nothing if no explorer is active.
+///
+/// # Arguments
+///
+/// * `frame` - Frame to draw on.
+/// * `app` - Application state (explorer, path input, error, mode).
+/// * `area` - Outer rectangle of the dialog.
 fn render_file_explorer_overlay(frame: &mut Frame, app: &mut TuiApp, area: Rect) {
     let export_scope = app.export_scope();
     let Some(explorer) = &mut app.file_explorer else {
@@ -519,6 +709,17 @@ fn render_file_explorer_overlay(frame: &mut Frame, app: &mut TuiApp, area: Rect)
     render_themed(explorer, frame, chunks[2usize], &app.explorer_theme);
 }
 
+/// Computes a rectangle of a fixed size centered inside `area`.
+///
+/// # Arguments
+///
+/// * `width` - Desired width; capped at `area.width`.
+/// * `height` - Desired height; capped at `area.height`.
+/// * `area` - The enclosing rectangle.
+///
+/// # Returns
+///
+/// The centered rectangle.
 fn centered_rect_size(width: u16, height: u16, area: Rect) -> Rect {
     let width = width.min(area.width);
     let height = height.min(area.height);
@@ -532,6 +733,19 @@ fn centered_rect_size(width: u16, height: u16, area: Rect) -> Rect {
     }
 }
 
+/// Computes a rectangle covering a percentage of `area`, centered inside it.
+///
+/// The result is shrunk by a one-cell margin on every side.
+///
+/// # Arguments
+///
+/// * `percent_x` - Width as a percentage of `area` (0–100).
+/// * `percent_y` - Height as a percentage of `area` (0–100).
+/// * `area` - The enclosing rectangle.
+///
+/// # Returns
+///
+/// The centered rectangle.
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     let popup_layout = Layout::vertical([
         Constraint::Percentage((100 - percent_y) / 2),
@@ -549,6 +763,19 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
         .inner(Margin::new(1, 1))
 }
 
+/// Converts text containing ANSI SGR escape sequences into a styled [`Line`].
+///
+/// The text is tokenized into plain text and escape sequences. Every
+/// escape updates the current style (see [`apply_ansi_code`]) and the text
+/// that follows it becomes a span with that style.
+///
+/// # Arguments
+///
+/// * `text` - The text, possibly containing ANSI escape codes.
+///
+/// # Returns
+///
+/// A line with one span per run of identically styled text.
 pub(super) fn line_from_ansi(text: &str) -> Line<'static> {
     use crate::model::ansi::AnsiToken;
     use crate::model::ansi::tokenize_ansi;
@@ -576,6 +803,22 @@ pub(super) fn line_from_ansi(text: &str) -> Line<'static> {
     Line::from(spans)
 }
 
+/// Applies one ANSI SGR escape sequence to a style.
+///
+/// Supports reset (`0`), the basic attributes handled by
+/// [`apply_basic_sgr`], 256-color (`38;5;n` / `48;5;n`) and true-color
+/// (`38;2;r;g;b` / `48;2;r;g;b`) foreground and background selection. A
+/// sequence may carry several `;`-separated parameters. Anything
+/// unrecognized is ignored.
+///
+/// # Arguments
+///
+/// * `base` - The style in effect before the sequence.
+/// * `code` - The full escape sequence, e.g. `"\x1b[1;31m"`.
+///
+/// # Returns
+///
+/// The updated style, or `base` unchanged if `code` is not a CSI sequence.
 fn apply_ansi_code(mut base: Style, code: &str) -> Style {
     if !code.starts_with("\x1b[") {
         return base;
@@ -648,6 +891,20 @@ fn apply_ansi_code(mut base: Style, code: &str) -> Style {
     base
 }
 
+/// Applies a single basic SGR parameter to a style.
+///
+/// Handles bold (`1`) and its reset (`22`), the 8 standard and 8 bright
+/// foreground colors (`30`–`37`, `90`–`97`), the matching backgrounds
+/// (`40`–`47`, `100`–`107`) and the default-color resets (`39`, `49`).
+///
+/// # Arguments
+///
+/// * `style` - The style to modify.
+/// * `code` - The SGR parameter.
+///
+/// # Returns
+///
+/// The updated style, or `style` unchanged for unsupported codes.
 fn apply_basic_sgr(style: Style, code: u16) -> Style {
     match code {
         1 => style.add_modifier(Modifier::BOLD),
@@ -690,6 +947,19 @@ fn apply_basic_sgr(style: Style, code: u16) -> Style {
     }
 }
 
+/// Converts an xterm 256-color palette index into a ratatui [`Color`].
+///
+/// - `0..=15` map to the basic/bright named colors;
+/// - `16..=231` map to the 6×6×6 color cube as RGB;
+/// - `232..=255` map to the 24-step grayscale ramp as RGB.
+///
+/// # Arguments
+///
+/// * `index` - The palette index.
+///
+/// # Returns
+///
+/// The corresponding color.
 fn ansi256_to_color(index: u8) -> Color {
     match index {
         0..=15 => {
