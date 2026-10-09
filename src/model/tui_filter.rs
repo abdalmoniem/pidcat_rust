@@ -1,3 +1,17 @@
+// Copyright (c) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+
+//! Filter bar expressions for the interactive log viewer.
+
 #![deny(clippy::unwrap_used)]
 
 use crate::LogEntry;
@@ -9,36 +23,52 @@ use crate::package_name_contains;
 use crate::passes_log_level;
 use crate::passes_tag_filter;
 
+/// One constraint parsed from the TUI filter input.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TuiFilter {
+    /// Match log lines whose PID equals this value.
     Pid(String),
+    /// Match lines whose UID equals this value or maps in [`State::uids_map`].
     Uid(String),
+    /// Match log tag (supports glob rules via [`passes_tag_filter`]).
     Tag(String),
+    /// Match resolved package display name ([`package_name_contains`]).
     Package(String),
+    /// Require at least this [`LogLevel`] (combined with other level filters via minimum).
     Level(LogLevel),
+    /// Case-insensitive substring in message or banner text.
     Keyword(String),
 }
 
+/// Ordered list of active TUI filters parsed from user input.
 #[derive(Clone, Debug, Default)]
 pub struct TuiFilterSet {
+    /// Parsed filter clauses in input order.
     filters: Vec<TuiFilter>,
 }
 
 impl TuiFilterSet {
+    /// Creates an empty filter set (no constraints).
     pub fn new() -> Self {
         Self {
             filters: Vec::default(),
         }
     }
 
+    /// Borrowed view of parsed filters.
     pub fn filters(&self) -> &[TuiFilter] {
         &self.filters
     }
 
+    /// Returns true when no filters are configured.
     pub fn is_empty(&self) -> bool {
         self.filters.is_empty()
     }
 
+    /// Parses a filter bar string into typed [`TuiFilter`] values.
+    ///
+    /// Supports `pid:`, `uid:`, `tag:`, `package:`, and `level:` prefixes (CSV where noted),
+    /// plus bare tokens as keywords. Quoted segments preserve embedded spaces.
     pub fn parse(input: &str) -> Self {
         let mut filters = Vec::default();
 
@@ -73,6 +103,7 @@ impl TuiFilterSet {
         Self { filters }
     }
 
+    /// Returns true when `entry` satisfies all active filters and minimum log level.
     pub fn matches(&self, entry: &LogEntry, state: &State) -> bool {
         if !passes_log_level(entry.level, self.min_log_level(state)) {
             return false;
@@ -198,6 +229,7 @@ impl TuiFilterSet {
         true
     }
 
+    /// Effective minimum level: explicit `level:` filters (most verbose wins) or [`State::log_level`].
     fn min_log_level(&self, state: &State) -> LogLevel {
         let level_filters = self
             .filters
@@ -216,6 +248,7 @@ impl TuiFilterSet {
     }
 }
 
+/// Splits `input` on whitespace outside of double-quoted regions.
 fn tokenize_filter_input(input: &str) -> Vec<String> {
     let mut tokens = Vec::default();
     let mut current = String::new();
@@ -244,6 +277,7 @@ fn tokenize_filter_input(input: &str) -> Vec<String> {
     tokens
 }
 
+/// Trims a token and strips surrounding `"` quotes when present.
 fn normalize_token(token: &str) -> String {
     let trimmed = token.trim();
 
