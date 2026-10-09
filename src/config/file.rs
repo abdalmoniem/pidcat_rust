@@ -161,7 +161,7 @@ pub const TIMESTAMPS_DOC: &[&str] = &[
     "command line: -T, --timestamps",
     "note: when true here, it cannot be switched off from the command line",
     "note: use log-format = \"threadtime\" so adb includes a clock time in each line;",
-    "with \"brief\", pidcat uses the local time when the line is processed",
+    "with \"brief\", pidcatrs uses the local time when the line is processed",
     "example: timestamps = true",
 ];
 

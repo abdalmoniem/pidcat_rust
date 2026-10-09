@@ -32,12 +32,12 @@ lint:
 clean:
     @cargo xtask clean --profile=both
 
-[doc('Build the pidcat binary')]
+[doc('Build the pidcatrs binary')]
 [group('build')]
 build: fmt lint generate-themes generate-schema
     @cargo xtask build --profile=dev
 
-[doc('Build the pidcat release binary')]
+[doc('Build the pidcatrs release binary')]
 [group('build')]
 build-release: fmt lint generate-themes generate-schema
     @cargo xtask build --profile=release
@@ -48,19 +48,19 @@ build-release: fmt lint generate-themes generate-schema
 build-installer:
     @cargo xtask build-installer
 
-[arg('profile', help='the pidcat binary build profile')]
+[arg('profile', help='the pidcatrs binary build profile')]
 [doc('Perform a full rebuild and create the installer')]
 [group('build')]
 [windows]
 build-all profile:
     @cargo xtask build-all --profile=$profile
 
-[doc('Run the pidcat binary')]
+[doc('Run the pidcatrs binary')]
 [group('build')]
 run args:
     @cargo xtask run -- $args
 
-[doc('Run the pidcat release binary')]
+[doc('Run the pidcatrs release binary')]
 [group('build')]
 run-release args:
     @cargo xtask run --profile=release -- $args
@@ -169,42 +169,42 @@ update_changelog:
 [private]
 [script]
 post_install:
-    pidcat_exe="$(which pidcat)"
-    pidcat_exe_basename="$(basename "$pidcat_exe")"
+    pidcatrs_exe="$(which pidcatrs)"
+    pidcatrs_exe_basename="$(basename "$pidcatrs_exe")"
 
     echo
     if command -v ccze >/dev/null 2>&1; then
-        just installed_message "$pidcat_exe" | ccze --raw-ansi
+        just installed_message "$pidcatrs_exe" | ccze --raw-ansi
     else
-        just installed_message "$pidcat_exe"
+        just installed_message "$pidcatrs_exe"
     fi
 
     if [ "$TARGET_OS" != "windows" ]; then
-        strip "$pidcat_exe" 2>/dev/null || echo "could not strip $pidcat_exe_basename"
+        strip "$pidcatrs_exe" 2>/dev/null || echo "could not strip $pidcatrs_exe_basename"
     fi
 
     if command -v ccze >/dev/null 2>&1; then
-        just file_info "$pidcat_exe" | ccze --raw-ansi
-        just ldd_info  "$pidcat_exe" | ccze --raw-ansi
-        just du_info   "$pidcat_exe" | ccze --raw-ansi
+        just file_info "$pidcatrs_exe" | ccze --raw-ansi
+        just ldd_info  "$pidcatrs_exe" | ccze --raw-ansi
+        just du_info   "$pidcatrs_exe" | ccze --raw-ansi
     else
-        just file_info "$pidcat_exe"
-        just ldd_info  "$pidcat_exe"
-        just du_info   "$pidcat_exe"
+        just file_info "$pidcatrs_exe"
+        just ldd_info  "$pidcatrs_exe"
+        just du_info   "$pidcatrs_exe"
     fi
 
 [private]
-installed_message pidcat_exe:
-    @echo "installed pidcat to "$pidcat_exe""
+installed_message pidcatrs_exe:
+    @echo "installed pidcatrs to "$pidcatrs_exe""
 
 [private]
-file_info pidcat_exe:
-    @file "$pidcat_exe"
+file_info pidcatrs_exe:
+    @file "$pidcatrs_exe"
 
 [private]
-ldd_info pidcat_exe:
-    @ldd "$pidcat_exe"
+ldd_info pidcatrs_exe:
+    @ldd "$pidcatrs_exe"
 
 [private]
-du_info pidcat_exe:
-    @du -hs --time --time-style=+'%a, %d/%b/%Y - %r' "$pidcat_exe"
+du_info pidcatrs_exe:
+    @du -hs --time --time-style=+'%a, %d/%b/%Y - %r' "$pidcatrs_exe"

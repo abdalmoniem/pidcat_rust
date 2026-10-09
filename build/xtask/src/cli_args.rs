@@ -40,7 +40,7 @@ pub enum Command {
         profile: Profile,
     },
 
-    /// Build the pidcat binary
+    /// Build the pidcatrs binary
     Build {
         /// The build profile
         #[arg(short = 'p', long = "profile", ignore_case = true)]
@@ -77,7 +77,7 @@ pub enum Command {
         iscc_path: Option<PathBuf>,
     },
 
-    /// Run the pidcat binary
+    /// Run the pidcatrs binary
     Run {
         /// The build profile
         #[arg(short = 'p', long = "profile", ignore_case = true)]

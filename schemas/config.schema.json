@@ -101,7 +101,7 @@
     },
     "timestamps": {
       "type": "boolean",
-      "description": "Show a timestamp column as the first output field.\ntype: boolean\ndefault: false\ncommand line: -T, --timestamps\nnote: when true here, it cannot be switched off from the command line\nnote: use log-format = \"threadtime\" so adb includes a clock time in each line;\nwith \"brief\", pidcat uses the local time when the line is processed\nexample: timestamps = true"
+      "description": "Show a timestamp column as the first output field.\ntype: boolean\ndefault: false\ncommand line: -T, --timestamps\nnote: when true here, it cannot be switched off from the command line\nnote: use log-format = \"threadtime\" so adb includes a clock time in each line;\nwith \"brief\", pidcatrs uses the local time when the line is processed\nexample: timestamps = true"
     },
     "timestamp-format": {
       "type": "string",
@@ -393,7 +393,7 @@
       "description": "Color theme of the TUI and of the log output (also in plain mode).\nUse a bundled theme name (see the JSON schema enum), a custom theme file name\nin the `themes` directory next to the default config file (without the .toml\nextension), or a path to a theme file. A value containing a path separator or\nending in .toml is a path; relative paths are resolved from the current\ndirectory. Bundled themes are written to the themes directory when missing.\ntype: string (bundled name, custom name, or file path)\ndefault: \"gruber-darker\"\ncommand line: --theme <THEME>\nexample: theme = \"monokai\""
     }
   },
-  "title": "pidcat configuration",
+  "title": "pidcatrs configuration",
   "description": "Every key mirrors the command-line flag of the same name. A flag passed on the\ncommand line wins over the value in this file, which wins over the built-in\ndefault.\n\nBoolean keys can only switch options on: when a key is true here, there is no\ncommand-line flag to switch it back off for a single run.\n\nCommented-out keys have no value; uncomment and edit them to set one.\nUnknown keys are rejected.",
   "$schema": "http://json-schema.org/draft-07/schema#"
 }

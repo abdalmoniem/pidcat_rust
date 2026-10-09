@@ -1436,7 +1436,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pidcat"
+name = "pidcatrs"
 version = "1.2.1"
 dependencies = [
  "build-print",
@@ -2636,7 +2636,7 @@ dependencies = [
  "anyhow",
  "clap",
  "colored",
- "pidcat",
+ "pidcatrs",
  "scope-functions",
  "which",
  "xshell",

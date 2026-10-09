@@ -205,7 +205,7 @@ impl TuiApp {
             pending_overwrite: None,
             export_file_name: String::new(),
             export_format_palette: PaletteSearch::default(),
-            export_format: ExportFormat::Pidcat,
+            export_format: ExportFormat::Pidcatrs,
             copy_in_progress: false,
             export_in_progress: false,
             status_tx,

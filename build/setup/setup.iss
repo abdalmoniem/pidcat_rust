@@ -1,8 +1,8 @@
-#define AppName "PidCatr"
+#define AppName "pidcatrs"
 #define AppVersion "1.2.1"
 #define AppPublisher "AbdElMoniem ElHifnawy"
 #define AppURL "https://abdalmoniem-alhifnawy.is-a.dev"
-#define AppExeName "pidcat.exe"
+#define AppExeName "pidcatrs.exe"
 #define DateTime GetDateTimeString('ddd_dd_mmm_yyyy_hh_nn_ss.zzz_ampm', '', '')
 #define SetupDir ExtractFilePath(SourcePath)
 #define BuildDir ExtractFilePath(RemoveBackslashUnlessRoot(SetupDir))

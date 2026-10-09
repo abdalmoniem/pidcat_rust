@@ -27,7 +27,7 @@ const EXPORT_FORMAT_HINTS: &[(&str, &str)] =
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExportFormat {
-    Pidcat,
+    Pidcatrs,
     Adb,
 }
 
@@ -41,7 +41,7 @@ pub const EXPORT_FORMAT_OPTIONS: &[ExportFormatOption] = &[
     ExportFormatOption {
         key: 'p',
         label: env!("CARGO_PKG_NAME"),
-        format: ExportFormat::Pidcat,
+        format: ExportFormat::Pidcatrs,
     },
     ExportFormatOption {
         key: 'a',
@@ -77,7 +77,7 @@ pub async fn run_export(
     render_state.last_tag = None;
 
     let message = match format {
-        ExportFormat::Pidcat => write_rendered_entries(&path, &entries, &mut render_state, &args)
+        ExportFormat::Pidcatrs => write_rendered_entries(&path, &entries, &mut render_state, &args)
             .await
             .map(|count| {
                 format!(

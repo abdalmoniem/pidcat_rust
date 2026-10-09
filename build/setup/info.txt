@@ -1,7 +1,7 @@
-📃 PidCat
+📃 pidcatrs
 🎯 Overview
-PidCat is an enhanced Android logcat viewer originally created by Jake Wharton for the Android Open Source Project. This Windows-optimized fork adds modern features including VT100 color support, advanced tag filtering with substring matching, and improved column formatting.
-PidCat filters logcat output by application package name, colorizes the output for better readability, and provides powerful filtering options to help you focus on the logs that matter.
+pidcatrs is an enhanced Android logcat viewer originally created by Jake Wharton for the Android Open Source Project. This Windows-optimized fork adds modern features including VT100 color support, advanced tag filtering with substring matching, and improved column formatting.
+pidcatrs filters logcat output by application package name, colorizes the output for better readability, and provides powerful filtering options to help you focus on the logs that matter.
 
 ✨ Features
 Core Features
@@ -28,7 +28,7 @@ Add Android SDK platform-tools to your PATH
 Or specify full path to adb in environment
 
 No Logs Appearing
-Problem: PidCat runs but shows no output.
+Problem: pidcatrs runs but shows no output.
 Solution:
 Verify your app is running: adb shell ps | grep your.package.name
 Check package name is correct (case-sensitive)
@@ -56,13 +56,13 @@ GitHub: @abdalmoniem
 Website: abdalmoniem.github.io
 
 Contributors
-Thanks to all contributors who have helped improve PidCat!
+Thanks to all contributors who have helped improve pidcatrs!
 
 🔗 Links
 
-GitHub Repository: github.com/abdalmoniem/pidcat
-Issue Tracker: github.com/abdalmoniem/pidcat/issues
+GitHub Repository: github.com/abdalmoniem/pidcatrs
+Issue Tracker: github.com/abdalmoniem/pidcatrs/issues
 Original PidCat: github.com/JakeWharton/pidcat
 
 Made with ❤️ for Android Developers
-If you find PidCat useful, please ⭐ star the repository!
+If you find pidcatrs useful, please ⭐ star the repository!

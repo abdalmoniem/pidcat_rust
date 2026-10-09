@@ -196,7 +196,7 @@ pub fn run_plain(args: &mut CliArgs) {
     }
 
     if !IS_RUNNING.load(Relaxed) {
-        let bin_name = option_env!("CARGO_BIN_NAME").unwrap_or("pidcat");
+        let bin_name = option_env!("CARGO_BIN_NAME").unwrap_or("pidcatrs");
         let msg = format!("{bin_name} stopped by user.")
             .run(|msg| colored(msg, show_colors, Color::BrightCyan));
 

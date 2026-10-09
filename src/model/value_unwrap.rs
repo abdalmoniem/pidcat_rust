@@ -6,7 +6,7 @@ use colored::ColoredString;
 ///
 /// ```should_panic
 /// use colored::Colorize;
-/// use pidcat::ValueOrPanic;
+/// use pidcatrs::ValueOrPanic;
 ///
 /// let result: Result<i32, &str> = Err("Oops");
 /// let value = result.unwrap_or_panic("Custom panic message");
@@ -28,7 +28,7 @@ pub trait ValueOrPanic<T> {
     /// ### Example
     ///
     /// ```should_panic
-    /// use pidcat::ValueOrPanic;
+    /// use pidcatrs::ValueOrPanic;
     ///
     /// let result: Result<i32, &str> = Err("Oops");
     /// let value = result.unwrap_or_panic("Custom panic message");
@@ -46,7 +46,7 @@ pub trait ValueOrPanic<T> {
     ///
     /// ```should_panic
     /// use colored::Colorize;
-    /// use pidcat::ValueOrPanic;
+    /// use pidcatrs::ValueOrPanic;
     ///
     /// let result: Result<i32, &str> = Err("Oops");
     /// let value = result.unwrap_or_panic_with("Custom panic message", |msg| msg.red().bold());

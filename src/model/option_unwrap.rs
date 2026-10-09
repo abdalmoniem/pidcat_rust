@@ -8,7 +8,7 @@ use colored::Colorize;
 ///
 /// ```should_panic
 /// use colored::Colorize;
-/// use pidcat::ValueOrPanic;
+/// use pidcatrs::ValueOrPanic;
 ///
 /// let option: Option<i32> = None;
 /// let value = option.unwrap_or_panic("Custom panic message");
@@ -24,7 +24,7 @@ impl<T> ValueOrPanic<T> for Option<T> {
     /// ### Example
     ///
     /// ```should_panic
-    /// use pidcat::ValueOrPanic;
+    /// use pidcatrs::ValueOrPanic;
     ///
     /// let option: Option<i32> = None;
     /// let value = option.unwrap_or_panic("Custom panic message");
@@ -45,7 +45,7 @@ impl<T> ValueOrPanic<T> for Option<T> {
     ///
     /// ```should_panic
     /// use colored::Colorize;
-    /// use pidcat::ValueOrPanic;
+    /// use pidcatrs::ValueOrPanic;
     ///
     /// let option: Option<i32> = None;
     /// let value = option.unwrap_or_panic_with("Custom panic message", |msg| msg.red().bold());

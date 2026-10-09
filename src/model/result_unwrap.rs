@@ -8,7 +8,7 @@ use colored::Colorize;
 ///
 /// ```should_panic
 /// use colored::Colorize;
-/// use pidcat::ValueOrPanic;
+/// use pidcatrs::ValueOrPanic;
 ///
 /// let result: Result<i32, &str> = Err("Oops");
 /// let value = result.unwrap_or_panic("Custom panic message");
@@ -27,7 +27,7 @@ where
     /// ### Example
     ///
     /// ```should_panic
-    /// use pidcat::ValueOrPanic;
+    /// use pidcatrs::ValueOrPanic;
     ///
     /// let result: Result<i32, &str> = Err("Oops");
     /// let value = result.unwrap_or_panic("Custom panic message");
@@ -50,7 +50,7 @@ where
     ///
     /// ```should_panic
     /// use colored::Colorize;
-    /// use pidcat::ValueOrPanic;
+    /// use pidcatrs::ValueOrPanic;
     ///
     /// let result: Result<i32, &str> = Err("Oops");
     /// let value = result.unwrap_or_panic_with("Custom panic message", |msg| msg.red().bold());

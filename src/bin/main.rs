@@ -9,22 +9,22 @@ use colored::Color;
 
 use is_terminal::IsTerminal;
 
-use pidcat::CliArgs;
-use pidcat::Config;
-use pidcat::ValueOrPanic;
-use pidcat::available_themes;
-use pidcat::colored;
-use pidcat::exit_with_error;
-use pidcat::format_columns;
-use pidcat::install_bundled_themes;
-use pidcat::load_theme;
-use pidcat::print_paged;
-use pidcat::restore_tui_terminal;
-use pidcat::run_plain;
-use pidcat::run_tui;
-use pidcat::set_active_theme;
-use pidcat::set_running;
-use pidcat::write_completions;
+use pidcatrs::CliArgs;
+use pidcatrs::Config;
+use pidcatrs::ValueOrPanic;
+use pidcatrs::available_themes;
+use pidcatrs::colored;
+use pidcatrs::exit_with_error;
+use pidcatrs::format_columns;
+use pidcatrs::install_bundled_themes;
+use pidcatrs::load_theme;
+use pidcatrs::print_paged;
+use pidcatrs::restore_tui_terminal;
+use pidcatrs::run_plain;
+use pidcatrs::run_tui;
+use pidcatrs::set_active_theme;
+use pidcatrs::set_running;
+use pidcatrs::write_completions;
 
 use scope_functions::Run;
 fn panic_hook(info: &PanicHookInfo, show_colors: bool) {

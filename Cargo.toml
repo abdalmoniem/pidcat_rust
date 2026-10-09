@@ -1,5 +1,5 @@
 [package]
-name = "pidcat"
+name = "pidcatrs"
 edition = "2024"
 version = "1.2.1"
 build = "build/build.rs"
@@ -44,7 +44,7 @@ embed-resource = "3.0.6"
 scope-functions = "1.1.0"
 
 [[bin]]
-name = "pidcat"
+name = "pidcatrs"
 path = "src/bin/main.rs"
 
 [dev-dependencies]

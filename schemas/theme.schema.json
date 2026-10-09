@@ -32,7 +32,7 @@
     "ui",
     "log"
   ],
-  "title": "pidcat color theme",
+  "title": "pidcatrs color theme",
   "description": "Colors are hex strings in the form \"#rrggbb\". Every key in [ui] and [log]\nexcept `tokens` takes either a hex color or the name of a [palette] entry.\nAll [ui] and [log] keys are required; unknown keys are rejected.",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {

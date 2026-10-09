@@ -77,4 +77,4 @@ recurse_submodules = false
 
 [remote.github]
 owner = "abdalmoniem"
-repo = "pidcat_rust"
+repo = "pidcatrs"

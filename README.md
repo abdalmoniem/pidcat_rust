@@ -1,207 +1,348 @@
 <div align="center">
-   <img width="200" src="assets/icon.png" alt="PidCat Icon"/>
-   <h1>📃 PidCat Rust</h1>
-   <p>A colorized Android logcat viewer for Windows with advanced filtering capabilities</p>
+   <img width="200" src="assets/icon.png" alt="pidcatrs icon"/>
+   <h1>📃 pidcatrs</h1>
+   <p>A colorized Android logcat viewer with an interactive TUI, themes, and advanced filtering</p>
 
 [![GPLv3 License](https://img.shields.io/badge/License-GPL%20v3-yellow.svg)](LICENSE.md)
 [![Python](https://img.shields.io/badge/Rust-1.92+-yellow.svg)](https://rust-lang.org)
 
-<!-- [![WinGet Package Version](https://img.shields.io/winget/v/AbdElMoniemElHifnawy.PidCat)](https://winstall.app/apps/AbdElMoniemElHifnawy.PidCatRust) -->
+<!-- [![WinGet Package Version](https://img.shields.io/winget/v/AbdElMoniemElHifnawy.pidcatrs)](https://winstall.app/apps/AbdElMoniemElHifnawy.pidcatrs) -->
 
-[![Views](https://views.whatilearened.today/views/github/abdalmoniem/pidcat_rust.svg)](https://github.com/abdalmoniem/pidcat_rust)
-[![GitHub Release](https://img.shields.io/github/v/release/abdalmoniem/pidcat_rust)](https://github.com/abdalmoniem/pidcat_rust/releases/latest)
-[![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/abdalmoniem/pidcat_rust/total?logo=github&logoSize=auto&label=GitHub%20Downloads)](https://github.com/abdalmoniem/pidcat_rust/releases/latest)
+[![Views](https://views.whatilearened.today/views/github/abdalmoniem/pidcatrs.svg)](https://github.com/abdalmoniem/pidcatrs)
+[![GitHub Release](https://img.shields.io/github/v/release/abdalmoniem/pidcatrs)](https://github.com/abdalmoniem/pidcatrs/releases/latest)
+[![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/abdalmoniem/pidcatrs/total?logo=github&logoSize=auto&label=GitHub%20Downloads)](https://github.com/abdalmoniem/pidcatrs/releases/latest)
 
 </div>
 
 # 🎯 Overview
 
-A fork of [PidCat](https://github.com/abdalmoniem/pidcat) re-written entirely in [Rust](https://rust-lang.org)
+A fork of [PidCat](https://github.com/JakeWharton/pidcat) re-written entirely in [Rust](https://rust-lang.org).
 
-PidCat is an enhanced Android logcat viewer originally created by Jake Wharton for the Android Open Source Project. This Windows-optimized fork adds modern features including VT100 color support, advanced tag filtering with substring matching, and improved column formatting.
+[PidCat](https://github.com/JakeWharton/pidcat) was originally created by Jake Wharton for the Android Open Source Project. **pidcatrs** extends that idea with a full-screen terminal UI, documented TOML configuration and color themes, multiple adb log formats (including multiline `long` output), timestamps, and the same package/tag filtering workflow you expect from classic pidcat—plus plain streaming mode when stdout is not a TTY or when you pass `--plain`.
 
-PidCat filters logcat output by application package name, colorizes the output for better readability, and provides powerful filtering options to help you focus on the logs that matter.
+pidcatrs filters logcat output by application package name, colorizes logs for readability, and offers CLI flags and an in-TUI filter bar so you can focus on the lines that matter.
 
 ---
 
 # 📸 Screenshots
 
-<div align=center>
-    <img
-        src="assets/screenshot_1.png"
-        alt="PidCat Screenshot 01"
-        width="800"/>
-    <br/>
-    <br/>
-    <br/>
-    <img 
-        src="assets/screenshot_2.png"
-        alt="PidCat Screenshot 02"
-        width="800"/>
+<div align="center">
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="assets/screenshot_1.png" alt="Screenshot 1" width="100%"/></td>
+    <td align="center" width="33%"><img src="assets/screenshot_2.png" alt="Screenshot 2" width="100%"/></td>
+    <td align="center" width="33%"><img src="assets/screenshot_3.png" alt="Screenshot 3" width="100%"/></td>
+  </tr>
+
+  <tr>
+    <td align="center" width="33%"><img src="assets/screenshot_4.png" alt="Screenshot 4" width="100%"/></td>
+    <td align="center" width="33%"><img src="assets/screenshot_5.png" alt="Screenshot 5" width="100%"/></td>
+    <td align="center" width="33%"><img src="assets/screenshot_6.png" alt="Screenshot 6" width="100%"/></td>
+  </tr>
+
+  <tr>
+    <td align="center" width="33%"><img src="assets/screenshot_7.png" alt="Screenshot 7" width="100%"/></td>
+    <td align="center" width="33%"><img src="assets/screenshot_8.png" alt="Screenshot 8" width="100%"/></td>
+    <td align="center" width="33%"><img src="assets/screenshot_9.png" alt="Screenshot 9" width="100%"/></td>
+  </tr>
+</table>
+
 </div>
 
 ---
 
 # ✨ Features
 
-- ## Core Features
+- ## Modes
 
-  - 🎨 **Colorized Output** - Different colors for log levels, tags, and packages
-  - 📦 **Package Filtering** - Show logs only from specific app packages
-  - 🏷️ **Tag Filtering** - Filter by log tags with substring matching support
-  - 🔍 **Regex Support** - Use regular expressions for advanced tag filtering
-  - 📊 **Process Tracking** - Automatically tracks process starts and deaths
-  - 💻 **Windows VT100 Support** - Native color support on Windows 10/11
+  - **Interactive TUI** — Default when stdout is a terminal: scroll, pause, filter, pick devices, open files, export, clipboard copy.
+  - **Plain stream mode** — `--plain`, or automatic when stdout is piped or redirected (same filters and colors as classic pidcat-style output).
 
-- ## Advanced Filtering
+- ## Core filtering
 
-  - **Multiple Tag Support** - Filter by multiple tags simultaneously
-  - **Substring Matching** - Match tags containing specific strings (e.g., `-t Timeout` matches `TimeoutJob$update`)
-  - **Regex Patterns** - Use regex special characters for complex filtering
-  - **Comma-Separated Tags** - Specify multiple tags in a single argument: `-t Tag1,Tag2,Tag3`
-  - **Tag Ignoring** - Exclude specific tags from output with `-i`
-  - **Log Level Filtering** - Show only logs at or above a specific level
+  - **Package filtering** — One or more package names; process suffixes (`com.app:remote`, `com.app:`) supported.
+  - **Tag filtering** — Substring matching by default; regex when you use regex syntax in patterns.
+  - **Ignore tags** — `-i` / config `ignore_tags`; optional **ignore known system tags** (`-I`).
+  - **Log level** — Minimum level `-l` / `level:` in the TUI filter bar.
+  - **Message regex** — `-r` for line-body filtering.
+  - **Current app** — `--current` resolves foreground package(s) via adb.
+  - **Process tracking** — Start/death notifications for filtered processes.
 
-- ## Display Options
+- ## Formatting and adb
 
-  - **Customizable Column Widths** - Adjust package name and tag column widths
-  - **Smart Tag Display** - Automatically shows tags when filtering
-  - **Truncation** - Long tags are truncated to fit column width
-  - **Process Notifications** - Visual indicators for process lifecycle events
+  - **Log formats** — `-f` / `--log-format`: `brief`, `long`, `process`, `raw`, `tag`, `thread`, `threadtime`, `time` (short aliases supported).
+  - **Timestamps** — `-T` / `--timestamps` and `-Z` / `--timestamp-format` (chrono strftime).
+  - **Columns** — Show PID (`-P`), UID (`-U`), package (`-p`); widths `-x` (pid/uid), `-m` (package), `-n` (tag); always show tags (`-S`).
+  - **Custom adb path** — `-A` / `--adb`.
+  - **Device selection** — `-d`, `-e`, `-s SERIAL` (TUI can switch devices with `d`).
 
-- ## Output Options
+- ## Configuration and themes
 
-  - **File Output** - Save logs to a file with `-o`
-  - **Color Disable** - Remove colors for piping or parsing with `-n`
-  - **Current App Mode** - Automatically filter by the currently running app
+  - **Config file** — `~/.config/pidcatrs/config.toml` (or platform equivalent); JSON Schema in `schemas/config.schema.json`.
+  - **218 bundled color themes** — Installed under `~/.config/pidcatrs/themes/`; default theme `gruber-darker`; custom `.toml` themes supported.
+  - **CLI helpers** — `--print-config`, `--print-theme`, `--list-themes`, `--config`, `--theme`.
+  - **Shell completions** — `--completions bash|zsh|fish|powershell|elvish`.
+
+- ## Output
+
+  - **Save to file** — `-o` / `--output`.
+  - **Colors** — Theme-driven TUI and plain colors; `-N` / `--no-color`; optional GC highlighting `-g` / `--gc-color`.
+  - **Cross-platform color** — VT100/ANSI on Windows, Linux, and macOS.
 
 ---
 
 # 📥 Installation
 
-- ### Installer Binaries
+- ### Installer binaries
 
-  [<img alt="Get it on GitHub" height="80" src="assets/badge_github.png"/>](https://github.com/abdalmoniem/pidcat_rust/releases/latest)
-  <!-- [<img alt="Get from WinGet" height="80" src="assets/badge_winget.png"/>](https://winstall.app/apps/AbdElMoniemElHifnawy.PidCatRust) -->
+  [<img alt="Get it on GitHub" height="80" src="assets/badge_github.png"/>](https://github.com/abdalmoniem/pidcatrs/releases/latest)
+  <!-- [<img alt="Get from WinGet" height="80" src="assets/badge_winget.png"/>](https://winstall.app/apps/AbdElMoniemElHifnawy.pidcatrs) -->
 
-  <!-- ```bash
-  winget install --id AbdElMoniemElHifnawy.PidCatRust
-  ``` -->
-
-- ## From Source
+- ## From source
 
   - ### Prerequisites
 
-    - [Android SDK](https://developer.android.com/tools/releases/platform-tools#downloads) with ADB in PATH
-    - [Rust](https://rust-lang.org/learn/get-started) latest version
-    - [Git](https://git-scm.com) for version control
+    - [Android SDK platform-tools](https://developer.android.com/tools/releases/platform-tools#downloads) with `adb` on `PATH`
+    - [Rust](https://rust-lang.org/learn/get-started) (see `rust-toolchain.toml`)
+    - [just](https://github.com/casey/just) (recommended) or `cargo` + `cargo xtask`
+    - [Inno Setup](https://jrsoftware.org/isdl.php) — Windows installer only
 
-  - ### Installation Steps
+  - ### Quick build
 
     ```bash
-    # Clone the repository
-    git clone https://github.com/abdalmoniem/pidcat_rust.git
-    cd pidcat_rust
+    git clone https://github.com/abdalmoniem/pidcatrs.git
+    cd pidcatrs
 
-    # Install cargo-make
-    cargo install cargo-make
+    # Debug binary (fmt, clippy, schema/themes generation, build)
+    just build
 
-    # Build all variants
-    cargo make build-all
+    # Release binary
+    just build-release
 
-    # Run debug variant
-    cargo run -- com.example.app
+    # Install release binary to PATH (non-Windows: cargo install style via xtask)
+    just install
+    ```
 
-    # Run release variant
-    cargo run --release -- com.example.app
+  - ### Run without installing
+
+    ```bash
+    just run 'com.example.app'
+    just run-release '--plain com.example.app'
     ```
 
 ---
 
 # 🚀 Usage
 
-- ## Basic Usage
+- ## TUI vs plain
+
+  - With a connected device and a TTY stdout, **pidcatrs starts the TUI** automatically.
+  - Use **`--plain`** for traditional scrolling line output (scripts, CI, or copying from a terminal without full-screen UI).
+  - Redirecting stdout (e.g. `pidcatrs … | tee log.txt`) also selects plain mode.
+
+- ## Basic usage
 
 ```bash
-# Filter logs by package name
-pidcat com.example.myapp
+# TUI: filter logs by package name
+pidcatrs com.example.myapp
 
-# Filter by multiple packages
-pidcat com.example.app1 com.example.app2
+# Multiple packages
+pidcatrs com.example.app1 com.example.app2
 
-# Show all logs (no package filtering)
-pidcat -a
+# Plain stream
+pidcatrs --plain com.example.myapp
 
-# Filter by currently running app
-pidcat --current
+# All packages
+pidcatrs -a
+
+# Foreground app only
+pidcatrs --current
 ```
 
-- ## Advanced Filtering
+- ## Advanced filtering
 
 ```bash
-# Filter by specific tags
-pidcat com.example.app -t MyTag -t AnotherTag
+# Tags (repeat or comma-separated)
+pidcatrs com.example.app -t MyTag -t AnotherTag
+pidcatrs com.example.app -t MyTag,AnotherTag
 
-# Filter by tags with substring matching
-pidcat com.example.app -t Timeout
-# Matches: TimeoutJob, TimeoutJob$update, NetworkTimeout, etc.
+# Substring tag match
+pidcatrs com.example.app -t Timeout
 
-# Use comma-separated tags
-pidcat com.example.app -t MyTag,AnotherTag,ThirdTag
+# Level and ignored tags
+pidcatrs com.example.app -l D -i Chatty -i Verbose
 
-# Combine with log level filtering
-pidcat com.example.app -t MyTag -l D
-# Shows only Debug level and above
+# Message regex
+pidcatrs com.example.app -r "Exception|FATAL"
 
-# Ignore specific tags
-pidcat com.example.app -i ChattyCrap -i Noisy
-
-# Use regex for complex patterns
-pidcat com.example.app -t "^Network.*"
-# Matches: NetworkManager, NetworkClient, etc.
+# Regex tag patterns
+pidcatrs com.example.app -t "^Network.*"
 ```
 
-- ## Command Line Options
+- ## Command line options
 
-```bash
-positional arguments:
-  package(s)            Application package name(s)
-                        This can be specified multiple times
+  Positional **`PACKAGE`** — Application package name(s); may be repeated. On the command line, packages **replace** the `packages` list in config.
 
-options:
-  -h, --help            Show this help message and exit.
-  -v, --version         Print the version number and exit
-  -a, --all             Print log messages from all packages, default: False
-  -k, --keep            Keep the entire log before running, default: False
-  -d, --device          Use first device for log input, default: False
-  -e, --emulator        Use first emulator for log input, default: False
-  -g, --color-gc        Color garbage collection, default: False
-  -N, --no-color        Disable colors, default: False
-  -P, --show-pid        Show package name in output, default: False
-  -p, --show-package    Show package name in output, default: False
-  -S, --always-show-tags
-                        Always show the tag name, default: False
-  -c, --current         Filter logcat by current running app(s), default: False
-  -I, --ignore-system-tags
-                        Filter output by ignoring known system tags, default: False
-                        Use --ignore-tag to ignore additional tags if needed
-  -t, --tag TAG         Filter output by specified tag(s)
-                        This can be specified multiple times, or as a comma separated list
-  -i, --ignore-tag IGNORED_TAG
-                        Filter output by ignoring specified tag(s)
-                        This can be specified multiple times, or as a comma separated list
-  -l, --log-level LEVEL [V|D|I|W|E|F|v|d|i|w|e|f]
-                        Filter messages lower than minimum log level, default: V
-  -r, --regex REGEX     Filter output messages using the specified REGEX
-  -x, --pid-width X     Width of PID column, default: 6
-  -n, --package-width N
-                        Width of package/process name column, default: 20
-  -m, --tag-width M     Width of tag column, default: 20
-  -s, --serial DEVICE_SERIAL
-                        Device serial number
-  -o, --output FILE_PATH
-                        Output filename
-```
+  | Option | Description |
+  | --- | --- |
+  | `-h`, `--help` | Show help and exit |
+  | `-v`, `--version` | Show version and exit |
+  | `--completions SHELL` | Write shell completions to stdout |
+  | `-A`, `--adb ADB_PATH` | Path to `adb` if not on `PATH` |
+
+  **Device**
+
+  | Option | Description |
+  | --- | --- |
+  | `-d`, `--device` | First physical device |
+  | `-e`, `--emulator` | First emulator |
+  | `-s`, `--serial SERIAL` | Specific device serial |
+
+  **Filtering**
+
+  | Option | Description |
+  | --- | --- |
+  | `-a`, `--all` | All packages (no package filter) |
+  | `-k`, `--keep` | Do not clear logcat before tailing |
+  | `-c`, `--current` | Filter to current foreground app(s) |
+  | `-I`, `--ignore-system-tags` | Ignore built-in system tag list (combine with `-i`) |
+  | `-t`, `--tag TAG` | Include tag(s); repeat or comma-separated |
+  | `-i`, `--ignore-tag TAG` | Exclude tag(s); repeat or comma-separated |
+  | `-l`, `--log-level LEVEL` | Minimum level: `V` `D` `I` `W` `E` `F` (case insensitive) |
+  | `-r`, `--regex REGEX` | Filter log message body |
+
+  **Formatting**
+
+  | Option | Description |
+  | --- | --- |
+  | `-T`, `--timestamps` | Show timestamp column |
+  | `-Z`, `--timestamp-format FMT` | chrono strftime format (default `%I:%M:%S%.3f%P`) |
+  | `-f`, `--log-format FORMAT` | adb format: brief, long, process, raw, tag, thread, threadtime, time |
+  | `-P`, `--show-pid` | Show PID column |
+  | `-U`, `--show-uid` | Show UID column |
+  | `-p`, `--show-package` | Show package / process name column |
+  | `-S`, `--always-show-tags` | Always show tag column |
+  | `-x`, `--puid-width WIDTH` | PID/UID column width (default 5) |
+  | `-m`, `--package-width WIDTH` | Package column width (default 20) |
+  | `-n`, `--tag-width WIDTH` | Tag column width (default 20) |
+
+  **Colors and output**
+
+  | Option | Description |
+  | --- | --- |
+  | `-g`, `--gc-color` | Highlight GC-related messages |
+  | `-N`, `--no-color` | Disable message colors |
+  | `-o`, `--output FILE` | Write plain output to file |
+  | `--plain` | Force plain stream mode (no TUI) |
+
+  **Config**
+
+  | Option | Description |
+  | --- | --- |
+  | `--config PATH` | Config file (default `~/.config/pidcatrs/config.toml`) |
+  | `--theme NAME_OR_PATH` | Bundled theme name or path to `.toml` (default `gruber-darker`) |
+  | `--list-themes` | List bundled and custom themes |
+  | `--print-config` | Print effective config as documented TOML |
+  | `--print-theme` | Print active theme as documented TOML |
+
+  CLI flags override config values when both are set. See `schemas/config.schema.json` for every config key.
+
+---
+
+# 🖥️ TUI user guide
+
+Press **`?`** anytime to open the **command palette** (searchable list of shortcuts). **`Esc`** closes dialogs or leaves filter editing.
+
+- ## General
+
+  | Keys | Action |
+  | --- | --- |
+  | `q`, `Ctrl+c` | Quit |
+  | `?` | Open command palette |
+  | `Esc` | Close dialog / stop editing filter |
+
+- ## Log view
+
+  | Keys | Action |
+  | --- | --- |
+  | `j` / `k`, `↑` / `↓`, mouse wheel | Scroll |
+  | `PgUp` / `PgDn` | Scroll by page |
+  | `g` / `Home` | Jump to top |
+  | `G` / `End` | Jump to bottom (resume live tail) |
+  | `v` | Enter select mode |
+
+- ## Select mode
+
+  | Keys | Action |
+  | --- | --- |
+  | `j` / `k`, `↑` / `↓` | Move selection |
+  | `PgUp` / `PgDn` | Move by 10 entries |
+  | `y`, `Enter` | Open copy menu for selected entry |
+  | `v`, `Esc` | Exit select mode |
+
+- ## Log capture
+
+  | Keys | Action |
+  | --- | --- |
+  | `p`, `Space` | Pause / resume incoming logs |
+  | `l` | Clear buffer and restart live logcat |
+  | `d` | Open device picker |
+  | `o` | Open log file (file explorer) |
+  | `Ctrl+s` | Export entries matching the current filter |
+
+- ## Filter bar
+
+  | Keys | Action |
+  | --- | --- |
+  | `/` | Focus filter input |
+  | `Enter` | Apply filter |
+  | `←` / `→`, `Home` / `End` | Edit filter text |
+  | `Backspace` / `Delete` | Edit filter text |
+
+  **Filter syntax** (combine terms; message words match log text):
+
+  | Syntax | Meaning |
+  | --- | --- |
+  | `package:com.example.app` | Filter by package (multiple allowed) |
+  | `tag:MyTag` | Filter by tag |
+  | `level:debug` | Minimum level (`verbose`, `debug`, `info`, …) |
+  | `pid:1234` | Filter by PID |
+  | `uid:10001` | Filter by UID |
+  | `search terms` | Match message text |
+
+- ## Device picker
+
+  | Keys | Action |
+  | --- | --- |
+  | `Enter` | Select highlighted device |
+  | `Ctrl+r` | Refresh device list |
+  | `j` / `k`, `↑` / `↓` | Move selection |
+
+- ## Copy menu
+
+  | Keys | Action |
+  | --- | --- |
+  | `m` / `t` / `p` / `u` / `e` | Copy message, tag, pid, uid, or full entry |
+  | `Enter` | Copy highlighted option |
+  | `j` / `k`, `↑` / `↓` | Move selection |
+
+- ## Export format
+
+  | Keys | Action |
+  | --- | --- |
+  | `p` / `a` | Export as rendered output vs raw adb lines |
+  | `Enter` | Confirm format |
+  | `j` / `k`, `↑` / `↓` | Move selection |
+
+- ## File explorer
+
+  | Keys | Action |
+  | --- | --- |
+  | Type a path | List matching directory entries |
+  | `↑` / `↓`, `PgUp` / `PgDn` | Move selection |
+  | `Tab` | Complete path with selected entry |
+  | `Enter` | Open file or save export (confirm twice to overwrite) |
 
 ---
 
@@ -209,158 +350,172 @@ options:
 
 <details>
 
-<summary>Example 1: Basic Package Filtering</summary>
+<summary>Example 1: Basic package filtering</summary>
 
 ```bash
-pidcat com.example.myapp
+pidcatrs com.example.myapp
 ```
 
-Shows all logs from `com.example.myapp` with colorized output.
+Opens the TUI (or plain stream if stdout is not a TTY) for `com.example.myapp`.
 
 </details>
 
 <details>
 
-<summary>Example 2: Multiple Tags with Custom Width</summary>
+<summary>Example 2: Multiple tags with custom column widths</summary>
 
 ```bash
-pidcat com.example.myapp -t Network -t Database -m 25 -n 30
+pidcatrs com.example.myapp -t Network -t Database -m 25 -n 30
 ```
 
-Shows logs with `Network` or `Database` tags, with 30-char package column and 25-char tag column.
+Filters tags containing `Network` or `Database`; package column 25 chars, tag column 30 chars.
 
 </details>
 
 <details>
 
-<summary>Example 3: Debug Level Only</summary>
+<summary>Example 3: Debug level and above</summary>
 
 ```bash
-pidcat com.example.myapp -l D
+pidcatrs com.example.myapp -l D
 ```
 
-Shows only Debug, Info, Warning, Error, and Fatal logs (filters out Verbose).
+Shows Debug, Info, Warning, Error, and Fatal (hides Verbose).
 
 </details>
 
 <details>
 
-<summary>Example 4: Save to File Without Colors</summary>
+<summary>Example 4: Save to file without colors</summary>
 
 ```bash
-pidcat com.example.myapp -o logs.txt -n
+pidcatrs com.example.myapp -o logs.txt -N --plain
 ```
 
-Saves logs to `logs.txt` without color codes.
+Writes plain, uncolored lines to `logs.txt`.
 
 </details>
 
 <details>
 
-<summary>Example 5: Current App with Specific Tags</summary>
+<summary>Example 5: Current app with specific tags</summary>
 
 ```bash
-pidcat --current -t MainActivity -t ServiceManager --always-display-tags
+pidcatrs --current -t MainActivity -t ServiceManager -S
 ```
 
-Monitors the currently running app, showing only MainActivity and ServiceManager tags.
+Monitors the foreground app and always shows tag names for matching tags.
 
 </details>
 
 <details>
 
-<summary>Example 6: Complex Regex Filtering</summary>
+<summary>Example 6: Long log format with timestamps</summary>
 
 ```bash
-pidcat com.example.myapp -t "^(Network|Http).*Client$"
+pidcatrs --plain -f long -T com.example.myapp
 ```
 
-Matches tags like `NetworkClient`, `HttpClient`, `NetworkSocketClient`, etc.
+Uses adb `long` format (multiline messages) with a timestamp column in plain mode.
 
 </details>
 
 <details>
 
-<summary>Example 7: Ignore Verbose Tags</summary>
+<summary>Example 7: Config and theme</summary>
 
 ```bash
-pidcat com.example.myapp -i Chatty -i Verbose -l I
+pidcatrs --print-config > ~/.config/pidcatrs/config.toml
+pidcatrs --list-themes
+pidcatrs --theme catppuccin-mocha com.example.app
 ```
 
-Shows Info level and above, ignoring tags containing "Chatty" or "Verbose".
+Print a documented config template, list themes, and run with a bundled theme.
+
+</details>
+
+<details>
+
+<summary>Example 8: Shell completions</summary>
+
+```bash
+pidcatrs --completions zsh > "${fpath[1]}/_pidcatrs"
+```
+
+Generate zsh completions (adjust path for your setup).
 
 </details>
 
 ---
 
-# 🔨 Building from Source
+# 🔨 Building from source
 
 - ## Prerequisites
 
-  - [Android SDK](https://developer.android.com/tools/releases/platform-tools#downloads) with ADB in PATH
-  - [Rust](https://rust-lang.org/learn/get-started) latest version
-  - [Git](https://git-scm.com) for version control
-  - [Inno Setup](https://jrsoftware.org/isdl.php) for Windows installer
+  - Android SDK platform-tools (`adb` on `PATH`)
+  - Rust toolchain from `rust-toolchain.toml`
+  - `just` (see [Justfile](Justfile)) or invoke `cargo xtask` directly
+  - Inno Setup — only for `just build-installer` on Windows
 
-- ## Build Steps
+- ## Build steps
 
-  - ### Update Version
+  ```bash
+  just build              # debug
+  just build-release      # release
+  just test               # workspace tests
+  just generate-schema    # refresh schemas/config.schema.json
+  just generate-themes    # refresh bundled theme sources
+  ```
 
-    - Edit `Cargo.toml` and set the `version` variable
-
-  - ### Run Build Task
-
-    ```bash
-    cargo make build-all
-    ```
-
-    or
+  - ### Windows installer:
 
     ```bash
-    cargo make rebuild-installer
+    just build-installer
+    # Output: build/setup/Output/pidcatrs_v<version>_<datetime>.exe
     ```
 
-  - ### Output Locations
-    - **Debug Executable**: `target/debug/PidCat.exe`
-    - **Release Executable**: `target/release/PidCat.exe`
-    - **Installer**: `build/setup/Output/PidCat_<datetime>.exe`
+  - ### Binaries:
+
+    `target/debug/pidcatrs` or `target/release/pidcatrs` (`.exe` on Windows).
 
 ---
 
 # ⚙️ Configuration
 
-- ## Tag Filtering Behavior
+- ## Files
 
-  By default, tag filters use **_substring matching_**:
+  - **Config**: `~/.config/pidcatrs/config.toml` (Linux/macOS) or `%APPDATA%\pidcatrs\config.toml` (Windows).
+  - **Themes**: `themes/` next to the config file; bundled themes are copied on first run.
+  - **Schemas**: [`schemas/config.schema.json`](schemas/config.schema.json), [`schemas/theme.schema.json`](schemas/theme.schema.json) for editor validation.
+
+  On first run, if no config exists, pidcatrs can write a default file from built-in defaults. Use `--print-config` to dump the effective settings as a documented template.
+
+- ## Tag filtering behavior
+
+  By default, tag filters use **substring matching**:
 
   ```bash
   -t Timeout
   ```
 
-  Matches any tag containing "Timeout": `TimeoutJob`, `NetworkTimeout`, `TimeoutManager`, etc.
-
-  To use **_exact matching_** or **_regex patterns_**, include regex special characters:
+  Matches tags containing `Timeout` (`TimeoutJob`, `NetworkTimeout`, …). Use regex metacharacters for exact or pattern matches:
 
   ```bash
-  -t "^TimeoutJob$"  # Exact match only
-  -t "Timeout.*Job"  # Regex pattern
+  -t "^TimeoutJob$"
+  -t "Timeout.*Job"
   ```
 
-- ## Column Width Adjustment
-
-  Adjust column widths to fit your terminal:
+- ## Column widths
 
   ```bash
-  pidcat com.example.app -m 25 -n 30
+  pidcatrs com.example.app -m 25 -n 30 -x 6
   ```
 
-  - Package column: 25 characters
-  - Tag column: 30 characters
-  - Packages/Tags longer than width are truncated
+  Package width `-m`, tag width `-n`, PID/UID width `-x`. Longer names are truncated.
 
-- ## Color Customization
+- ## Colors
 
-  Colors are automatically allocated to tags and packages using an LRU cache. Predefined colors exist for common Android tags like `ActivityManager`, `DEBUG`, etc.
+  Plain and TUI colors come from the active **theme** TOML (log levels, tags, packages, UI chrome). Tags and packages receive stable colors from an LRU palette; common Android tags have predefined colors in many themes.
 
 ---
 
@@ -368,26 +523,27 @@ Shows Info level and above, ignoring tags containing "Chatty" or "Verbose".
 
 Contributions are welcome! Here's how you can help:
 
-- ## Fork the Repository
-- ## Create a Feature Branch
+- ## Fork the repository
+- ## Create a feature branch
   ```bash
   git checkout -b feature/amazing-feature
   ```
-- ## Commit Your Changes
+- ## Commit your changes
   ```bash
   git commit -m 'Add some amazing feature'
   ```
-- ## Push to the Branch
+- ## Push to the branch
   ```bash
   git push origin feature/amazing-feature
   ```
 - ## Open a Pull Request
 
-- ## Development Guidelines
+- ## Development guidelines
 
-  - Add comments for complex logic
-  - Test on Windows 10/11
-  - Update documentation for new features
+  - Run `just build` or `just lint` before submitting
+  - Add comments for non-obvious logic
+  - Test on your target OS (Windows, Linux, macOS)
+  - Update README and schemas when adding flags or config keys
 
 ---
 
@@ -399,26 +555,26 @@ This project is licensed under the GNU General Public License 3.0 - see the [LIC
 
 # 🙏 Credits
 
-- ## Original Author
+- ## Original author
 
-  - **[Jake Wharton](https://github.com/JakeWharton)** - Original [PidCat](https://github.com/JakeWharton/pidcat) creator
+  - **[Jake Wharton](https://github.com/JakeWharton)** — Original [PidCat](https://github.com/JakeWharton/pidcat) creator
 
-- ## Windows Fork Maintainer
+- ## Fork maintainer
 
-  - **AbdElMoniem ElHifnawy** - Windows optimizations and enhancements
+  - **AbdElMoniem ElHifnawy** — Rust rewrite, TUI, themes, and cross-platform enhancements
   - GitHub: [@abdalmoniem](https://github.com/abdalmoniem)
   - Website: [abdalmoniem-alhifnawy.is-a.dev](https://abdalmoniem-alhifnawy.is-a.dev)
 
 - ## Contributors
 
-  Thanks to all contributors who have helped improve PidCat!
+  Thanks to everyone who has helped improve pidcatrs!
 
 ---
 
 <div align="center">
 
-**Made with ❤️ for Android Developers**
+**Made with ❤️ for Android developers**
 
-If you find PidCat useful, please ⭐ star the repository!
+If you find pidcatrs useful, please ⭐ star the repository!
 
 </div>

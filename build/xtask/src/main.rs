@@ -6,9 +6,9 @@ use clap::error::DefaultFormatter as ClapFormatter;
 use clap::error::Error as ClapError;
 use clap::error::ErrorKind as ClapErrorKind;
 
-use pidcat::config_schema;
-use pidcat::render_theme_source;
-use pidcat::theme_schema;
+use pidcatrs::config_schema;
+use pidcatrs::render_theme_source;
+use pidcatrs::theme_schema;
 
 use scope_functions::Run;
 
@@ -48,7 +48,7 @@ fn cargo() -> Result<PathBuf> {
         .context("Couldn't find 'cargo' executable")
 }
 
-/// Clean the build artifacts for the pidcat package
+/// Clean the build artifacts for the pidcatrs package
 fn clean(shell: &Shell, profile: &Profile) -> Result<()> {
     let clean_cmd = |cargo| {
         let dev = matches!(profile, Profile::Development | Profile::Both);
@@ -57,7 +57,7 @@ fn clean(shell: &Shell, profile: &Profile) -> Result<()> {
         if dev {
             status(">> Cleaning...");
 
-            cmd!(shell, "{cargo} clean --package pidcat")
+            cmd!(shell, "{cargo} clean --package pidcatrs")
                 .quiet()
                 .run()
                 .map_err(Error::new)?;
@@ -66,7 +66,7 @@ fn clean(shell: &Shell, profile: &Profile) -> Result<()> {
         if release {
             status(">> Cleaning Release...");
 
-            cmd!(shell, "{cargo} clean --release --package pidcat")
+            cmd!(shell, "{cargo} clean --release --package pidcatrs")
                 .quiet()
                 .run()
                 .map_err(Error::new)?;
@@ -78,7 +78,7 @@ fn clean(shell: &Shell, profile: &Profile) -> Result<()> {
     cargo().and_then(clean_cmd).context("failed to clean!")
 }
 
-/// Build PidCat
+/// Build pidcatrs
 fn build(shell: &Shell, profile: &Profile) -> Result<()> {
     let build_cmd = |cargo| {
         let dev = matches!(profile, Profile::Development | Profile::Both);
@@ -108,7 +108,7 @@ fn build(shell: &Shell, profile: &Profile) -> Result<()> {
     cargo().and_then(build_cmd).context("failed to build!")
 }
 
-/// Build the Inno Setup Installer for PidCat
+/// Build the Inno Setup Installer for pidcatrs
 #[cfg(target_os = "windows")]
 fn build_installer(shell: &Shell, iscc_path: Option<PathBuf>) -> Result<()> {
     let cmd = |iscc| {
@@ -126,7 +126,7 @@ fn build_installer(shell: &Shell, iscc_path: Option<PathBuf>) -> Result<()> {
         .context("failed to build installer!")
 }
 
-/// Run PidCat
+/// Run pidcatrs
 fn run(shell: &Shell, profile: &Profile, args: &[String]) -> Result<()> {
     let cmd = |cargo| {
         let run_profile = match profile {
@@ -296,7 +296,7 @@ fn themes(generate: bool, check: bool, import_dir: Option<PathBuf>) -> Result<()
     }
 }
 
-/// Install PidCat using the Inno Setup Installer
+/// Install pidcatrs using the Inno Setup Installer
 #[cfg(target_os = "windows")]
 fn install(shell: &Shell, silent: bool) -> Result<()> {
     let cmd = |installer_exe| {
@@ -324,11 +324,11 @@ fn install(shell: &Shell, silent: bool) -> Result<()> {
         .context("failed to install!")
 }
 
-/// Install PidCat using cargo install
+/// Install pidcatrs using cargo install
 #[cfg(not(target_os = "windows"))]
 fn install(shell: &Shell) -> Result<()> {
     let cmd = |cargo| {
-        status(">> Installing pidcat...");
+        status(">> Installing pidcatrs...");
 
         cmd!(shell, "{cargo} install --locked --path .")
             .quiet()
