@@ -21,6 +21,9 @@
 - ([ebd784](https://github.com/abdalmoniem/pidcatrs/commit/ebd784)) **(Justfile)** Update Justfile to use xtask
 - ([d2ea77](https://github.com/abdalmoniem/pidcatrs/commit/d2ea77)) **(Justfile)** Change reinstall recipe to use xtask
 - ([b70e68](https://github.com/abdalmoniem/pidcatrs/commit/b70e68)) New app icon
+
+**Full Changelog**: [v1.2.0...v1.2.1](https://github.com/abdalmoniem/pidcatrs/compare/v1.2.0...v1.2.1)
+
 ---
 # [1.2.0] - Wed, 25/Feb/2026
 ## 🚀 Features
@@ -35,6 +38,9 @@
 ## 🛠️ Maintenance
 - ([cf4054](https://github.com/abdalmoniem/pidcatrs/commit/cf4054)) Add helix editor config
 - ([c1c6cf](https://github.com/abdalmoniem/pidcatrs/commit/c1c6cf)) Add git-cliff configuration
+
+**Full Changelog**: [v1.1.3...v1.2.0](https://github.com/abdalmoniem/pidcatrs/compare/v1.1.3...v1.2.0)
+
 ---
 # [1.1.3] - Fri, 23/Jan/2026
 ## 🚀 Features
@@ -56,6 +62,9 @@
 ## 🛠️ Maintenance
 - ([985781](https://github.com/abdalmoniem/pidcatrs/commit/985781)) Use github outputs in publish_release_on_tag.yml
 - ([607f5b](https://github.com/abdalmoniem/pidcatrs/commit/607f5b)) Improve build system
+
+**Full Changelog**: [v1.0.0...v1.1.3](https://github.com/abdalmoniem/pidcatrs/compare/v1.0.0...v1.1.3)
+
 ---
 # [1.0.0] - Sun, 11/Jan/2026
 ## ♻️ Refactors
@@ -68,6 +77,4 @@
 ## 🛠️ Maintenance
 - ([ee43e8](https://github.com/abdalmoniem/pidcatrs/commit/ee43e8)) Integrate github workflows
 
-## 📦 Other
-- ([1c2c41](https://github.com/abdalmoniem/pidcatrs/commit/1c2c41)) Initial commit
 ---
