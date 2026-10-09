@@ -1,3 +1,35 @@
+// Copyright (C) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+//! `xtask` binary: developer workflows for building, packaging, and validating `pidcatrs`.
+//!
+//! Invoked as `cargo xtask …` (or via project `just` recipes). Commands delegate to `cargo`,
+//! Inno Setup on Windows, and library helpers from the main `pidcatrs` crate for JSON Schema and
+//! bundled theme generation.
+//!
+//! # Commands
+//!
+//! See [`xtask::Command`] for the full clap subcommand tree. Highlights:
+//!
+//! - **Build / clean / rebuild / run** — wrap `cargo` with profile selection ([`Profile`]).
+//! - **Schema** — write or check `schemas/*.json` against [`pidcatrs::config_schema`] and
+//!   [`pidcatrs::theme_schema`].
+//! - **Themes** — render documented bundled theme TOML under `src/config/themes`.
+//! - **Windows-only** — build or run the Inno Setup installer, install from `build/setup/output`.
+//! - **Non-Windows** — `cargo install --path .` for local installation.
+
 use anyhow::Context;
 use anyhow::Error;
 use anyhow::Result;
