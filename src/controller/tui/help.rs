@@ -1,24 +1,69 @@
+// Copyright (C) 2026 AbdAlMoniem AlHifnawy
+//
+// This file is part of pidcatrs.
+//
+// pidcatrs is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// pidcatrs is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with pidcatrs.  If not, see <https://www.gnu.org/licenses/>.
+//
+// Author: AbdAlMoniem AlHifnawy
+
+//! The command palette / help catalog.
+//!
+//! [`HELP_CATALOG`] is the single source of truth for every documented key
+//! binding and filter keyword. Entries that have a [`HelpAction`] can be
+//! executed straight from the palette; the rest are purely informational.
+//! [`build_help_rows`] turns the catalog into the (optionally searched) list
+//! of rows that the UI displays.
+
 #![deny(clippy::unwrap_used)]
 
+/// A command that can be triggered directly from the command palette.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HelpAction {
+    /// Quit the application.
     Quit,
+    /// Toggle pausing of incoming logs.
     PauseResume,
+    /// Clear the buffer and restart live logcat capture.
     RestartLive,
+    /// Open the device selection dialog.
     OpenDevicePicker,
+    /// Open the "open log file" dialog.
     OpenFileDialog,
+    /// Export the currently filtered entries to a file.
     ExportEntries,
+    /// Move keyboard focus to the filter input.
     FocusFilter,
 }
 
+/// One documented key binding or filter keyword.
 #[derive(Clone, Copy, Debug)]
 pub struct HelpEntry {
+    /// Name of the group this entry is listed under (e.g. `"log view"`).
     pub section: &'static str,
+    /// The key(s) or syntax, as displayed (e.g. `"j / k / ↑ / ↓"`).
     pub keys: &'static str,
+    /// Short explanation of what the binding does.
     pub description: &'static str,
+    /// The command to run when the entry is chosen in the palette, or `None`
+    /// for entries that are informational only.
     pub action: Option<HelpAction>,
 }
 
+/// Every entry shown in the command palette, grouped by consecutive `section`.
+///
+/// Entries of the same section must be adjacent: [`build_help_rows`] emits a
+/// section header whenever the section name changes.
 pub const HELP_CATALOG: &[HelpEntry] = &[
     HelpEntry {
         section: "general",
@@ -280,12 +325,30 @@ pub const HELP_CATALOG: &[HelpEntry] = &[
     },
 ];
 
+/// One displayed row of the command palette list.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HelpRow {
+    /// A non-selectable section heading with the section's name.
     Section(&'static str),
+    /// A selectable entry, identified by its index into [`HELP_CATALOG`].
     Entry(usize),
 }
 
+/// Builds the list of rows to display for a search query.
+///
+/// With an empty (or whitespace-only) query, all entries are listed, each
+/// section introduced by a [`HelpRow::Section`] heading. Otherwise only the
+/// entries whose `"<section> <keys> <description>"` text matches the query
+/// (see [`matches_query`](super::palette::matches_query)) are returned, as a
+/// flat list without headings.
+///
+/// # Arguments
+///
+/// * `query` - The text typed into the palette search field.
+///
+/// # Returns
+///
+/// The rows in display order.
 pub fn build_help_rows(query: &str) -> Vec<HelpRow> {
     let query = query.trim();
     if query.is_empty() {
@@ -314,6 +377,21 @@ pub fn build_help_rows(query: &str) -> Vec<HelpRow> {
         .collect()
 }
 
+/// Returns the command bound to a row, if any.
+///
+/// # Arguments
+///
+/// * `row` - A row produced by [`build_help_rows`].
+///
+/// # Returns
+///
+/// The entry's [`HelpAction`], or `None` for section headings and
+/// informational entries.
+///
+/// # Panics
+///
+/// Panics if `row` is a [`HelpRow::Entry`] whose index is outside
+/// [`HELP_CATALOG`]; rows from [`build_help_rows`] are always in range.
 pub fn row_action(row: &HelpRow) -> Option<HelpAction> {
     match row {
         HelpRow::Entry(index) => HELP_CATALOG[*index].action,
