@@ -1,8 +1,22 @@
+// Copyright (c) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+
+//! [`ValueOrPanic`] for [`Option`].
+
 use crate::ValueOrPanic;
 use colored::ColoredString;
 use colored::Colorize;
 
-/// Trait to extend `Option` with custom unwrap methods that panic with styled messages.
+/// [`ValueOrPanic`] implementation for [`Option`].
 ///
 /// ### Example
 ///
@@ -17,9 +31,7 @@ use colored::Colorize;
 /// let value = option.unwrap_or_panic_with("Custom panic message", |msg| msg.red().bold());
 /// ```
 impl<T> ValueOrPanic<T> for Option<T> {
-    /// Unwraps an `Option` with a custom panic message.
-    ///
-    /// Instead of panicking with a default message, this method panics with a custom message.
+    /// Returns the inner value or panics with a bold red `msg`.
     ///
     /// ### Example
     ///
@@ -39,7 +51,7 @@ impl<T> ValueOrPanic<T> for Option<T> {
         }
     }
 
-    /// Unwraps an `Option` with a custom panic message and style.
+    /// Returns the inner value or panics with `style(msg)`.
     ///
     /// ### Example
     ///
