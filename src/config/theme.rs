@@ -1,4 +1,21 @@
+// Copyright (C) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #![deny(clippy::unwrap_used)]
+
+//! Color theme TOML format, bundled themes, resolution to [`Rgb`], and runtime activation.
 
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -28,26 +45,34 @@ use super::schema::THEME_SCHEMA_URL;
 use super::schema::hex_color_map_schema;
 use super::schema::schema_directive_prefix;
 
+/// Default bundled theme used when none is configured.
 pub const DEFAULT_THEME_NAME: &str = "gruber-darker";
-/// `source` must equal its `render_theme_source()`: the schema directive and blank `#` line, the
-/// credit lines, a lone `#` line, then exactly the `--print-theme` output.
+/// One embedded theme shipped with the binary.
+///
+/// `source` must equal its `render_theme_source()` output: the schema directive and blank `#`
+/// line, the credit lines, a lone `#` line, then exactly the `--print-theme` body.
 pub struct BundledTheme {
+    /// Bundled theme identifier.
     pub name: &'static str,
+    /// Full documented theme TOML source text.
     pub source: &'static str,
 }
 
+// `BUNDLED_THEMES` is defined here; generated at build time from `themes/*.toml`.
 include!(concat!(env!("OUT_DIR"), "/bundled_themes.rs"));
 
+/// Lazily initialized active theme after [`set_active`].
 static ACTIVE_THEME: OnceLock<Theme> = OnceLock::new();
 
+/// File name helpers for embedded themes.
 impl BundledTheme {
+    /// Returns the theme file name `{name}.toml`.
     pub fn file_name(&self) -> String {
         format!("{name}.toml", name = self.name)
     }
 }
 
-/// The credit lines of a theme source: optional schema directive, then comment lines before the
-/// first lone `#` line, or none when the leading comments have no such line.
+/// Extracts credit comment lines from a theme source after an optional schema directive.
 fn theme_credits(source: &str) -> Vec<&str> {
     let lines = source.lines().collect::<Vec<_>>();
     let mut index = 0usize;
@@ -92,13 +117,16 @@ pub fn render_theme_source(source: &str) -> Result<String, String> {
     ))
 }
 
+/// Looks up a bundled theme by name.
 fn bundled_theme(name: &str) -> Option<&'static BundledTheme> {
     BUNDLED_THEMES.iter().find(|bundled| bundled.name == name)
 }
 
-/// Joins `names` with commas into indented lines no wider than 80 columns.
+/// Wraps theme names into comma-separated lines no wider than 80 columns for error messages.
 fn wrap_theme_names(names: &[String]) -> String {
+    // Maximum line width before wrapping to the next line.
     const WIDTH: usize = 80;
+    // Leading spaces for continuation lines.
     const INDENT: &str = "  ";
 
     names
@@ -116,12 +144,14 @@ fn wrap_theme_names(names: &[String]) -> String {
         .join(",\n")
 }
 
+/// Documentation lines for the theme file format in JSON Schema and generated TOML.
 pub const THEME_FILE_DOC: &[&str] = &[
     "Colors are hex strings in the form \"#rrggbb\". Every key in [ui] and [log]",
     "except `tokens` takes either a hex color or the name of a [palette] entry.",
     "All [ui] and [log] keys are required; unknown keys are rejected.",
 ];
 
+/// Documentation lines for the `palette` key in JSON Schema and generated TOML.
 pub const PALETTE_DOC: &[&str] = &[
     "Named colors that the [ui] and [log] tables can refer to by name.",
     "Names are free-form (letters, digits, '-' and '_'), values are hex colors in",
@@ -130,11 +160,13 @@ pub const PALETTE_DOC: &[&str] = &[
     "example: bg0 = \"#181818\"",
 ];
 
+/// Documentation lines for the `ui` key in JSON Schema and generated TOML.
 pub const UI_DOC: &[&str] = &[
     "Colors of the interactive TUI chrome. Plain output does not use this table.",
     "Each key takes a [palette] name or a hex color \"#rrggbb\".",
 ];
 
+/// Documentation lines for the `log` key in JSON Schema and generated TOML.
 pub const LOG_DOC: &[&str] = &[
     "Colors of the log lines, used both in the TUI log view and in plain output",
     "(and in copied or exported text). Each key except `tokens` takes a [palette]",
@@ -143,6 +175,7 @@ pub const LOG_DOC: &[&str] = &[
     "basic ANSI colors otherwise.",
 ];
 
+/// Documentation lines for the `ui.background` key in JSON Schema and generated TOML.
 pub const BACKGROUND_DOC: &[&str] = &[
     "Background of the whole TUI: log view, status bar, panels, menus, dialogs and",
     "the file browser. Also the text color on accent-colored badges such as the",
@@ -152,6 +185,7 @@ pub const BACKGROUND_DOC: &[&str] = &[
     "example: background = \"#1d2021\"",
 ];
 
+/// Documentation lines for the `ui.text` key in JSON Schema and generated TOML.
 pub const TEXT_DOC: &[&str] = &[
     "Main foreground text: menu and dialog content, help descriptions, device",
     "names, key hint descriptions, file browser entries, and selected log line",
@@ -161,6 +195,7 @@ pub const TEXT_DOC: &[&str] = &[
     "example: text = \"#ebdbb2\"",
 ];
 
+/// Documentation lines for the `ui.subtext` key in JSON Schema and generated TOML.
 pub const SUBTEXT_DOC: &[&str] = &[
     "Dimmed text: status bar separators and entry counters, device states, input",
     "placeholders, hints, unavailable commands in the help menu and file browser",
@@ -170,6 +205,7 @@ pub const SUBTEXT_DOC: &[&str] = &[
     "example: subtext = \"#928374\"",
 ];
 
+/// Documentation lines for the `ui.accent` key in JSON Schema and generated TOML.
 pub const ACCENT_DOC: &[&str] = &[
     "Primary accent: panel borders, section headings, key names in the border",
     "hints, the running status badge, the log source in the status bar, the",
@@ -180,6 +216,7 @@ pub const ACCENT_DOC: &[&str] = &[
     "example: accent = \"#fabd2f\"",
 ];
 
+/// Documentation lines for the `ui.secondary` key in JSON Schema and generated TOML.
 pub const SECONDARY_DOC: &[&str] = &[
     "Secondary accent: the device serial in the status bar.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -187,6 +224,7 @@ pub const SECONDARY_DOC: &[&str] = &[
     "example: secondary = \"#83a598\"",
 ];
 
+/// Documentation lines for the `ui.success` key in JSON Schema and generated TOML.
 pub const SUCCESS_DOC: &[&str] = &[
     "Success feedback: status bar messages such as copy confirmations, and success",
     "messages in the file browser.",
@@ -195,6 +233,7 @@ pub const SUCCESS_DOC: &[&str] = &[
     "example: success = \"#b8bb26\"",
 ];
 
+/// Documentation lines for the `ui.warning` key in JSON Schema and generated TOML.
 pub const WARNING_DOC: &[&str] = &[
     "Idle status indicator in the status bar, shown while paused, waiting for a",
     "device or not reading live logs.",
@@ -203,6 +242,7 @@ pub const WARNING_DOC: &[&str] = &[
     "example: warning = \"#fe8019\"",
 ];
 
+/// Documentation lines for the `ui.error` key in JSON Schema and generated TOML.
 pub const ERROR_DOC: &[&str] = &[
     "Error messages in the device picker and the file dialogs.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -210,6 +250,7 @@ pub const ERROR_DOC: &[&str] = &[
     "example: error = \"#fb4934\"",
 ];
 
+/// Documentation lines for the `ui.match` key in JSON Schema and generated TOML.
 pub const MATCH_DOC: &[&str] = &[
     "File browser entries matching the current search.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -217,6 +258,7 @@ pub const MATCH_DOC: &[&str] = &[
     "example: match = \"#8ec07c\"",
 ];
 
+/// Documentation lines for the `ui.keys` key in JSON Schema and generated TOML.
 pub const KEYS_DOC: &[&str] = &[
     "Key bindings listed in the help, copy and export menus.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -224,6 +266,7 @@ pub const KEYS_DOC: &[&str] = &[
     "example: keys = \"#83a598\"",
 ];
 
+/// Documentation lines for the `ui.selection` key in JSON Schema and generated TOML.
 pub const SELECTION_DOC: &[&str] = &[
     "Background of the selected log line in select mode, the selected help and",
     "menu row, and the selected file browser entry.",
@@ -232,6 +275,7 @@ pub const SELECTION_DOC: &[&str] = &[
     "example: selection = \"#504945\"",
 ];
 
+/// Documentation lines for the `log.timestamp` key in JSON Schema and generated TOML.
 pub const TIMESTAMP_DOC: &[&str] = &[
     "Color of the timestamp column when --timestamps is enabled.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -239,6 +283,7 @@ pub const TIMESTAMP_DOC: &[&str] = &[
     "example: timestamp = \"gray\"",
 ];
 
+/// Documentation lines for the `log.level-fg` key in JSON Schema and generated TOML.
 pub const LEVEL_FG_DOC: &[&str] = &[
     "Text color of the log level badges (V, D, I, W, E, F) and of the connectors",
     "(╠═ and ╚═) in front of wrapped message lines. The badge background is the",
@@ -248,6 +293,7 @@ pub const LEVEL_FG_DOC: &[&str] = &[
     "example: level-fg = \"#1d2021\"",
 ];
 
+/// Documentation lines for the `log.verbose` key in JSON Schema and generated TOML.
 pub const VERBOSE_DOC: &[&str] = &[
     "Level badge and wrap connector background of verbose (V) messages.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -255,6 +301,7 @@ pub const VERBOSE_DOC: &[&str] = &[
     "example: verbose = \"#83a598\"",
 ];
 
+/// Documentation lines for the `log.debug` key in JSON Schema and generated TOML.
 pub const DEBUG_DOC: &[&str] = &[
     "Level badge and wrap connector background of debug (D) messages.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -262,6 +309,7 @@ pub const DEBUG_DOC: &[&str] = &[
     "example: debug = \"#458588\"",
 ];
 
+/// Documentation lines for the `log.info` key in JSON Schema and generated TOML.
 pub const INFO_DOC: &[&str] = &[
     "Level badge and wrap connector background of info (I) messages.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -269,6 +317,7 @@ pub const INFO_DOC: &[&str] = &[
     "example: info = \"#b8bb26\"",
 ];
 
+/// Documentation lines for the `log.warn` key in JSON Schema and generated TOML.
 pub const WARN_DOC: &[&str] = &[
     "Level badge and wrap connector background of warning (W) messages.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -276,6 +325,7 @@ pub const WARN_DOC: &[&str] = &[
     "example: warn = \"#fabd2f\"",
 ];
 
+/// Documentation lines for the `log.error` key in JSON Schema and generated TOML.
 pub const LOG_ERROR_DOC: &[&str] = &[
     "Level badge and wrap connector background of error (E) messages.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -283,6 +333,7 @@ pub const LOG_ERROR_DOC: &[&str] = &[
     "example: error = \"#fe8019\"",
 ];
 
+/// Documentation lines for the `log.fatal` key in JSON Schema and generated TOML.
 pub const FATAL_DOC: &[&str] = &[
     "Level badge and wrap connector background of fatal (F) messages.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -290,6 +341,7 @@ pub const FATAL_DOC: &[&str] = &[
     "example: fatal = \"#fb4934\"",
 ];
 
+/// Documentation lines for the `log.highlight` key in JSON Schema and generated TOML.
 pub const HIGHLIGHT_DOC: &[&str] = &[
     "Highlighted values inside the process banners: the package, target, PID, UID",
     "and GIDs of started processes and the name and PID of ended processes.",
@@ -298,6 +350,7 @@ pub const HIGHLIGHT_DOC: &[&str] = &[
     "example: highlight = \"#fabd2f\"",
 ];
 
+/// Documentation lines for the `log.process-start` key in JSON Schema and generated TOML.
 pub const PROCESS_START_DOC: &[&str] = &[
     "Background of the banner shown when a process starts.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -305,6 +358,7 @@ pub const PROCESS_START_DOC: &[&str] = &[
     "example: process-start = \"#98971a\"",
 ];
 
+/// Documentation lines for the `log.process-death` key in JSON Schema and generated TOML.
 pub const PROCESS_DEATH_DOC: &[&str] = &[
     "Background of the banner shown when a process ends.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -312,6 +366,7 @@ pub const PROCESS_DEATH_DOC: &[&str] = &[
     "example: process-death = \"#cc241d\"",
 ];
 
+/// Documentation lines for the `log.gc-duration` key in JSON Schema and generated TOML.
 pub const GC_DURATION_DOC: &[&str] = &[
     "The \"; ~duration=\" label of StrictMode policy violation messages.",
     "value: a [palette] name or a hex color \"#rrggbb\"",
@@ -319,6 +374,7 @@ pub const GC_DURATION_DOC: &[&str] = &[
     "example: gc-duration = \"#fb4934\"",
 ];
 
+/// Documentation lines for the `log.gc-free` key in JSON Schema and generated TOML.
 pub const GC_FREE_DOC: &[&str] = &[
     "The \"freed <size>\" part of garbage collector messages. Only used when",
     "gc-color is enabled (gc-color = true in the config file, or -g).",
@@ -327,6 +383,7 @@ pub const GC_FREE_DOC: &[&str] = &[
     "example: gc-free = \"#b8bb26\"",
 ];
 
+/// Documentation lines for the `log.gc-unit` key in JSON Schema and generated TOML.
 pub const GC_UNIT_DOC: &[&str] = &[
     "The duration value of StrictMode policy violation messages, and the",
     "\"paused <time>\" part of garbage collector messages (the latter only when",
@@ -336,6 +393,7 @@ pub const GC_UNIT_DOC: &[&str] = &[
     "example: gc-unit = \"#fabd2f\"",
 ];
 
+/// Documentation lines for the `log.tokens` key in JSON Schema and generated TOML.
 pub const TOKENS_DOC: &[&str] = &[
     "Colors rotated through for the PID, UID, package and tag columns. A newly seen",
     "value gets the least recently used color and keeps it, so the same tag or",
@@ -351,134 +409,204 @@ pub const TOKENS_DOC: &[&str] = &[
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 #[schemars(title = concat!(env!("CARGO_PKG_NAME"), " color theme"))]
 #[schemars(description = THEME_FILE_DOC.join("\n"))]
+/// Parsed theme TOML before palette resolution.
 pub struct ThemeFile {
     #[serde(default)]
     #[schemars(schema_with = "hex_color_map_schema")]
     #[schemars(description = PALETTE_DOC.join("\n"))]
+    /// Optional named hex colors.
     pub palette: Table,
     #[schemars(description = UI_DOC.join("\n"))]
+    /// TUI chrome colors.
     pub ui: UiSection,
     #[schemars(description = LOG_DOC.join("\n"))]
+    /// Log line colors.
     pub log: LogSection,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
+/// Required `[ui]` table in a theme file.
 pub struct UiSection {
     #[schemars(description = BACKGROUND_DOC.join("\n"))]
+    /// TUI background color.
     pub background: String,
     #[schemars(description = TEXT_DOC.join("\n"))]
+    /// Primary foreground text color.
     pub text: String,
     #[schemars(description = SUBTEXT_DOC.join("\n"))]
+    /// Dimmed secondary text color.
     pub subtext: String,
     #[schemars(description = ACCENT_DOC.join("\n"))]
+    /// Primary accent color.
     pub accent: String,
     #[schemars(description = SECONDARY_DOC.join("\n"))]
+    /// Secondary accent color.
     pub secondary: String,
     #[schemars(description = SUCCESS_DOC.join("\n"))]
+    /// Success feedback color.
     pub success: String,
     #[schemars(description = WARNING_DOC.join("\n"))]
+    /// Idle or warning indicator color.
     pub warning: String,
     #[schemars(description = ERROR_DOC.join("\n"))]
+    /// Error message color.
     pub error: String,
     #[schemars(description = MATCH_DOC.join("\n"))]
+    /// Search match highlight color.
     pub r#match: String,
     #[schemars(description = KEYS_DOC.join("\n"))]
+    /// Key binding label color.
     pub keys: String,
     #[schemars(description = SELECTION_DOC.join("\n"))]
+    /// Selection background color.
     pub selection: String,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
+/// Required `[log]` table in a theme file.
 pub struct LogSection {
     #[schemars(description = TIMESTAMP_DOC.join("\n"))]
+    /// Timestamp column color.
     pub timestamp: String,
     #[schemars(description = LEVEL_FG_DOC.join("\n"))]
+    /// Log level badge foreground.
     pub level_fg: String,
     #[schemars(description = VERBOSE_DOC.join("\n"))]
+    /// Verbose level color.
     pub verbose: String,
     #[schemars(description = DEBUG_DOC.join("\n"))]
+    /// Debug level color.
     pub debug: String,
     #[schemars(description = INFO_DOC.join("\n"))]
+    /// Info level color.
     pub info: String,
     #[schemars(description = WARN_DOC.join("\n"))]
+    /// Warning level color.
     pub warn: String,
     #[schemars(description = LOG_ERROR_DOC.join("\n"))]
+    /// Error message color.
     pub error: String,
     #[schemars(description = FATAL_DOC.join("\n"))]
+    /// Fatal level color.
     pub fatal: String,
     #[schemars(description = HIGHLIGHT_DOC.join("\n"))]
+    /// Process banner highlight color.
     pub highlight: String,
     #[schemars(description = PROCESS_START_DOC.join("\n"))]
+    /// Process start banner background.
     pub process_start: String,
     #[schemars(description = PROCESS_DEATH_DOC.join("\n"))]
+    /// Process death banner background.
     pub process_death: String,
     #[schemars(description = GC_DURATION_DOC.join("\n"))]
+    /// StrictMode duration label color.
     pub gc_duration: String,
     #[schemars(description = GC_FREE_DOC.join("\n"))]
+    /// GC freed-size highlight color.
     pub gc_free: String,
     #[schemars(description = GC_UNIT_DOC.join("\n"))]
+    /// GC pause / duration value color.
     pub gc_unit: String,
     #[schemars(length(min = 1), inner(pattern(HEX_COLOR_PATTERN)))]
     #[schemars(description = TOKENS_DOC.join("\n"))]
+    /// Rotating column token colors.
     pub tokens: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// 24-bit sRGB color.
 pub struct Rgb {
+    /// Red channel (0–255).
     pub r: u8,
+    /// Green channel (0–255).
     pub g: u8,
+    /// Blue channel (0–255).
     pub b: u8,
 }
 
 #[derive(Clone, Debug)]
+/// Resolved TUI colors as [`Rgb`] values.
 pub struct UiColors {
+    /// TUI background color.
     pub background: Rgb,
+    /// Primary foreground text color.
     pub text: Rgb,
+    /// Dimmed secondary text color.
     pub subtext: Rgb,
+    /// Primary accent color.
     pub accent: Rgb,
+    /// Secondary accent color.
     pub secondary: Rgb,
+    /// Success feedback color.
     pub success: Rgb,
+    /// Idle or warning indicator color.
     pub warning: Rgb,
+    /// Error message color.
     pub error: Rgb,
+    /// Search match highlight color.
     pub r#match: Rgb,
+    /// Key binding label color.
     pub keys: Rgb,
+    /// Selection background color.
     pub selection: Rgb,
 }
 
 #[derive(Clone, Debug)]
+/// Resolved log output colors as [`Rgb`] values.
 pub struct LogColors {
+    /// Timestamp column color.
     pub timestamp: Rgb,
+    /// Log level badge foreground.
     pub level_fg: Rgb,
+    /// Verbose level color.
     pub verbose: Rgb,
+    /// Debug level color.
     pub debug: Rgb,
+    /// Info level color.
     pub info: Rgb,
+    /// Warning level color.
     pub warn: Rgb,
+    /// Error message color.
     pub error: Rgb,
+    /// Fatal level color.
     pub fatal: Rgb,
+    /// Process banner highlight color.
     pub highlight: Rgb,
+    /// Process start banner background.
     pub process_start: Rgb,
+    /// Process death banner background.
     pub process_death: Rgb,
+    /// StrictMode duration label color.
     pub gc_duration: Rgb,
+    /// GC freed-size highlight color.
     pub gc_free: Rgb,
+    /// GC pause / duration value color.
     pub gc_unit: Rgb,
+    /// Rotating column token colors.
     pub tokens: Vec<Rgb>,
 }
 
 #[derive(Clone, Debug)]
+/// Fully resolved theme used at runtime.
 pub struct Theme {
+    /// TUI chrome colors.
     pub ui: UiColors,
+    /// Log line colors.
     pub log: LogColors,
 }
 
+/// Hex parsing for [`Rgb`].
 impl Rgb {
+    /// Parses `#rrggbb` hex into RGB channels.
     pub fn from_hex(hex: &str) -> Option<Self> {
         let digits = hex.strip_prefix('#')?;
         if digits.len() != 6usize || !digits.chars().all(|char| char.is_ascii_hexdigit()) {
             return None;
         }
 
+        // Parses one two-digit hex channel starting at `index`.
         let channel = |index: usize| u8::from_str_radix(&digits[index..index + 2usize], 16).ok();
 
         Some(Self {
@@ -490,18 +618,21 @@ impl Rgb {
 }
 
 impl Display for Rgb {
+    /// Formats the color as lowercase `#rrggbb`.
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         write!(formatter, "#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
     }
 }
 
 impl From<Rgb> for ratatui::style::Color {
+    /// Converts to ratatui true-color.
     fn from(rgb: Rgb) -> Self {
         Self::Rgb(rgb.r, rgb.g, rgb.b)
     }
 }
 
 impl From<Rgb> for colored::Color {
+    /// Converts to colored true-color.
     fn from(rgb: Rgb) -> Self {
         Self::TrueColor {
             r: rgb.r,
@@ -511,11 +642,13 @@ impl From<Rgb> for colored::Color {
     }
 }
 
+/// Parses a hex color or returns a keyed error message.
 fn hex_color(key: &str, value: &str) -> Result<Rgb, String> {
     Rgb::from_hex(value)
         .ok_or_else(|| format!("{key}: invalid color '{value}', expected a hex color \"#rrggbb\""))
 }
 
+/// Parses theme TOML into a [`ThemeFile`] without resolving palette references.
 pub fn parse_theme(source: &str) -> Result<ThemeFile, String> {
     toml::from_str(source).map_err(|err| err.to_string().trim_end().to_string())
 }
@@ -570,6 +703,7 @@ pub fn install_bundled_themes() {
     }
 }
 
+/// Returns bundled and installed custom theme names, sorted and deduplicated.
 pub fn available_themes() -> Vec<String> {
     let installed = themes_dir()
         .and_then(|dir| fs::read_dir(dir).ok())
@@ -592,10 +726,12 @@ pub fn available_themes() -> Vec<String> {
         .collect()
 }
 
+/// Returns whether `spec` should be treated as a file path.
 fn is_theme_path(spec: &str) -> bool {
     spec.contains('/') || spec.contains(MAIN_SEPARATOR) || spec.ends_with(".toml")
 }
 
+/// Reads and resolves a theme from a filesystem path.
 fn read_theme_file(path: &Path) -> Result<(ThemeFile, Theme), String> {
     let path_display = path.display();
     let source = fs::read_to_string(path)
@@ -651,7 +787,9 @@ pub fn load_theme(spec: &str) -> Result<(ThemeFile, Theme), String> {
     }
 }
 
+/// Resolution and documented TOML export for parsed theme files.
 impl ThemeFile {
+    /// Resolves a color string against the palette or hex literal.
     fn palette_color(&self, key: &str, value: &str) -> Result<Rgb, String> {
         if value.starts_with('#') {
             return hex_color(key, value);
@@ -668,6 +806,7 @@ impl ThemeFile {
         }
     }
 
+    /// Validates palette entries and resolves all UI and log colors to [`Rgb`].
     pub fn resolve(&self) -> Result<Theme, String> {
         for (name, value) in &self.palette {
             match value {
@@ -756,6 +895,7 @@ impl ThemeFile {
         })
     }
 
+    /// Returns documentation sections for [`super::doc_toml::render`].
     pub fn doc_items(&self) -> Vec<DocSection> {
         let Self { palette, ui, log } = self.clone();
 
@@ -844,6 +984,7 @@ impl ThemeFile {
         ]
     }
 
+    /// Renders this theme as schema-linked, commented TOML (without the schema directive prefix).
     pub fn to_doc_toml(&self) -> String {
         let pkg = env!("CARGO_PKG_NAME");
         let header = [
