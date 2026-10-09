@@ -1,3 +1,24 @@
+// Copyright (C) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+//! Command-line interface for the `xtask` helper binary.
+//!
+//! [`CliArgs`] is the root [`clap::Parser`]; [`Command`] lists subcommands for build automation,
+//! schema and theme maintenance, and platform-specific install flows. Styling and version strings
+//! are derived from the running executable and `CARGO_PKG_*` metadata.
+
 use clap::ColorChoice;
 use clap::CommandFactory;
 use clap::Parser;
@@ -17,6 +38,7 @@ use std::path::PathBuf;
 
 use std::process;
 
+/// Root parser for `cargo xtask` invocations.
 #[derive(Debug, Parser)]
 #[command(color = ColorChoice::Auto)]
 #[command(name = CliArgs::get_name())]
@@ -30,6 +52,7 @@ pub struct CliArgs {
     pub command: Command,
 }
 
+/// Subcommands implemented by `xtask` (`build/xtask/src/main.rs`).
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Clean build artifcats
@@ -149,11 +172,15 @@ pub enum Command {
     Reinstall,
 }
 
+/// Cargo build profile selection for clean, build, rebuild, and run commands.
 #[derive(Eq, Ord, Copy, Debug, Clone, PartialEq, PartialOrd, Default)]
 pub enum Profile {
+    /// Debug / unoptimized build (`cargo build`, `cargo run`).
     #[default]
     Development,
+    /// Release build (`cargo build --release`, `cargo run --release`).
     Release,
+    /// Run the same operation for both development and release (not valid for `run`).
     Both,
 }
 
@@ -203,6 +230,7 @@ impl CliArgs {
         format!("{version}\n{description}\nAuthor: {author}").leak()
     }
 
+    /// Parse process arguments, printing long help when no subcommand is given.
     pub fn parse_args() -> Self {
         match Self::try_parse() {
             Ok(args) => args,
