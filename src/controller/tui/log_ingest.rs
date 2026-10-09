@@ -1,3 +1,34 @@
+// Copyright (C) 2026 AbdAlMoniem AlHifnawy
+//
+// This file is part of pidcatrs.
+//
+// pidcatrs is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// pidcatrs is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with pidcatrs.  If not, see <https://www.gnu.org/licenses/>.
+//
+// Author: AbdAlMoniem AlHifnawy
+
+//! Background log ingestion for the TUI.
+//!
+//! A [`LogIngest`] owns a Tokio task that reads raw log lines from one of the
+//! supported sources (a live `adb logcat` process, a file, or standard
+//! input), parses them into [`LogEntry`] values, evaluates the current TUI
+//! filter against each entry and forwards the result to the UI as an
+//! [`IngestUpdate`] over an unbounded channel.
+//!
+//! The task can be paused and resumed without being torn down, and it can
+//! optionally mirror the entries that pass the filter to an output file
+//! (`--output`).
+
 #![deny(clippy::unwrap_used)]
 
 use std::path::Path;
@@ -28,11 +59,25 @@ use crate::trim_log_line_bytes;
 
 use super::app::SourceMode;
 
+/// Handle to the task that mirrors filtered entries to the `--output` file.
 struct FileOutputTask {
+    /// Channel on which entries to be written are sent to the writer task.
     tx: tokio_mpsc::UnboundedSender<LogEntry>,
 }
 
 impl FileOutputTask {
+    /// Spawns the writer task if an output path was configured.
+    ///
+    /// # Arguments
+    ///
+    /// * `handle` - Runtime on which the writer task is spawned.
+    /// * `args` - CLI arguments; `output_path` selects the destination.
+    /// * `initial_state` - Render state the writer starts from.
+    ///
+    /// # Returns
+    ///
+    /// `Some` with a sender for the new task, or `None` if `args.output_path`
+    /// is not set.
     fn start(handle: &Handle, args: &CliArgs, initial_state: State) -> Option<Self> {
         let path = args.output_path.as_ref()?.clone();
         let (tx, rx) = tokio_mpsc::unbounded_channel();
@@ -44,6 +89,16 @@ impl FileOutputTask {
     }
 }
 
+/// Writer task: renders every received entry into the output file.
+///
+/// Runs until the sending side is dropped, then flushes the writer.
+///
+/// # Arguments
+///
+/// * `rx` - Receives the entries to write.
+/// * `args` - The active CLI arguments, used for rendering.
+/// * `state` - Render state, advanced as entries are rendered.
+/// * `path` - Path of the output file.
 async fn run_file_output(
     mut rx: tokio_mpsc::UnboundedReceiver<LogEntry>,
     args: CliArgs,
@@ -59,12 +114,19 @@ async fn run_file_output(
     writer.flush();
 }
 
+/// A cheaply clonable pause switch shared between the UI and the ingest task.
+///
+/// While paused, the ingest task blocks (without busy-waiting) before reading
+/// the next line, so no new data is consumed from the source.
 struct PauseGate {
+    /// `true` while ingestion is paused.
     paused: Arc<AtomicBool>,
+    /// Notified when ingestion is resumed so waiting tasks wake up.
     resume: Arc<Notify>,
 }
 
 impl PauseGate {
+    /// Creates a gate in the running (not paused) state.
     fn new() -> Self {
         Self {
             paused: Arc::new(AtomicBool::new(false)),
@@ -72,6 +134,13 @@ impl PauseGate {
         }
     }
 
+    /// Pauses or resumes ingestion.
+    ///
+    /// Resuming wakes every task blocked in [`wait_if_paused`](Self::wait_if_paused).
+    ///
+    /// # Arguments
+    ///
+    /// * `paused` - `true` to pause, `false` to resume.
     fn set_paused(&self, paused: bool) {
         self.paused.store(paused, Relaxed);
         if !paused {
@@ -79,6 +148,13 @@ impl PauseGate {
         }
     }
 
+    /// Waits until ingestion is no longer paused.
+    ///
+    /// Returns immediately when not paused, or when `stop` is set.
+    ///
+    /// # Arguments
+    ///
+    /// * `stop` - Stop flag; once set, the wait ends regardless of pausing.
     async fn wait_if_paused(&self, stop: &AtomicBool) {
         while self.paused.load(Relaxed) && !stop.load(Relaxed) {
             self.resume.notified().await;
@@ -86,17 +162,38 @@ impl PauseGate {
     }
 }
 
+/// Mutable state shared by the per-source reader loops.
 struct IngestContext {
+    /// The active CLI arguments, used for parsing.
     args: CliArgs,
+    /// Parser state (PID/UID maps, last tag, ...), advanced for every line.
     state: State,
+    /// Filter shared with the UI; read to decide whether an entry matches.
     filters: Arc<RwLock<TuiFilterSet>>,
+    /// Channel to the output-file writer, when `--output` is configured.
     file_tx: Option<tokio_mpsc::UnboundedSender<LogEntry>>,
+    /// Channel delivering parsed entries to the UI.
     update_tx: tokio_mpsc::UnboundedSender<IngestUpdate>,
+    /// Set to request that the reader loop terminates.
     stop: Arc<AtomicBool>,
+    /// Pause switch consulted before reading each line.
     pause: PauseGate,
 }
 
 impl IngestContext {
+    /// Parses one raw line and forwards the resulting entries.
+    ///
+    /// A single line can yield zero or more entries. For each entry the shared filter is evaluated;
+    /// matching entries are also sent to the output file, and every entry is
+    /// sent to the UI with a snapshot of the parser state.
+    ///
+    /// # Arguments
+    ///
+    /// * `line` - The trimmed log line.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the shared filter lock is poisoned.
     fn ingest_line(&mut self, line: String) {
         for entry in process_log_input(&line, &mut self.state, &self.args) {
             let matches_filter = self
@@ -117,11 +214,21 @@ impl IngestContext {
         }
     }
 
+    /// Blocks while ingestion is paused (see [`PauseGate::wait_if_paused`]).
     async fn wait_if_paused(&self) {
         self.pause.wait_if_paused(&self.stop).await;
     }
 }
 
+/// Reader loop for a log file source.
+///
+/// Reads the file line by line until end of file, an I/O error or a stop
+/// request. If the file cannot be opened the function returns immediately.
+///
+/// # Arguments
+///
+/// * `path` - Path of the log file.
+/// * `ctx` - Shared ingest state.
 async fn ingest_from_file(path: String, ctx: &mut IngestContext) {
     let Ok(file) = tokio::fs::File::open(Path::new(&path)).await else {
         return;
@@ -142,6 +249,14 @@ async fn ingest_from_file(path: String, ctx: &mut IngestContext) {
     }
 }
 
+/// Reader loop for standard input (piped logs).
+///
+/// Reads stdin line by line until end of input, an I/O error or a stop
+/// request.
+///
+/// # Arguments
+///
+/// * `ctx` - Shared ingest state.
 async fn ingest_from_pipe(ctx: &mut IngestContext) {
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
 
@@ -158,6 +273,16 @@ async fn ingest_from_pipe(ctx: &mut IngestContext) {
     }
 }
 
+/// Reader loop for a live `adb logcat` process.
+///
+/// Spawns logcat for `device_serial` (or the default device), reads its
+/// standard output line by line and kills the child process when the loop
+/// ends. Returns immediately if the process cannot be spawned.
+///
+/// # Arguments
+///
+/// * `device_serial` - Serial of the device to read from, if one is selected.
+/// * `ctx` - Shared ingest state.
 async fn ingest_from_live(device_serial: Option<String>, ctx: &mut IngestContext) {
     let adb_command = build_logcat_command(&ctx.args, device_serial.as_deref());
     let mut child = match Command::new(&adb_command[0usize])
@@ -196,18 +321,33 @@ async fn ingest_from_live(device_serial: Option<String>, ctx: &mut IngestContext
     let _ = child.kill().await;
 }
 
+/// Everything the spawned ingest task needs, moved into it as one value.
 struct IngestTask {
+    /// Which kind of source to read from.
     source: SourceMode,
+    /// The active CLI arguments.
     args: CliArgs,
+    /// Initial parser state.
     state: State,
+    /// Device serial for [`SourceMode::Live`].
     device_serial: Option<String>,
+    /// Filter shared with the UI.
     filters: Arc<RwLock<TuiFilterSet>>,
+    /// Channel to the output-file writer, when configured.
     file_tx: Option<tokio_mpsc::UnboundedSender<LogEntry>>,
+    /// Channel delivering parsed entries to the UI.
     update_tx: tokio_mpsc::UnboundedSender<IngestUpdate>,
+    /// Stop request flag.
     stop: Arc<AtomicBool>,
+    /// Pause switch.
     pause: PauseGate,
 }
 
+/// Entry point of the ingest task: dispatches to the reader for its source.
+///
+/// # Arguments
+///
+/// * `task` - The task description; consumed.
 async fn run_ingest(task: IngestTask) {
     let mut ctx = IngestContext {
         args: task.args,
@@ -226,20 +366,41 @@ async fn run_ingest(task: IngestTask) {
     }
 }
 
+/// A parsed log entry delivered from the ingest task to the UI.
 pub struct IngestUpdate {
+    /// The parsed log entry.
     pub entry: LogEntry,
+    /// Whether the entry passed the TUI filter at the time it was parsed.
     pub matches_filter: bool,
+    /// Snapshot of the parser state after this entry was processed.
     pub state: State,
 }
 
+/// Controller for a running (or idle) ingest task.
+///
+/// Dropping a `LogIngest` does not stop the task; call [`stop`](Self::stop)
+/// explicitly.
 pub struct LogIngest {
+    /// Stop request flag shared with the task.
     stop: Arc<AtomicBool>,
+    /// Pause switch shared with the task.
     pause: PauseGate,
+    /// Join handle of the ingest task, if one is running.
     task: Option<TokioJoinHandle<()>>,
+    /// Output-file writer, if `--output` is configured.
     file_output: Option<FileOutputTask>,
 }
 
 impl LogIngest {
+    /// Creates an inert controller that is not reading from any source.
+    ///
+    /// Used before the real source is known (e.g. while waiting for the user
+    /// to pick a device).
+    ///
+    /// # Returns
+    ///
+    /// The idle controller and the (never producing) receiving end of its
+    /// update channel.
     pub fn idle() -> (Self, tokio_mpsc::UnboundedReceiver<IngestUpdate>) {
         let (_tx, update_rx) = tokio_mpsc::unbounded_channel();
         (
@@ -253,10 +414,20 @@ impl LogIngest {
         )
     }
 
+    /// Pauses or resumes the ingest task.
+    ///
+    /// # Arguments
+    ///
+    /// * `paused` - `true` to stop consuming new lines, `false` to resume.
     pub fn set_paused(&self, paused: bool) {
         self.pause.set_paused(paused);
     }
 
+    /// Stops the ingest task and the output-file writer.
+    ///
+    /// Sets the stop flag, aborts the task (which kills a live `adb logcat`
+    /// child via `kill_on_drop`) and drops the file writer channel so the
+    /// writer flushes and exits.
     pub fn stop(&mut self) {
         self.stop.store(true, Relaxed);
         if let Some(task) = self.task.take() {
@@ -265,6 +436,21 @@ impl LogIngest {
         self.file_output = None;
     }
 
+    /// Starts ingesting from `source` on the given runtime.
+    ///
+    /// # Arguments
+    ///
+    /// * `handle` - Runtime on which the tasks are spawned.
+    /// * `source` - Where to read log lines from.
+    /// * `args` - The active CLI arguments.
+    /// * `state` - Initial parser state.
+    /// * `device_serial` - Device to read from for [`SourceMode::Live`].
+    /// * `filters` - Filter shared with the UI; read for every entry.
+    ///
+    /// # Returns
+    ///
+    /// The controller for the new task and the receiving end of the channel
+    /// on which [`IngestUpdate`]s arrive.
     pub fn start(
         handle: &Handle,
         source: SourceMode,
@@ -304,6 +490,9 @@ impl LogIngest {
 }
 
 impl PauseGate {
+    /// Creates another handle to the same pause switch.
+    ///
+    /// All clones share the paused flag and the resume notification.
     fn clone(&self) -> Self {
         Self {
             paused: Arc::clone(&self.paused),
