@@ -163,9 +163,9 @@ pub const TIMESTAMPS_DOC: &[&str] = &[
 ];
 
 pub const TIMESTAMP_FORMAT_DOC: &[&str] = &[
-    "chrono strftime format for the timestamp column. The format must produce a",
-    "fixed width for every time of day. See the chrono format specifiers at",
-    "https://docs.rs/chrono/latest/chrono/format/strftime/index.html",
+    "chrono strftime format for the timestamp column. Column width is the longest render over",
+    "representative date/times; shorter values are padded. See the chrono specifiers at",
+    crate::model::timestamp::CHRONO_STRFTIME_DOCS,
     "type: string",
     "default: \"%I:%M:%S%.3f%p\" (example output: 03:04:05.123pm)",
     "command line: -Z, --timestamp-format <FORMAT>",

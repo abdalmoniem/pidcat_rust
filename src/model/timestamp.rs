@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use chrono::DateTime;
 use chrono::Datelike;
 use chrono::Local;
@@ -6,33 +8,75 @@ use chrono::TimeZone;
 
 pub const DEFAULT_TIMESTAMP_FORMAT: &str = "%I:%M:%S%.3f%P";
 
-/// Validates that `format` renders a fixed width and returns that width in characters.
+pub const CHRONO_STRFTIME_DOCS: &str =
+    "https://docs.rs/chrono/latest/chrono/format/strftime/index.html";
+
+fn timestamp_format_error(detail: impl std::fmt::Display) -> String {
+    format!("{detail}\nSee {CHRONO_STRFTIME_DOCS}")
+}
+
+fn format_datetime(format: &str, time: DateTime<Local>) -> Result<String, String> {
+    let mut output = String::new();
+    write!(output, "{}", time.format(format))
+        .map_err(|_| timestamp_format_error(format!("invalid timestamp format '{format}'")))?;
+    Ok(output)
+}
+
+fn push_sample(samples: &mut Vec<DateTime<Local>>, year: i32, month: u32, day: u32, hour: u32) {
+    if let Some(sample) = Local
+        .with_ymd_and_hms(year, month, day, hour, 30, 45)
+        .single()
+    {
+        samples.push(sample);
+    }
+}
+
+fn timestamp_validation_samples() -> Vec<DateTime<Local>> {
+    let mut samples = vec![Local::now()];
+
+    for year in [2024i32, 2025, 2026] {
+        for month in 1u32..=12u32 {
+            for day in [1u32, 10, 15, 20, 28] {
+                for hour in [0u32, 6, 12, 18, 23] {
+                    push_sample(&mut samples, year, month, day, hour);
+                }
+            }
+        }
+    }
+
+    for date in ["01-02", "02-28", "06-15", "09-09", "12-31"] {
+        for time in [
+            "03:04:05.123",
+            "11:59:59.000",
+            "12:00:00.000",
+            "23:59:59.999",
+        ] {
+            if let Some(parsed) = parse_android_log_timestamp(date, time) {
+                samples.push(parsed);
+            }
+        }
+    }
+
+    samples
+}
+
+/// Validates chrono strftime `format` and returns the timestamp column width (maximum rendered
+/// width over representative date/times). Shorter values are right-padded when displayed.
 pub fn timestamp_column_width(format: &str) -> Result<usize, String> {
-    let samples = [
-        Local
-            .with_ymd_and_hms(2024, 1, 2, 3, 4, 5)
-            .single()
-            .expect("sample timestamp"),
-        Local
-            .with_ymd_and_hms(2024, 12, 31, 11, 59, 59)
-            .single()
-            .expect("sample timestamp"),
-    ];
+    let mut max_width = 0usize;
 
-    let mut widths = Vec::default();
-    for sample in samples {
-        let formatted = sample.format(format).to_string();
-        widths.push(formatted.chars().count());
+    for sample in timestamp_validation_samples() {
+        let formatted = format_datetime(format, sample)?;
+        max_width = max_width.max(formatted.chars().count());
     }
 
-    let width = *widths.first().unwrap_or(&0usize);
-    if widths.iter().all(|value| *value == width) {
-        Ok(width)
-    } else {
-        Err(format!(
-            "timestamp format '{format}' must produce a fixed width; got {widths:?} characters"
-        ))
+    if max_width == 0usize {
+        return Err(timestamp_format_error(format!(
+            "timestamp format '{format}' could not be validated"
+        )));
     }
+
+    Ok(max_width)
 }
 
 pub fn format_log_timestamp(
@@ -40,12 +84,18 @@ pub fn format_log_timestamp(
     format: &str,
     width: usize,
 ) -> Result<String, String> {
-    let formatted = time.format(format).to_string();
+    let mut formatted = format_datetime(format, time)?;
     let char_count = formatted.chars().count();
-    if char_count != width {
-        return Err(format!(
-            "timestamp format '{format}' produced {char_count} characters, expected {width}"
-        ));
+    if char_count > width {
+        return Err(timestamp_format_error(format!(
+            "timestamp format '{format}' produced {char_count} characters, wider than the \
+             timestamp column ({width}); choose a narrower format or a format with less \
+             variation"
+        )));
+    }
+
+    if char_count < width {
+        formatted.push_str(&" ".repeat(width - char_count));
     }
 
     Ok(formatted)

@@ -15,6 +15,7 @@ use scope_functions::Run;
 
 use crate::ValueOrPanic;
 use crate::Writer;
+use crate::controller::terminal::restore_tui_terminal;
 
 pub fn colored(msg: &str, show_colors: bool, color: Color) -> String {
     msg.run(|msg| match show_colors {
@@ -24,9 +25,12 @@ pub fn colored(msg: &str, show_colors: bool, color: Color) -> String {
 }
 
 pub fn exit_with_error(msg: &str, show_colors: bool) -> ! {
+    restore_tui_terminal();
+
     let err_msg = format!("ERROR: {msg}").run(|msg| colored(msg, show_colors, Color::BrightRed));
 
     eprintln!("{err_msg}");
+    let _ = std::io::stderr().flush();
     process::exit(1i32);
 }
 

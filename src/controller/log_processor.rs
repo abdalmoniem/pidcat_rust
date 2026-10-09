@@ -19,6 +19,7 @@ use crate::State;
 use crate::ValueOrPanic;
 use crate::Writer;
 use crate::active_theme;
+use crate::exit_with_error;
 use crate::is_ignored_tag;
 use crate::model::timestamp::format_log_timestamp;
 use crate::model::timestamp::timestamp_from_log_line;
@@ -610,6 +611,12 @@ fn timestamp_field_width(args: &CliArgs) -> usize {
     }
 }
 
+fn formatted_log_timestamp(entry: &LogEntry, args: &CliArgs, width: usize) -> String {
+    format_log_timestamp(entry.timestamp, &args.timestamp_format, width).unwrap_or_else(|err| {
+        exit_with_error(&err, !args.no_color);
+    })
+}
+
 /// Log header width used for process banner layout (unchanged when timestamps are enabled).
 fn process_banner_layout_header_width(args: &CliArgs) -> usize {
     compute_header_width(args).saturating_sub(timestamp_field_width(args))
@@ -626,8 +633,7 @@ fn write_banner_line_timestamp(
     }
 
     let width = args.timestamp_width;
-    let text = format_log_timestamp(entry.timestamp, &args.timestamp_format, width)
-        .unwrap_or_else(|_| " ".repeat(width));
+    let text = formatted_log_timestamp(entry, args, width);
     let timestamp_color: Color = active_theme().log.timestamp.into();
     let display = if args.no_color {
         text
@@ -681,8 +687,7 @@ fn write_timestamp_prefix(
     let text = if blank {
         " ".repeat(width)
     } else {
-        format_log_timestamp(entry.timestamp, &args.timestamp_format, width)
-            .unwrap_or_else(|_| " ".repeat(width))
+        formatted_log_timestamp(entry, args, width)
     };
     let timestamp_color: Color = active_theme().log.timestamp.into();
     let display = if args.no_color {

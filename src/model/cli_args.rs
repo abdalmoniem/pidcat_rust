@@ -482,10 +482,12 @@ impl CliArgs {
             .unwrap_or_else(|err| exit_with_error(&err, show_colors))
             .merge_into(&mut args, &matches);
 
-        args.timestamp_width = if args.show_timestamps {
+        let timestamp_width =
             timestamp_column_width(&args.timestamp_format).unwrap_or_else(|err| {
                 exit_with_error(&err, show_colors);
-            })
+            });
+        args.timestamp_width = if args.show_timestamps {
+            timestamp_width
         } else {
             0usize
         };

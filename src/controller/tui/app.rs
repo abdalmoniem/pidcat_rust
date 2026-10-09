@@ -1,9 +1,7 @@
 #![deny(clippy::unwrap_used)]
 
 use colored::control::set_override;
-use colored::control::unset_override;
 use crossterm::ExecutableCommand;
-use crossterm::event::DisableMouseCapture;
 use crossterm::event::EnableMouseCapture;
 use crossterm::event::Event;
 use crossterm::event::EventStream;
@@ -28,6 +26,10 @@ use crate::State;
 use crate::TuiFilterSet;
 use crate::ValueOrPanic;
 use crate::build_adb_command;
+use crate::controller::terminal::register_tui_color_override;
+use crate::controller::terminal::register_tui_mouse_capture;
+use crate::controller::terminal::register_tui_terminal;
+use crate::controller::terminal::restore_tui_terminal;
 use crate::get_adb_devices;
 use crate::resolve_initial_device;
 use crate::set_running;
@@ -1254,9 +1256,11 @@ pub fn run_tui(args: &mut CliArgs) {
     stdout()
         .execute(EnableMouseCapture)
         .unwrap_or_panic("Failed to enable mouse capture");
+    register_tui_mouse_capture();
 
     if !args.no_color {
         set_override(true);
+        register_tui_color_override();
     }
 
     let (status_tx, mut status_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -1270,6 +1274,7 @@ pub fn run_tui(args: &mut CliArgs) {
 
     runtime.block_on(async {
         let mut terminal = ratatui::init();
+        register_tui_terminal();
         let mut events = EventStream::new();
 
         while crate::is_running() {
@@ -1315,13 +1320,8 @@ pub fn run_tui(args: &mut CliArgs) {
         }
 
         app.stop_ingest();
-        ratatui::restore();
+        restore_tui_terminal();
     });
 
     drop(runtime);
-    let _ = stdout().execute(DisableMouseCapture);
-
-    if !args.no_color {
-        unset_override();
-    }
 }

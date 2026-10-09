@@ -38,6 +38,7 @@ pub use controller::adb::resolve_initial_device;
 pub use controller::adb::spawn_logcat;
 pub use controller::adb::start_adb_server;
 
+pub use controller::terminal::restore_tui_terminal;
 pub use controller::util::colored;
 pub use controller::util::exit_with_error;
 pub use controller::util::format_columns;

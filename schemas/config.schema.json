@@ -158,7 +158,7 @@
       "type": "string"
     },
     "timestamp-format": {
-      "description": "chrono strftime format for the timestamp column. The format must produce a\nfixed width for every time of day. See the chrono format specifiers at\nhttps://docs.rs/chrono/latest/chrono/format/strftime/index.html\ntype: string\ndefault: \"%I:%M:%S%.3f%p\" (example output: 03:04:05.123pm)\ncommand line: -Z, --timestamp-format <FORMAT>\nexample: timestamp-format = \"%I:%M:%S%.3f%p\"",
+      "description": "chrono strftime format for the timestamp column. Column width is the longest render over\nrepresentative date/times; shorter values are padded. See the chrono specifiers at\nhttps://docs.rs/chrono/latest/chrono/format/strftime/index.html\ntype: string\ndefault: \"%I:%M:%S%.3f%p\" (example output: 03:04:05.123pm)\ncommand line: -Z, --timestamp-format <FORMAT>\nexample: timestamp-format = \"%I:%M:%S%.3f%p\"",
       "type": "string"
     },
     "timestamps": {

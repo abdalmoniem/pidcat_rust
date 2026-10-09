@@ -19,6 +19,7 @@ use pidcat::format_columns;
 use pidcat::install_bundled_themes;
 use pidcat::load_theme;
 use pidcat::print_paged;
+use pidcat::restore_tui_terminal;
 use pidcat::run_plain;
 use pidcat::run_tui;
 use pidcat::set_active_theme;
@@ -53,6 +54,7 @@ fn panic_hook(info: &PanicHookInfo, show_colors: bool) {
     )
     .run(|msg| colored(msg, show_colors, Color::BrightRed));
 
+    restore_tui_terminal();
     eprintln!("{thread_err_msg}");
     eprintln!("{err_msg}");
 }
