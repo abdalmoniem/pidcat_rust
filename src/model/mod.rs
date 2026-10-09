@@ -11,5 +11,6 @@ pub mod log_source;
 pub mod option_unwrap;
 pub mod result_unwrap;
 pub mod state;
+pub mod timestamp;
 pub mod tui_filter;
 pub mod value_unwrap;

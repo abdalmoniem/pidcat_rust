@@ -21,6 +21,8 @@ use crate::LogLevel;
 use crate::ValueOrPanic;
 use crate::default_config_file;
 use crate::exit_with_error;
+use crate::model::timestamp::DEFAULT_TIMESTAMP_FORMAT;
+use crate::model::timestamp::timestamp_column_width;
 use crate::themes_dir;
 
 const POSITIONAL_ARGUMENTS: &str = "Positional Arguments";
@@ -201,6 +203,25 @@ pub struct CliArgs {
     #[arg(help = format!("Filter output messages using the specified {metavar}", metavar = "[REGEX]".cyan().bold()))]
     pub regex: Option<String>,
 
+    #[arg(short = 'T')]
+    #[arg(required = false)]
+    #[arg(value_name = None)]
+    #[arg(long = "timestamps")]
+    #[arg(default_value_t = false)]
+    #[arg(action = ArgAction::SetTrue)]
+    #[arg(help_heading = FORMATTING_OPTIONS)]
+    #[arg(help = "Show a timestamp column before log fields")]
+    pub show_timestamps: bool,
+
+    #[arg(short = 'Z')]
+    #[arg(required = false)]
+    #[arg(long = "timestamp-format")]
+    #[arg(value_name = "FORMAT")]
+    #[arg(default_value = DEFAULT_TIMESTAMP_FORMAT)]
+    #[arg(help_heading = FORMATTING_OPTIONS)]
+    #[arg(help = "chrono strftime format for the timestamp column (see docs.rs/chrono strftime)")]
+    pub timestamp_format: String,
+
     #[arg(short = 'f')]
     #[arg(long = "log-format")]
     #[arg(ignore_case = true)]
@@ -363,6 +384,10 @@ pub struct CliArgs {
 
     #[arg(skip)]
     pub tui_mode: bool,
+
+    /// Plain character width of the timestamp column; zero when timestamps are disabled.
+    #[arg(skip)]
+    pub timestamp_width: usize,
 }
 
 impl CliArgs {
@@ -456,6 +481,14 @@ impl CliArgs {
         Config::load_effective(args.config_path.as_deref())
             .unwrap_or_else(|err| exit_with_error(&err, show_colors))
             .merge_into(&mut args, &matches);
+
+        args.timestamp_width = if args.show_timestamps {
+            timestamp_column_width(&args.timestamp_format).unwrap_or_else(|err| {
+                exit_with_error(&err, show_colors);
+            })
+        } else {
+            0usize
+        };
 
         args
     }

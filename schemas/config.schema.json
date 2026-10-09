@@ -156,6 +156,14 @@
     "theme": {
       "description": "Color theme of the TUI and of the log output (also in plain mode).\nEither the name of a theme file in the `themes` directory next to the default\nconfig file, without the .toml extension, or a path to a theme file. A value\ncontaining a path separator or ending in .toml is a path; relative paths are\nresolved from the current directory. The bundled themes are written to the\nthemes directory when missing and can be edited there.\ntype: string (theme name or file path)\ndefault: \"gruber-darker\"\ncommand line: --theme <THEME>\nexample: theme = \"monokai\"",
       "type": "string"
+    },
+    "timestamp-format": {
+      "description": "chrono strftime format for the timestamp column. The format must produce a\nfixed width for every time of day. See the chrono format specifiers at\nhttps://docs.rs/chrono/latest/chrono/format/strftime/index.html\ntype: string\ndefault: \"%I:%M:%S%.3f%p\" (example output: 03:04:05.123pm)\ncommand line: -Z, --timestamp-format <FORMAT>\nexample: timestamp-format = \"%I:%M:%S%.3f%p\"",
+      "type": "string"
+    },
+    "timestamps": {
+      "description": "Show a timestamp column as the first output field.\ntype: boolean\ndefault: false\ncommand line: -T, --timestamps\nnote: when true here, it cannot be switched off from the command line\nnote: use log-format = \"threadtime\" so adb includes a clock time in each line;\nwith \"brief\", pidcat uses the local time when the line is processed\nexample: timestamps = true",
+      "type": "boolean"
     }
   },
   "title": "pidcat configuration",

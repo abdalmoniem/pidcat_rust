@@ -132,6 +132,12 @@ selection = "hl2"
 # basic ANSI colors otherwise.
 [log]
 
+# Color of the timestamp column when --timestamps is enabled.
+# value: a [palette] name or a hex color "#rrggbb"
+# Bundled themes set this to the same [palette] name as ui.subtext.
+# example: timestamp = "gray"
+timestamp = "#a49da5"
+
 # Text color of the log level badges (V, D, I, W, E, F) and of the connectors
 # (╠═ and ╚═) in front of wrapped message lines. The badge background is the
 # color of the message's level below.

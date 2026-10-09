@@ -151,6 +151,27 @@ pub const REGEX_DOC: &[&str] = &[
     "example: regex = \"Exception|Error\"",
 ];
 
+pub const TIMESTAMPS_DOC: &[&str] = &[
+    "Show a timestamp column as the first output field.",
+    "type: boolean",
+    "default: false",
+    "command line: -T, --timestamps",
+    "note: when true here, it cannot be switched off from the command line",
+    "note: use log-format = \"threadtime\" so adb includes a clock time in each line;",
+    "with \"brief\", pidcat uses the local time when the line is processed",
+    "example: timestamps = true",
+];
+
+pub const TIMESTAMP_FORMAT_DOC: &[&str] = &[
+    "chrono strftime format for the timestamp column. The format must produce a",
+    "fixed width for every time of day. See the chrono format specifiers at",
+    "https://docs.rs/chrono/latest/chrono/format/strftime/index.html",
+    "type: string",
+    "default: \"%I:%M:%S%.3f%p\" (example output: 03:04:05.123pm)",
+    "command line: -Z, --timestamp-format <FORMAT>",
+    "example: timestamp-format = \"%I:%M:%S%.3f%p\"",
+];
+
 pub const LOG_FORMAT_DOC: &[&str] = &[
     "Log format requested from adb (\"adb logcat -v\") and expected in piped input.",
     "values (case-insensitive): \"brief\" or \"B\", \"long\" or \"L\", \"process\" or \"P\",",
@@ -325,6 +346,10 @@ pub struct Config {
     #[schemars(schema_with = "value_enum_schema::<LogFormatKind>")]
     #[schemars(description = LOG_FORMAT_DOC.join("\n"))]
     pub log_format: Option<LogFormatKind>,
+    #[schemars(description = TIMESTAMPS_DOC.join("\n"))]
+    pub timestamps: Option<bool>,
+    #[schemars(description = TIMESTAMP_FORMAT_DOC.join("\n"))]
+    pub timestamp_format: Option<String>,
     #[schemars(description = SHOW_PID_DOC.join("\n"))]
     pub show_pid: Option<bool>,
     #[schemars(description = SHOW_UID_DOC.join("\n"))]
@@ -447,6 +472,8 @@ impl Config {
             log_level,
             regex,
             log_format,
+            timestamps,
+            timestamp_format,
             show_pid,
             show_uid,
             show_package,
@@ -494,6 +521,18 @@ impl Config {
             log_format.map(LogFormat::new),
             matches,
             "log_format",
+        );
+        set_unless_cli(
+            &mut args.show_timestamps,
+            timestamps,
+            matches,
+            "show_timestamps",
+        );
+        set_unless_cli(
+            &mut args.timestamp_format,
+            timestamp_format,
+            matches,
+            "timestamp_format",
         );
         set_unless_cli(&mut args.show_pid, show_pid, matches, "show_pid");
         set_unless_cli(&mut args.show_uid, show_uid, matches, "show_uid");
@@ -545,6 +584,8 @@ impl Config {
             log_level: Some(args.log_level),
             regex: args.regex.clone(),
             log_format: Some(args.log_format.kind),
+            timestamps: Some(args.show_timestamps),
+            timestamp_format: Some(args.timestamp_format.clone()),
             show_pid: Some(args.show_pid),
             show_uid: Some(args.show_uid),
             show_package: Some(args.show_package),
@@ -576,6 +617,8 @@ impl Config {
             log_level,
             regex,
             log_format,
+            timestamps,
+            timestamp_format,
             show_pid,
             show_uid,
             show_package,
@@ -663,6 +706,13 @@ impl Config {
                         LOG_FORMAT_DOC,
                         log_format.map(|kind| kind.to_string()),
                         "threadtime",
+                    ),
+                    DocItem::optional("timestamps", TIMESTAMPS_DOC, timestamps, true),
+                    DocItem::optional(
+                        "timestamp-format",
+                        TIMESTAMP_FORMAT_DOC,
+                        timestamp_format,
+                        crate::model::timestamp::DEFAULT_TIMESTAMP_FORMAT,
                     ),
                     DocItem::optional("show-pid", SHOW_PID_DOC, show_pid, true),
                     DocItem::optional("show-uid", SHOW_UID_DOC, show_uid, true),

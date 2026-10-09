@@ -1,3 +1,6 @@
+use chrono::DateTime;
+use chrono::Local;
+
 use crate::LogLevel;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -10,6 +13,7 @@ pub enum LogEntryKind {
 #[derive(Clone, Debug)]
 pub struct LogEntry {
     pub kind: LogEntryKind,
+    pub timestamp: DateTime<Local>,
     pub pid: String,
     pub uid: String,
     pub owner: String,

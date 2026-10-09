@@ -49,6 +49,10 @@
           "description": "Background of the banner shown when a process starts.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"green\" (#73c936)\nexample: process-start = \"#98971a\"",
           "type": "string"
         },
+        "timestamp": {
+          "description": "Color of the timestamp column when --timestamps is enabled.\nvalue: a [palette] name or a hex color \"#rrggbb\"\nBundled themes set this to the same [palette] name as ui.subtext.\nexample: timestamp = \"gray\"",
+          "type": "string"
+        },
         "tokens": {
           "description": "Colors rotated through for the PID, UID, package and tag columns. A newly seen\nvalue gets the least recently used color and keeps it, so the same tag or\npackage is always shown in the same color.\ntype: non-empty array of hex colors \"#rrggbb\" (palette names are not\naccepted); there is no upper limit on the number of colors\ndefault (gruber-darker): [\"#f43841\", \"#96a6c8\", \"#8cd0d3\", \"#73c936\",\n\"#ffdd33\", \"#9e95c7\", \"#8ec07c\", \"#cc8c3c\"]\nexample: tokens = [\"#fb4934\", \"#83a598\", \"#b8bb26\", \"#fabd2f\"]",
           "items": {
@@ -68,6 +72,7 @@
         }
       },
       "required": [
+        "timestamp",
         "level-fg",
         "verbose",
         "debug",

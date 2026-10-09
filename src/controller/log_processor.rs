@@ -20,6 +20,8 @@ use crate::ValueOrPanic;
 use crate::Writer;
 use crate::active_theme;
 use crate::is_ignored_tag;
+use crate::model::timestamp::format_log_timestamp;
+use crate::model::timestamp::timestamp_from_log_line;
 use crate::passes_log_level;
 use crate::passes_package_ownership;
 use crate::passes_tag_filter;
@@ -319,6 +321,7 @@ pub fn process_line(line: &str, state: &mut State, args: &CliArgs) -> Option<Log
 
             return Some(LogEntry {
                 kind: LogEntryKind::ProcessStart,
+                timestamp: timestamp_from_log_line(args, line),
                 pid: started_pid,
                 uid: started_uid.clone(),
                 owner: started_uid,
@@ -391,6 +394,7 @@ pub fn process_line(line: &str, state: &mut State, args: &CliArgs) -> Option<Log
 
         return Some(LogEntry {
             kind: LogEntryKind::ProcessDeath,
+            timestamp: timestamp_from_log_line(args, line),
             pid: dead_pid.clone(),
             uid: String::default(),
             owner: dead_pid,
@@ -455,6 +459,7 @@ pub fn process_line(line: &str, state: &mut State, args: &CliArgs) -> Option<Log
 
     Some(LogEntry {
         kind: LogEntryKind::Normal,
+        timestamp: timestamp_from_log_line(args, line),
         pid,
         uid,
         owner,
@@ -597,18 +602,116 @@ pub fn format_process_death_message(entry: &LogEntry, args: &CliArgs, colorize: 
     }
 }
 
-fn render_process_start(
+fn timestamp_field_width(args: &CliArgs) -> usize {
+    if args.show_timestamps {
+        args.timestamp_width + 1usize
+    } else {
+        0usize
+    }
+}
+
+/// Log header width used for process banner layout (unchanged when timestamps are enabled).
+fn process_banner_layout_header_width(args: &CliArgs) -> usize {
+    compute_header_width(args).saturating_sub(timestamp_field_width(args))
+}
+
+fn write_banner_line_timestamp(
     entry: &LogEntry,
-    state: &mut State,
     args: &CliArgs,
     writers: &mut [Writer],
+    banner: Color,
 ) {
-    let header_width = compute_header_width(args);
+    if !args.show_timestamps {
+        return;
+    }
+
+    let width = args.timestamp_width;
+    let text = format_log_timestamp(entry.timestamp, &args.timestamp_format, width)
+        .unwrap_or_else(|_| " ".repeat(width));
+    let timestamp_color: Color = active_theme().log.timestamp.into();
+    let display = if args.no_color {
+        text
+    } else {
+        text.color(timestamp_color).to_string()
+    };
+
+    write_token(&display, writers, false, 0usize, banner, banner);
+    write_token(" ", writers, false, 0usize, banner, banner);
+}
+
+fn write_process_banner_with_timestamps(
+    rendered: &str,
+    entry: &LogEntry,
+    args: &CliArgs,
+    writers: &mut [Writer],
+    banner: Color,
+) {
+    if rendered.is_empty() {
+        return;
+    }
+
+    let ends_with_newline = rendered.ends_with('\n');
+    let mut lines: Vec<&str> = rendered.split('\n').collect();
+    if lines.last().is_some_and(|line| line.is_empty()) {
+        lines.pop();
+    }
+
+    for (index, line) in lines.iter().enumerate() {
+        write_banner_line_timestamp(entry, args, writers, banner);
+        write_token(line, writers, false, 0usize, banner, banner);
+        let is_last = index == lines.len() - 1usize;
+        if !is_last || ends_with_newline {
+            write_token("\n", writers, false, 0usize, banner, banner);
+        }
+    }
+}
+
+fn write_timestamp_prefix(
+    entry: &LogEntry,
+    args: &CliArgs,
+    writers: &mut [Writer],
+    row_header: &mut usize,
+    blank: bool,
+) {
+    if !args.show_timestamps {
+        return;
+    }
+
+    let width = args.timestamp_width;
+    let text = if blank {
+        " ".repeat(width)
+    } else {
+        format_log_timestamp(entry.timestamp, &args.timestamp_format, width)
+            .unwrap_or_else(|_| " ".repeat(width))
+    };
+    let timestamp_color: Color = active_theme().log.timestamp.into();
+    let display = if args.no_color {
+        text
+    } else {
+        text.color(timestamp_color).to_string()
+    };
+
+    *row_header = write_token(
+        &display,
+        writers,
+        false,
+        *row_header,
+        Color::White,
+        Color::Black,
+    );
+    *row_header = write_token(" ", writers, false, *row_header, Color::White, Color::Black);
+}
+
+fn render_process_start_body(entry: &LogEntry, args: &CliArgs, writers: &mut [Writer]) {
+    let header_width = process_banner_layout_header_width(args);
     let banner_width = header_width.saturating_sub(1usize);
-    let spaces = " ".repeat(banner_width);
     let banner: Color = active_theme().log.process_start.into();
 
-    let spaces = spaces.color(banner).on_color(banner).to_string();
+    let spaces = " "
+        .repeat(banner_width)
+        .color(banner)
+        .on_color(banner)
+        .to_string();
 
     let (started_process_msg, pugid_msg) = format_process_start_messages(entry, args, true);
 
@@ -646,22 +749,48 @@ fn render_process_start(
         banner,
         banner,
     );
-
-    state.last_tag = None;
 }
 
-fn render_process_death(
+fn render_process_start(
     entry: &LogEntry,
     state: &mut State,
     args: &CliArgs,
     writers: &mut [Writer],
 ) {
-    let header_width = compute_header_width(args);
+    let banner: Color = active_theme().log.process_start.into();
+
+    if args.show_timestamps {
+        let width = writers
+            .first()
+            .and_then(|writer| writer.width)
+            .unwrap_or(-1i16);
+        let show_colors = writers.first().is_some_and(|writer| writer.show_colors);
+        let mut buffer = vec![Writer::new_buffer(width, show_colors)];
+        render_process_start_body(entry, args, &mut buffer);
+        write_process_banner_with_timestamps(
+            &buffer.remove(0).take_buffer(),
+            entry,
+            args,
+            writers,
+            banner,
+        );
+    } else {
+        render_process_start_body(entry, args, writers);
+    }
+
+    state.last_tag = None;
+}
+
+fn render_process_death_body(entry: &LogEntry, args: &CliArgs, writers: &mut [Writer]) {
+    let header_width = process_banner_layout_header_width(args);
     let banner_width = header_width.saturating_sub(1usize);
-    let spaces = " ".repeat(banner_width);
     let banner: Color = active_theme().log.process_death.into();
 
-    let spaces = spaces.color(banner).on_color(banner).to_string();
+    let spaces = " "
+        .repeat(banner_width)
+        .color(banner)
+        .on_color(banner)
+        .to_string();
 
     let dead_process_msg = format_process_death_message(entry, args, true);
 
@@ -693,6 +822,34 @@ fn render_process_death(
         banner,
         banner,
     );
+}
+
+fn render_process_death(
+    entry: &LogEntry,
+    state: &mut State,
+    args: &CliArgs,
+    writers: &mut [Writer],
+) {
+    let banner: Color = active_theme().log.process_death.into();
+
+    if args.show_timestamps {
+        let width = writers
+            .first()
+            .and_then(|writer| writer.width)
+            .unwrap_or(-1i16);
+        let show_colors = writers.first().is_some_and(|writer| writer.show_colors);
+        let mut buffer = vec![Writer::new_buffer(width, show_colors)];
+        render_process_death_body(entry, args, &mut buffer);
+        write_process_banner_with_timestamps(
+            &buffer.remove(0).take_buffer(),
+            entry,
+            args,
+            writers,
+            banner,
+        );
+    } else {
+        render_process_death_body(entry, args, writers);
+    }
 
     state.last_tag = None;
 }
@@ -707,6 +864,9 @@ fn render_normal_entry(
     let mut header_width = 0usize;
     let (level_foreground, level_background) = level_color(entry.level);
     let mut message = entry.message.clone();
+
+    write_timestamp_prefix(entry, args, writers, &mut header_width, false);
+    header_width += timestamp_field_width(args);
 
     write_owner(
         state,
@@ -764,6 +924,8 @@ fn render_normal_entry(
     message = format_log_message(args, &message);
 
     write_message(
+        entry,
+        args,
         &message,
         writers,
         header_width,
@@ -774,7 +936,7 @@ fn render_normal_entry(
 
 pub fn compute_header_width(args: &CliArgs) -> usize {
     let base_header_width = 3usize + 1usize;
-    let mut header_width = 0usize;
+    let mut header_width = timestamp_field_width(args);
 
     if args.show_pid {
         header_width += args.puid_width as usize + 1usize;
@@ -1016,6 +1178,11 @@ fn fit_column_label(label: &str, width: usize) -> String {
 pub fn tui_log_border_columns(args: &CliArgs) -> Vec<(String, usize)> {
     let mut columns = Vec::default();
 
+    if args.show_timestamps {
+        let width = args.timestamp_width + 1usize;
+        columns.push((fit_column_label("TIME", width), width));
+    }
+
     if args.show_pid {
         let width = args.puid_width as usize + 1usize;
         columns.push((fit_column_label("PID", width), width));
@@ -1043,6 +1210,13 @@ pub fn tui_log_border_columns(args: &CliArgs) -> Vec<(String, usize)> {
 /// TUI log panel title — column names aligned like plain-mode output fields.
 pub fn tui_column_header(args: &CliArgs) -> String {
     let mut header = String::new();
+
+    if args.show_timestamps {
+        let width = args.timestamp_width;
+        let label = fit_column_label("TIME", width);
+        header.push_str(&format!("{:width$}", label, width = width));
+        header.push(' ');
+    }
 
     if args.show_pid {
         let width = args.puid_width as usize;
@@ -1086,6 +1260,10 @@ pub fn tui_column_header(args: &CliArgs) -> String {
 /// Prefix column widths for the TUI table — mirrors plain-mode field + separator layout.
 pub fn plain_prefix_column_widths(args: &CliArgs) -> Vec<usize> {
     let mut widths = Vec::default();
+
+    if args.show_timestamps {
+        widths.push(args.timestamp_width + 1usize);
+    }
 
     if args.show_pid {
         widths.push(args.puid_width as usize + 1usize);
@@ -1496,21 +1674,123 @@ pub fn format_log_message(args: &CliArgs, message: &str) -> String {
     message
 }
 
+fn colored_level_padding(
+    len: usize,
+    show_colors: bool,
+    level_foreground: Color,
+    level_background: Color,
+) -> String {
+    if len == 0usize {
+        return String::default();
+    }
+
+    if level_foreground == level_background && show_colors {
+        " ".repeat(len)
+            .color(level_foreground)
+            .on_color(level_background)
+            .to_string()
+    } else {
+        " ".repeat(len)
+    }
+}
+
 fn write_message(
+    entry: &LogEntry,
+    args: &CliArgs,
     message: &str,
     writers: &mut [Writer],
     header_width: usize,
     level_foreground: Color,
     level_background: Color,
 ) {
-    write_token(
-        message,
-        writers,
-        true,
-        header_width,
-        level_foreground,
-        level_background,
-    );
+    let show_colors = writers.first().is_some_and(|writer| writer.show_colors);
+    let width = writers
+        .first()
+        .and_then(|writer| writer.width)
+        .unwrap_or(-1i16);
+
+    let wrapped = if args.show_timestamps && width != -1i16 {
+        get_wrapped_indent(
+            message,
+            show_colors,
+            width,
+            header_width,
+            level_foreground,
+            level_background,
+        )
+    } else {
+        String::default()
+    };
+
+    if !args.show_timestamps || !wrapped.contains('\n') {
+        write_token(
+            if wrapped.is_empty() {
+                message
+            } else {
+                &wrapped
+            },
+            writers,
+            !args.show_timestamps,
+            header_width,
+            level_foreground,
+            level_background,
+        );
+        write_token(
+            "\n",
+            writers,
+            false,
+            header_width,
+            level_foreground,
+            level_background,
+        );
+        return;
+    }
+
+    let indent_len = header_width.saturating_sub(4usize);
+    let continuation_pad = header_width
+        .saturating_sub(timestamp_field_width(args))
+        .saturating_sub(4usize);
+    let mut lines = wrapped.split('\n');
+
+    if let Some(first) = lines.next() {
+        write_token(
+            first,
+            writers,
+            false,
+            header_width,
+            level_foreground,
+            level_background,
+        );
+    }
+
+    for line in lines {
+        write_token(
+            "\n",
+            writers,
+            false,
+            header_width,
+            level_foreground,
+            level_background,
+        );
+        let mut row_header = 0usize;
+        write_timestamp_prefix(entry, args, writers, &mut row_header, false);
+        let suffix = strip_leading_plain_spaces(line, indent_len);
+        let padding = colored_level_padding(
+            continuation_pad,
+            show_colors,
+            level_foreground,
+            level_background,
+        );
+        write_token(
+            &format!("{padding}{suffix}"),
+            writers,
+            false,
+            header_width,
+            level_foreground,
+            level_background,
+        );
+    }
+
     write_token(
         "\n",
         writers,

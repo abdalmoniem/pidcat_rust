@@ -211,6 +211,13 @@ pub const SELECTION_DOC: &[&str] = &[
     "example: selection = \"#504945\"",
 ];
 
+pub const TIMESTAMP_DOC: &[&str] = &[
+    "Color of the timestamp column when --timestamps is enabled.",
+    "value: a [palette] name or a hex color \"#rrggbb\"",
+    "Bundled themes set this to the same [palette] name as ui.subtext.",
+    "example: timestamp = \"gray\"",
+];
+
 pub const LEVEL_FG_DOC: &[&str] = &[
     "Text color of the log level badges (V, D, I, W, E, F) and of the connectors",
     "(╠═ and ╚═) in front of wrapped message lines. The badge background is the",
@@ -364,6 +371,8 @@ pub struct UiSection {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct LogSection {
+    #[schemars(description = TIMESTAMP_DOC.join("\n"))]
+    pub timestamp: String,
     #[schemars(description = LEVEL_FG_DOC.join("\n"))]
     pub level_fg: String,
     #[schemars(description = VERBOSE_DOC.join("\n"))]
@@ -419,6 +428,7 @@ pub struct UiColors {
 
 #[derive(Clone, Debug)]
 pub struct LogColors {
+    pub timestamp: Rgb,
     pub level_fg: Rgb,
     pub verbose: Rgb,
     pub debug: Rgb,
@@ -523,12 +533,17 @@ pub fn install_bundled_themes() {
             parse_theme(existing).is_ok_and(|existing| parse_theme(bundled.source) == Ok(existing))
         };
 
+        let installed_valid = fs::read_to_string(&path)
+            .ok()
+            .and_then(|existing| parse_theme(&existing).ok()?.resolve().ok())
+            .is_some();
+
         let outdated = match fs::read_to_string(&path) {
             Ok(existing) => existing != bundled.source && unedited(&existing),
             Err(_) => !path.exists(),
         };
 
-        if outdated {
+        if !path.exists() || !installed_valid || outdated {
             let _ = fs::write(&path, bundled.source);
         }
     }
@@ -659,6 +674,7 @@ impl ThemeFile {
         } = &self.ui;
 
         let LogSection {
+            timestamp,
             level_fg,
             verbose,
             debug,
@@ -700,6 +716,7 @@ impl ThemeFile {
                 selection: self.palette_color("ui.selection", selection)?,
             },
             log: LogColors {
+                timestamp: self.palette_color("log.timestamp", timestamp)?,
                 level_fg: self.palette_color("log.level-fg", level_fg)?,
                 verbose: self.palette_color("log.verbose", verbose)?,
                 debug: self.palette_color("log.debug", debug)?,
@@ -736,6 +753,7 @@ impl ThemeFile {
         } = ui;
 
         let LogSection {
+            timestamp,
             level_fg,
             verbose,
             debug,
@@ -785,6 +803,7 @@ impl ThemeFile {
                 table: Some("log"),
                 doc: LOG_DOC,
                 items: vec![
+                    DocItem::set("timestamp", TIMESTAMP_DOC, timestamp),
                     DocItem::set("level-fg", LEVEL_FG_DOC, level_fg),
                     DocItem::set("verbose", VERBOSE_DOC, verbose),
                     DocItem::set("debug", DEBUG_DOC, debug),
