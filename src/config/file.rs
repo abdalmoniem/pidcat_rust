@@ -1,4 +1,21 @@
+// Copyright (C) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #![deny(clippy::unwrap_used)]
+
+//! Application configuration file: types, loading, CLI merge, and documented TOML export.
 
 use std::fs;
 use std::path::Path;
@@ -29,6 +46,7 @@ use super::schema::schema_directive_prefix;
 use super::schema::theme_name_schema;
 use super::schema::value_enum_schema;
 
+/// Documentation lines for the `packages` key in JSON Schema and generated TOML.
 pub const PACKAGES_DOC: &[&str] = &[
     "Application package names whose log messages are shown.",
     "A plain name such as \"com.example.app\" matches the package and all of its",
@@ -42,6 +60,7 @@ pub const PACKAGES_DOC: &[&str] = &[
     "example: packages = [\"com.example.app\", \"com.example.app:remote\"]",
 ];
 
+/// Documentation lines for the `adb` key in JSON Schema and generated TOML.
 pub const ADB_DOC: &[&str] = &[
     "Path to the adb executable used to read logs and query devices.",
     "Leave unset to run \"adb\" from the PATH.",
@@ -51,6 +70,7 @@ pub const ADB_DOC: &[&str] = &[
     "example: adb = \"/opt/android-sdk/platform-tools/adb\"",
 ];
 
+/// Documentation lines for the `device` key in JSON Schema and generated TOML.
 pub const DEVICE_DOC: &[&str] = &[
     "Read logs from the first connected physical (non-emulator) device.",
     "type: boolean",
@@ -60,6 +80,7 @@ pub const DEVICE_DOC: &[&str] = &[
     "example: device = true",
 ];
 
+/// Documentation lines for the `emulator` key in JSON Schema and generated TOML.
 pub const EMULATOR_DOC: &[&str] = &[
     "Read logs from the first running emulator.",
     "type: boolean",
@@ -69,6 +90,7 @@ pub const EMULATOR_DOC: &[&str] = &[
     "example: emulator = true",
 ];
 
+/// Documentation lines for the `serial` key in JSON Schema and generated TOML.
 pub const SERIAL_DOC: &[&str] = &[
     "Serial number of the device to read logs from, as listed by \"adb devices\".",
     "type: string",
@@ -78,6 +100,7 @@ pub const SERIAL_DOC: &[&str] = &[
     "example: serial = \"emulator-5554\"",
 ];
 
+/// Documentation lines for the `all` key in JSON Schema and generated TOML.
 pub const ALL_DOC: &[&str] = &[
     "Show log messages from all packages instead of only the selected ones.",
     "type: boolean",
@@ -87,6 +110,7 @@ pub const ALL_DOC: &[&str] = &[
     "example: all = true",
 ];
 
+/// Documentation lines for the `keep` key in JSON Schema and generated TOML.
 pub const KEEP_DOC: &[&str] = &[
     "Keep the existing logcat buffer instead of clearing it at startup, so older",
     "messages are shown too.",
@@ -97,6 +121,7 @@ pub const KEEP_DOC: &[&str] = &[
     "example: keep = true",
 ];
 
+/// Documentation lines for the `current` key in JSON Schema and generated TOML.
 pub const CURRENT_DOC: &[&str] = &[
     "Add the package of the app currently in the foreground to the package filter.",
     "type: boolean",
@@ -106,6 +131,7 @@ pub const CURRENT_DOC: &[&str] = &[
     "example: current = true",
 ];
 
+/// Documentation lines for the `ignore-system-tags` key in JSON Schema and generated TOML.
 pub const IGNORE_SYSTEM_TAGS_DOC: &[&str] = &[
     "Hide messages from a built-in list of noisy Android system tags such as HWUI,",
     "libEGL and ViewRootImpl. Use `ignore-tag` to hide additional tags.",
@@ -116,6 +142,7 @@ pub const IGNORE_SYSTEM_TAGS_DOC: &[&str] = &[
     "example: ignore-system-tags = true",
 ];
 
+/// Documentation lines for the `tag` key in JSON Schema and generated TOML.
 pub const TAG_DOC: &[&str] = &[
     "Only show messages whose tag matches one of these entries.",
     "Matching is case-insensitive. An entry containing regex characters is a regular",
@@ -127,6 +154,7 @@ pub const TAG_DOC: &[&str] = &[
     "example: tag = [\"MainActivity\", \"OkHttp\"]",
 ];
 
+/// Documentation lines for the `ignore-tag` key in JSON Schema and generated TOML.
 pub const IGNORE_TAG_DOC: &[&str] = &[
     "Hide messages whose tag matches one of these entries.",
     "Entries are matched exactly like `tag` entries.",
@@ -136,6 +164,7 @@ pub const IGNORE_TAG_DOC: &[&str] = &[
     "example: ignore-tag = [\"chatty\", \"^Binder.*\"]",
 ];
 
+/// Documentation lines for the `log-level` key in JSON Schema and generated TOML.
 pub const LOG_LEVEL_DOC: &[&str] = &[
     "Hide messages below this minimum log level.",
     "values (case-insensitive): \"verbose\" or \"V\", \"debug\" or \"D\", \"info\" or \"I\",",
@@ -145,6 +174,7 @@ pub const LOG_LEVEL_DOC: &[&str] = &[
     "example: log-level = \"info\"",
 ];
 
+/// Documentation lines for the `regex` key in JSON Schema and generated TOML.
 pub const REGEX_DOC: &[&str] = &[
     "Only show messages matching this regular expression.",
     "It is passed to \"adb logcat -e\", and the TUI also seeds its filter bar with it.",
@@ -154,6 +184,7 @@ pub const REGEX_DOC: &[&str] = &[
     "example: regex = \"Exception|Error\"",
 ];
 
+/// Documentation lines for the `timestamps` key in JSON Schema and generated TOML.
 pub const TIMESTAMPS_DOC: &[&str] = &[
     "Show a timestamp column as the first output field.",
     "type: boolean",
@@ -165,6 +196,7 @@ pub const TIMESTAMPS_DOC: &[&str] = &[
     "example: timestamps = true",
 ];
 
+/// Documentation lines for the `timestamp-format` key in JSON Schema and generated TOML.
 pub const TIMESTAMP_FORMAT_DOC: &[&str] = &[
     "chrono strftime format for the timestamp column. Column width is the longest render over",
     "representative date/times; shorter values are padded. See the chrono specifiers at",
@@ -175,6 +207,7 @@ pub const TIMESTAMP_FORMAT_DOC: &[&str] = &[
     "example: timestamp-format = \"%I:%M:%S%.3f%p\"",
 ];
 
+/// Documentation lines for the `log-format` key in JSON Schema and generated TOML.
 pub const LOG_FORMAT_DOC: &[&str] = &[
     "Log format requested from adb (\"adb logcat -v\") and expected in piped input.",
     "values (case-insensitive): \"brief\" or \"B\", \"long\" or \"L\", \"process\" or \"P\",",
@@ -185,6 +218,7 @@ pub const LOG_FORMAT_DOC: &[&str] = &[
     "example: log-format = \"threadtime\"",
 ];
 
+/// Documentation lines for the `show-pid` key in JSON Schema and generated TOML.
 pub const SHOW_PID_DOC: &[&str] = &[
     "Show the process ID column.",
     "type: boolean",
@@ -194,6 +228,7 @@ pub const SHOW_PID_DOC: &[&str] = &[
     "example: show-pid = true",
 ];
 
+/// Documentation lines for the `show-uid` key in JSON Schema and generated TOML.
 pub const SHOW_UID_DOC: &[&str] = &[
     "Show the user ID column. The UID is only known when adb includes it in the log",
     "lines.",
@@ -204,6 +239,7 @@ pub const SHOW_UID_DOC: &[&str] = &[
     "example: show-uid = true",
 ];
 
+/// Documentation lines for the `show-package` key in JSON Schema and generated TOML.
 pub const SHOW_PACKAGE_DOC: &[&str] = &[
     "Show the package name column.",
     "type: boolean",
@@ -213,6 +249,7 @@ pub const SHOW_PACKAGE_DOC: &[&str] = &[
     "example: show-package = true",
 ];
 
+/// Documentation lines for the `always-show-tags` key in JSON Schema and generated TOML.
 pub const ALWAYS_SHOW_TAGS_DOC: &[&str] = &[
     "Print the tag on every line instead of only when it differs from the previous",
     "line.",
@@ -223,6 +260,7 @@ pub const ALWAYS_SHOW_TAGS_DOC: &[&str] = &[
     "example: always-show-tags = true",
 ];
 
+/// Documentation lines for the `puid-width` key in JSON Schema and generated TOML.
 pub const PUID_WIDTH_DOC: &[&str] = &[
     "Width of the PID and UID columns in characters. Longer values are truncated",
     "with an ellipsis.",
@@ -232,6 +270,7 @@ pub const PUID_WIDTH_DOC: &[&str] = &[
     "example: puid-width = 7",
 ];
 
+/// Documentation lines for the `package-width` key in JSON Schema and generated TOML.
 pub const PACKAGE_WIDTH_DOC: &[&str] = &[
     "Width of the package name column in characters. Longer names are truncated",
     "with an ellipsis.",
@@ -241,6 +280,7 @@ pub const PACKAGE_WIDTH_DOC: &[&str] = &[
     "example: package-width = 30",
 ];
 
+/// Documentation lines for the `tag-width` key in JSON Schema and generated TOML.
 pub const TAG_WIDTH_DOC: &[&str] = &[
     "Width of the tag column in characters. Longer tags are truncated with an",
     "ellipsis, and 0 hides the column.",
@@ -250,6 +290,7 @@ pub const TAG_WIDTH_DOC: &[&str] = &[
     "example: tag-width = 24",
 ];
 
+/// Documentation lines for the `gc-color` key in JSON Schema and generated TOML.
 pub const GC_COLOR_DOC: &[&str] = &[
     "Highlight the freed memory and pause time in garbage collector messages.",
     "type: boolean",
@@ -259,6 +300,7 @@ pub const GC_COLOR_DOC: &[&str] = &[
     "example: gc-color = true",
 ];
 
+/// Documentation lines for the `no-color` key in JSON Schema and generated TOML.
 pub const NO_COLOR_DOC: &[&str] = &[
     "Disable colors in the log output.",
     "type: boolean",
@@ -268,6 +310,7 @@ pub const NO_COLOR_DOC: &[&str] = &[
     "example: no-color = true",
 ];
 
+/// Documentation lines for the `output` key in JSON Schema and generated TOML.
 pub const OUTPUT_DOC: &[&str] = &[
     "Also save the log output to this file. The file is created, or truncated if it",
     "exists, at startup.",
@@ -277,6 +320,7 @@ pub const OUTPUT_DOC: &[&str] = &[
     "example: output = \"logcat.txt\"",
 ];
 
+/// Documentation lines for the `theme` key in JSON Schema and generated TOML.
 pub const THEME_DOC: &[&str] = &[
     "Color theme of the TUI and of the log output (also in plain mode).",
     "Use a bundled theme name (see the JSON schema enum), a custom theme file name",
@@ -290,6 +334,7 @@ pub const THEME_DOC: &[&str] = &[
     "example: theme = \"monokai\"",
 ];
 
+/// Documentation lines for the `plain` key in JSON Schema and generated TOML.
 pub const PLAIN_DOC: &[&str] = &[
     "Use plain text output instead of the interactive TUI. Plain output is also",
     "used automatically when standard output is not a terminal.",
@@ -300,6 +345,7 @@ pub const PLAIN_DOC: &[&str] = &[
     "example: plain = true",
 ];
 
+/// Documentation lines for the overall configuration file in JSON Schema and generated TOML.
 pub const CONFIG_DOC: &[&str] = &[
     "Every key mirrors the command-line flag of the same name. A flag passed on the",
     "command line wins over the value in this file, which wins over the built-in",
@@ -316,71 +362,101 @@ pub const CONFIG_DOC: &[&str] = &[
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 #[schemars(title = concat!(env!("CARGO_PKG_NAME"), " configuration"))]
 #[schemars(description = CONFIG_DOC.join("\n"))]
+/// TOML configuration mirroring all pidcatrs CLI options.
 pub struct Config {
     #[schemars(description = PACKAGES_DOC.join("\n"))]
+    /// Package filter list.
     pub packages: Option<Vec<String>>,
     #[schemars(description = ADB_DOC.join("\n"))]
+    /// Path to the adb executable.
     pub adb: Option<String>,
     #[schemars(description = DEVICE_DOC.join("\n"))]
+    /// Use the first physical device.
     pub device: Option<bool>,
     #[schemars(description = EMULATOR_DOC.join("\n"))]
+    /// Use the first emulator.
     pub emulator: Option<bool>,
     #[schemars(description = SERIAL_DOC.join("\n"))]
+    /// ADB device serial number.
     pub serial: Option<String>,
     #[schemars(description = ALL_DOC.join("\n"))]
+    /// Show logs from all packages.
     pub all: Option<bool>,
     #[schemars(description = KEEP_DOC.join("\n"))]
+    /// Keep the existing logcat buffer.
     pub keep: Option<bool>,
     #[schemars(description = CURRENT_DOC.join("\n"))]
+    /// Include the foreground app package.
     pub current: Option<bool>,
     #[schemars(description = IGNORE_SYSTEM_TAGS_DOC.join("\n"))]
+    /// Hide noisy built-in system tags.
     pub ignore_system_tags: Option<bool>,
     #[schemars(description = TAG_DOC.join("\n"))]
+    /// Tag filter list.
     pub tag: Option<Vec<String>>,
     #[schemars(description = IGNORE_TAG_DOC.join("\n"))]
+    /// Tags to hide.
     pub ignore_tag: Option<Vec<String>>,
     #[serde(deserialize_with = "parse_value_enum")]
     #[schemars(schema_with = "value_enum_schema::<LogLevel>")]
     #[schemars(description = LOG_LEVEL_DOC.join("\n"))]
+    /// Minimum log level.
     pub log_level: Option<LogLevel>,
     #[schemars(description = REGEX_DOC.join("\n"))]
+    /// Message filter regular expression.
     pub regex: Option<String>,
     #[serde(deserialize_with = "parse_value_enum")]
     #[schemars(schema_with = "value_enum_schema::<LogFormatKind>")]
     #[schemars(description = LOG_FORMAT_DOC.join("\n"))]
+    /// adb logcat output format.
     pub log_format: Option<LogFormatKind>,
     #[schemars(description = TIMESTAMPS_DOC.join("\n"))]
+    /// Show a timestamp column.
     pub timestamps: Option<bool>,
     #[schemars(description = TIMESTAMP_FORMAT_DOC.join("\n"))]
+    /// Timestamp strftime format.
     pub timestamp_format: Option<String>,
     #[schemars(description = SHOW_PID_DOC.join("\n"))]
+    /// Show process ID column.
     pub show_pid: Option<bool>,
     #[schemars(description = SHOW_UID_DOC.join("\n"))]
+    /// Show user ID column.
     pub show_uid: Option<bool>,
     #[schemars(description = SHOW_PACKAGE_DOC.join("\n"))]
+    /// Show package name column.
     pub show_package: Option<bool>,
     #[schemars(description = ALWAYS_SHOW_TAGS_DOC.join("\n"))]
+    /// Repeat the tag on every line.
     pub always_show_tags: Option<bool>,
     #[schemars(description = PUID_WIDTH_DOC.join("\n"))]
     #[schemars(range(min = 1))]
+    /// PID and UID column width.
     pub puid_width: Option<u8>,
     #[schemars(description = PACKAGE_WIDTH_DOC.join("\n"))]
     #[schemars(range(min = 1))]
+    /// Package column width.
     pub package_width: Option<u8>,
     #[schemars(description = TAG_WIDTH_DOC.join("\n"))]
+    /// Tag column width.
     pub tag_width: Option<u8>,
     #[schemars(description = GC_COLOR_DOC.join("\n"))]
+    /// Highlight GC message parts.
     pub gc_color: Option<bool>,
     #[schemars(description = NO_COLOR_DOC.join("\n"))]
+    /// Disable colored output.
     pub no_color: Option<bool>,
     #[schemars(description = OUTPUT_DOC.join("\n"))]
+    /// Optional log output file path.
     pub output: Option<String>,
     #[schemars(description = PLAIN_DOC.join("\n"))]
+    /// Use plain text instead of the TUI.
     pub plain: Option<bool>,
     #[schemars(description = THEME_DOC.join("\n"), schema_with = "theme_name_schema")]
+    /// Color theme name or path.
     pub theme: Option<String>,
 }
 
+/// Deserializes an optional string into a clap [`ValueEnum`] by name or alias.
 fn parse_value_enum<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: Deserializer<'de>,
@@ -408,6 +484,7 @@ where
     })
 }
 
+/// Applies `value` to `target` when the CLI did not set `id`.
 fn set_unless_cli<T>(target: &mut T, value: Option<T>, matches: &ArgMatches, id: &str) {
     if let Some(value) = value
         && matches.value_source(id) != Some(ValueSource::CommandLine)
@@ -416,7 +493,9 @@ fn set_unless_cli<T>(target: &mut T, value: Option<T>, matches: &ArgMatches, id:
     }
 }
 
+/// Loading, merging, and exporting the user configuration file.
 impl Config {
+    /// Reads and parses configuration from `path`.
     pub fn load(path: &Path) -> Result<Self, String> {
         let path_display = path.display();
         let text = fs::read_to_string(path)
@@ -459,6 +538,7 @@ impl Config {
         }
     }
 
+    /// Merges loaded values into `args` where the CLI did not override them.
     pub fn merge_into(self, args: &mut CliArgs, matches: &ArgMatches) {
         let Self {
             packages,
@@ -571,6 +651,7 @@ impl Config {
         set_unless_cli(&mut args.theme, theme, matches, "theme");
     }
 
+    /// Builds a [`Config`] snapshot from resolved CLI arguments.
     pub fn from_args(args: &CliArgs) -> Self {
         Self {
             packages: Some(args.packages.clone()),
@@ -604,6 +685,7 @@ impl Config {
         }
     }
 
+    /// Returns documentation sections for [`super::doc_toml::render`].
     pub fn doc_items(&self) -> Vec<DocSection> {
         let Self {
             packages,
@@ -768,6 +850,7 @@ impl Config {
         ]
     }
 
+    /// Renders this configuration as schema-linked, commented TOML.
     pub fn to_doc_toml(&self) -> String {
         let pkg = env!("CARGO_PKG_NAME");
         let default_path = default_config_file()
