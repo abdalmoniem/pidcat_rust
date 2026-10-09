@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Doom Acario Dark from the Doom Emacs themes
 # https://github.com/doomemacs/themes
 # Ported by Luna

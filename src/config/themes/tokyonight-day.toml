@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Tokyo Night Day by folke, based on Tokyo Night by enkia
 # https://github.com/folke/tokyonight.nvim
 # Ported by Paul Graydon

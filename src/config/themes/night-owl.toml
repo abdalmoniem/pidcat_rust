@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Night Owl by Sarah Drasner
 # https://github.com/sdras/night-owl-vscode-theme
 # Palette from https://github.com/haishanh/night-owl.vim

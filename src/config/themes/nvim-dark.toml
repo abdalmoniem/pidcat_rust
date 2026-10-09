@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Neovim default dark color scheme by Evgeni Chasnovski (echasnovski)
 # https://github.com/neovim/neovim
 # Based on Kim Nørgaard's Neovim dark theme for Zed

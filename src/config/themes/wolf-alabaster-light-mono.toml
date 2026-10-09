@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Wolf Alabaster Light Mono by Wolf
 # Based on Alabaster Mono by Nikita Prokopov (tonsky)
 # https://github.com/tonsky/sublime-scheme-alabaster

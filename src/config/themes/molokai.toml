@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Molokai by Tomas Restrepo
 # https://github.com/tomasr/molokai
 # Ported by Maxwell Anderson

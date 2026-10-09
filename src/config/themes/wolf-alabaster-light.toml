@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Wolf Alabaster Light by Wolf
 # Based on Alabaster by Nikita Prokopov (tonsky)
 # https://github.com/tonsky/sublime-scheme-alabaster

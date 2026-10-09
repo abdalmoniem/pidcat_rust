@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Kinda Nvim by Strash
 # https://github.com/strash/kinda_nvim.hx
 # License: MIT

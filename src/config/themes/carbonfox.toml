@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Carbonfox by EdenEast (James Simpson)
 # https://github.com/EdenEast/nightfox.nvim
 # Ported by ETCaton

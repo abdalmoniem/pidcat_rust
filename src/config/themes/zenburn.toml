@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Zenburn by Jani Nurminen
 # https://github.com/jnurmine/Zenburn
 # Ported by Jakob Jordan

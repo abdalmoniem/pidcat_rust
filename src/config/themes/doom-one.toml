@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Doom One by Henrik Lissner (Doom Emacs), Neovim version by NTBBloodbath
 # https://github.com/NTBBloodbath/doom-one.nvim
 # Ported by spentbliss

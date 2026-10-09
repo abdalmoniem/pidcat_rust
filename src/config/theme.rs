@@ -24,11 +24,13 @@ use super::doc_toml::DocSection;
 use super::doc_toml::render;
 use super::paths::themes_dir;
 use super::schema::HEX_COLOR_PATTERN;
+use super::schema::THEME_SCHEMA_URL;
 use super::schema::hex_color_map_schema;
+use super::schema::schema_directive_prefix;
 
 pub const DEFAULT_THEME_NAME: &str = "gruber-darker";
-/// `source` must equal its `render_theme_source()`: the credit lines, a lone `#` line, then exactly
-/// the `--print-theme` output.
+/// `source` must equal its `render_theme_source()`: the schema directive and blank `#` line, the
+/// credit lines, a lone `#` line, then exactly the `--print-theme` output.
 pub struct BundledTheme {
     pub name: &'static str,
     pub source: &'static str,
@@ -44,12 +46,26 @@ impl BundledTheme {
     }
 }
 
-/// The credit lines of a theme source: the leading comment lines before the first
-/// lone `#` line, or none when the leading comments have no such line.
+/// The credit lines of a theme source: optional schema directive, then comment lines before the
+/// first lone `#` line, or none when the leading comments have no such line.
 fn theme_credits(source: &str) -> Vec<&str> {
-    let comments = source
-        .lines()
+    let lines = source.lines().collect::<Vec<_>>();
+    let mut index = 0usize;
+
+    if lines
+        .first()
+        .is_some_and(|line| line.starts_with("#:schema"))
+    {
+        index += 1;
+        if lines.get(index).is_some_and(|line| *line == "#") {
+            index += 1;
+        }
+    }
+
+    let comments = lines[index..]
+        .iter()
         .take_while(|line| line.starts_with('#'))
+        .copied()
         .collect::<Vec<_>>();
 
     match comments.iter().position(|line| *line == "#") {
@@ -68,7 +84,12 @@ pub fn render_theme_source(source: &str) -> Result<String, String> {
         .map(|line| format!("{line}\n"))
         .collect::<String>();
 
-    Ok(format!("{credits}#\n{}", theme_file.to_doc_toml()))
+    Ok(format!(
+        "{}{}#\n{}",
+        schema_directive_prefix(THEME_SCHEMA_URL),
+        credits,
+        theme_file.to_doc_toml()
+    ))
 }
 
 fn bundled_theme(name: &str) -> Option<&'static BundledTheme> {

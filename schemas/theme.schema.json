@@ -1,74 +1,172 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
   "additionalProperties": false,
+  "properties": {
+    "palette": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "description": "Named colors that the [ui] and [log] tables can refer to by name.\nNames are free-form (letters, digits, '-' and '_'), values are hex colors in\nthe form \"#rrggbb\". The palette is optional; [ui] and [log] keys may also use\nhex colors directly.\nexample: bg0 = \"#181818\"",
+      "default": {}
+    },
+    "ui": {
+      "description": "Colors of the interactive TUI chrome. Plain output does not use this table.\nEach key takes a [palette] name or a hex color \"#rrggbb\".",
+      "allOf": [
+        {
+          "$ref": "#/definitions/UiSection"
+        }
+      ]
+    },
+    "log": {
+      "description": "Colors of the log lines, used both in the TUI log view and in plain output\n(and in copied or exported text). Each key except `tokens` takes a [palette]\nname or a hex color \"#rrggbb\". Log lines use these exact 24-bit colors when\nthe environment sets COLORTERM to \"truecolor\" or \"24bit\", and the closest\nbasic ANSI colors otherwise.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/LogSection"
+        }
+      ]
+    }
+  },
+  "required": [
+    "ui",
+    "log"
+  ],
+  "title": "pidcat color theme",
+  "description": "Colors are hex strings in the form \"#rrggbb\". Every key in [ui] and [log]\nexcept `tokens` takes either a hex color or the name of a [palette] entry.\nAll [ui] and [log] keys are required; unknown keys are rejected.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
-    "LogSection": {
+    "UiSection": {
+      "type": "object",
       "additionalProperties": false,
       "properties": {
-        "debug": {
-          "description": "Level badge and wrap connector background of debug (D) messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"niagara\" (#96a6c8)\nexample: debug = \"#458588\"",
-          "type": "string"
+        "background": {
+          "type": "string",
+          "description": "Background of the whole TUI: log view, status bar, panels, menus, dialogs and\nthe file browser. Also the text color on accent-colored badges such as the\nrunning status indicator and the selected device.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"bg0\" (#181818)\nexample: background = \"#1d2021\""
+        },
+        "text": {
+          "type": "string",
+          "description": "Main foreground text: menu and dialog content, help descriptions, device\nnames, key hint descriptions, file browser entries, and selected log line\ntext that has no color of its own.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"fg0\" (#e4e4ef)\nexample: text = \"#ebdbb2\""
+        },
+        "subtext": {
+          "type": "string",
+          "description": "Dimmed text: status bar separators and entry counters, device states, input\nplaceholders, hints, unavailable commands in the help menu and file browser\nmetadata.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"fg3\" (#a89984)\nexample: subtext = \"#928374\""
+        },
+        "accent": {
+          "type": "string",
+          "description": "Primary accent: panel borders, section headings, key names in the border\nhints, the running status badge, the log source in the status bar, the\nselected help and menu row, the selected device, and the file browser title,\ndirectories and highlights.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"yellow\" (#ffdd33)\nexample: accent = \"#fabd2f\""
+        },
+        "secondary": {
+          "type": "string",
+          "description": "Secondary accent: the device serial in the status bar.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"niagara\" (#96a6c8)\nexample: secondary = \"#83a598\""
+        },
+        "success": {
+          "type": "string",
+          "description": "Success feedback: status bar messages such as copy confirmations, and success\nmessages in the file browser.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"green\" (#73c936)\nexample: success = \"#b8bb26\""
+        },
+        "warning": {
+          "type": "string",
+          "description": "Idle status indicator in the status bar, shown while paused, waiting for a\ndevice or not reading live logs.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"brown\" (#cc8c3c)\nexample: warning = \"#fe8019\""
         },
         "error": {
-          "description": "Level badge and wrap connector background of error (E) messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"brown\" (#cc8c3c)\nexample: error = \"#fe8019\"",
-          "type": "string"
+          "type": "string",
+          "description": "Error messages in the device picker and the file dialogs.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"red\" (#f43841)\nexample: error = \"#fb4934\""
         },
-        "fatal": {
-          "description": "Level badge and wrap connector background of fatal (F) messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"red\" (#f43841)\nexample: fatal = \"#fb4934\"",
-          "type": "string"
+        "match": {
+          "type": "string",
+          "description": "File browser entries matching the current search.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"aqua\" (#8ec07c)\nexample: match = \"#8ec07c\""
         },
-        "gc-duration": {
-          "description": "The \"; ~duration=\" label of StrictMode policy violation messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"red\" (#f43841)\nexample: gc-duration = \"#fb4934\"",
-          "type": "string"
+        "keys": {
+          "type": "string",
+          "description": "Key bindings listed in the help, copy and export menus.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"cyan\" (#8cd0d3)\nexample: keys = \"#83a598\""
         },
-        "gc-free": {
-          "description": "The \"freed <size>\" part of garbage collector messages. Only used when\ngc-color is enabled (gc-color = true in the config file, or -g).\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"green\" (#73c936)\nexample: gc-free = \"#b8bb26\"",
-          "type": "string"
-        },
-        "gc-unit": {
-          "description": "The duration value of StrictMode policy violation messages, and the\n\"paused <time>\" part of garbage collector messages (the latter only when\ngc-color is enabled).\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"yellow\" (#ffdd33)\nexample: gc-unit = \"#fabd2f\"",
-          "type": "string"
-        },
-        "highlight": {
-          "description": "Highlighted values inside the process banners: the package, target, PID, UID\nand GIDs of started processes and the name and PID of ended processes.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"yellow\" (#ffdd33)\nexample: highlight = \"#fabd2f\"",
-          "type": "string"
-        },
-        "info": {
-          "description": "Level badge and wrap connector background of info (I) messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"green\" (#73c936)\nexample: info = \"#b8bb26\"",
-          "type": "string"
+        "selection": {
+          "type": "string",
+          "description": "Background of the selected log line in select mode, the selected help and\nmenu row, and the selected file browser entry.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"bg5\" (#404040)\nexample: selection = \"#504945\""
+        }
+      },
+      "required": [
+        "background",
+        "text",
+        "subtext",
+        "accent",
+        "secondary",
+        "success",
+        "warning",
+        "error",
+        "match",
+        "keys",
+        "selection"
+      ]
+    },
+    "LogSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timestamp": {
+          "type": "string",
+          "description": "Color of the timestamp column when --timestamps is enabled.\nvalue: a [palette] name or a hex color \"#rrggbb\"\nBundled themes set this to the same [palette] name as ui.subtext.\nexample: timestamp = \"gray\""
         },
         "level-fg": {
-          "description": "Text color of the log level badges (V, D, I, W, E, F) and of the connectors\n(╠═ and ╚═) in front of wrapped message lines. The badge background is the\ncolor of the message's level below.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"black\" (#000000)\nexample: level-fg = \"#1d2021\"",
-          "type": "string"
-        },
-        "process-death": {
-          "description": "Background of the banner shown when a process ends.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"red\" (#f43841)\nexample: process-death = \"#cc241d\"",
-          "type": "string"
-        },
-        "process-start": {
-          "description": "Background of the banner shown when a process starts.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"green\" (#73c936)\nexample: process-start = \"#98971a\"",
-          "type": "string"
-        },
-        "timestamp": {
-          "description": "Color of the timestamp column when --timestamps is enabled.\nvalue: a [palette] name or a hex color \"#rrggbb\"\nBundled themes set this to the same [palette] name as ui.subtext.\nexample: timestamp = \"gray\"",
-          "type": "string"
-        },
-        "tokens": {
-          "description": "Colors rotated through for the PID, UID, package and tag columns. A newly seen\nvalue gets the least recently used color and keeps it, so the same tag or\npackage is always shown in the same color.\ntype: non-empty array of hex colors \"#rrggbb\" (palette names are not\naccepted); there is no upper limit on the number of colors\ndefault (gruber-darker): [\"#f43841\", \"#96a6c8\", \"#8cd0d3\", \"#73c936\",\n\"#ffdd33\", \"#9e95c7\", \"#8ec07c\", \"#cc8c3c\"]\nexample: tokens = [\"#fb4934\", \"#83a598\", \"#b8bb26\", \"#fabd2f\"]",
-          "items": {
-            "pattern": "^#[0-9a-fA-F]{6}$",
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
+          "type": "string",
+          "description": "Text color of the log level badges (V, D, I, W, E, F) and of the connectors\n(╠═ and ╚═) in front of wrapped message lines. The badge background is the\ncolor of the message's level below.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"black\" (#000000)\nexample: level-fg = \"#1d2021\""
         },
         "verbose": {
-          "description": "Level badge and wrap connector background of verbose (V) messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"cyan\" (#8cd0d3)\nexample: verbose = \"#83a598\"",
-          "type": "string"
+          "type": "string",
+          "description": "Level badge and wrap connector background of verbose (V) messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"cyan\" (#8cd0d3)\nexample: verbose = \"#83a598\""
+        },
+        "debug": {
+          "type": "string",
+          "description": "Level badge and wrap connector background of debug (D) messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"niagara\" (#96a6c8)\nexample: debug = \"#458588\""
+        },
+        "info": {
+          "type": "string",
+          "description": "Level badge and wrap connector background of info (I) messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"green\" (#73c936)\nexample: info = \"#b8bb26\""
         },
         "warn": {
-          "description": "Level badge and wrap connector background of warning (W) messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"yellow\" (#ffdd33)\nexample: warn = \"#fabd2f\"",
-          "type": "string"
+          "type": "string",
+          "description": "Level badge and wrap connector background of warning (W) messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"yellow\" (#ffdd33)\nexample: warn = \"#fabd2f\""
+        },
+        "error": {
+          "type": "string",
+          "description": "Level badge and wrap connector background of error (E) messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"brown\" (#cc8c3c)\nexample: error = \"#fe8019\""
+        },
+        "fatal": {
+          "type": "string",
+          "description": "Level badge and wrap connector background of fatal (F) messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"red\" (#f43841)\nexample: fatal = \"#fb4934\""
+        },
+        "highlight": {
+          "type": "string",
+          "description": "Highlighted values inside the process banners: the package, target, PID, UID\nand GIDs of started processes and the name and PID of ended processes.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"yellow\" (#ffdd33)\nexample: highlight = \"#fabd2f\""
+        },
+        "process-start": {
+          "type": "string",
+          "description": "Background of the banner shown when a process starts.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"green\" (#73c936)\nexample: process-start = \"#98971a\""
+        },
+        "process-death": {
+          "type": "string",
+          "description": "Background of the banner shown when a process ends.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"red\" (#f43841)\nexample: process-death = \"#cc241d\""
+        },
+        "gc-duration": {
+          "type": "string",
+          "description": "The \"; ~duration=\" label of StrictMode policy violation messages.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"red\" (#f43841)\nexample: gc-duration = \"#fb4934\""
+        },
+        "gc-free": {
+          "type": "string",
+          "description": "The \"freed <size>\" part of garbage collector messages. Only used when\ngc-color is enabled (gc-color = true in the config file, or -g).\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"green\" (#73c936)\nexample: gc-free = \"#b8bb26\""
+        },
+        "gc-unit": {
+          "type": "string",
+          "description": "The duration value of StrictMode policy violation messages, and the\n\"paused <time>\" part of garbage collector messages (the latter only when\ngc-color is enabled).\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"yellow\" (#ffdd33)\nexample: gc-unit = \"#fabd2f\""
+        },
+        "tokens": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "description": "Colors rotated through for the PID, UID, package and tag columns. A newly seen\nvalue gets the least recently used color and keeps it, so the same tag or\npackage is always shown in the same color.\ntype: non-empty array of hex colors \"#rrggbb\" (palette names are not\naccepted); there is no upper limit on the number of colors\ndefault (gruber-darker): [\"#f43841\", \"#96a6c8\", \"#8cd0d3\", \"#73c936\",\n\"#ffdd33\", \"#9e95c7\", \"#8ec07c\", \"#cc8c3c\"]\nexample: tokens = [\"#fb4934\", \"#83a598\", \"#b8bb26\", \"#fabd2f\"]",
+          "minItems": 1
         }
       },
       "required": [
@@ -87,105 +185,7 @@
         "gc-free",
         "gc-unit",
         "tokens"
-      ],
-      "type": "object"
-    },
-    "UiSection": {
-      "additionalProperties": false,
-      "properties": {
-        "accent": {
-          "description": "Primary accent: panel borders, section headings, key names in the border\nhints, the running status badge, the log source in the status bar, the\nselected help and menu row, the selected device, and the file browser title,\ndirectories and highlights.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"yellow\" (#ffdd33)\nexample: accent = \"#fabd2f\"",
-          "type": "string"
-        },
-        "background": {
-          "description": "Background of the whole TUI: log view, status bar, panels, menus, dialogs and\nthe file browser. Also the text color on accent-colored badges such as the\nrunning status indicator and the selected device.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"bg0\" (#181818)\nexample: background = \"#1d2021\"",
-          "type": "string"
-        },
-        "error": {
-          "description": "Error messages in the device picker and the file dialogs.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"red\" (#f43841)\nexample: error = \"#fb4934\"",
-          "type": "string"
-        },
-        "keys": {
-          "description": "Key bindings listed in the help, copy and export menus.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"cyan\" (#8cd0d3)\nexample: keys = \"#83a598\"",
-          "type": "string"
-        },
-        "match": {
-          "description": "File browser entries matching the current search.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"aqua\" (#8ec07c)\nexample: match = \"#8ec07c\"",
-          "type": "string"
-        },
-        "secondary": {
-          "description": "Secondary accent: the device serial in the status bar.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"niagara\" (#96a6c8)\nexample: secondary = \"#83a598\"",
-          "type": "string"
-        },
-        "selection": {
-          "description": "Background of the selected log line in select mode, the selected help and\nmenu row, and the selected file browser entry.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"bg5\" (#404040)\nexample: selection = \"#504945\"",
-          "type": "string"
-        },
-        "subtext": {
-          "description": "Dimmed text: status bar separators and entry counters, device states, input\nplaceholders, hints, unavailable commands in the help menu and file browser\nmetadata.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"fg3\" (#a89984)\nexample: subtext = \"#928374\"",
-          "type": "string"
-        },
-        "success": {
-          "description": "Success feedback: status bar messages such as copy confirmations, and success\nmessages in the file browser.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"green\" (#73c936)\nexample: success = \"#b8bb26\"",
-          "type": "string"
-        },
-        "text": {
-          "description": "Main foreground text: menu and dialog content, help descriptions, device\nnames, key hint descriptions, file browser entries, and selected log line\ntext that has no color of its own.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"fg0\" (#e4e4ef)\nexample: text = \"#ebdbb2\"",
-          "type": "string"
-        },
-        "warning": {
-          "description": "Idle status indicator in the status bar, shown while paused, waiting for a\ndevice or not reading live logs.\nvalue: a [palette] name or a hex color \"#rrggbb\"\ndefault (gruber-darker): \"brown\" (#cc8c3c)\nexample: warning = \"#fe8019\"",
-          "type": "string"
-        }
-      },
-      "required": [
-        "background",
-        "text",
-        "subtext",
-        "accent",
-        "secondary",
-        "success",
-        "warning",
-        "error",
-        "match",
-        "keys",
-        "selection"
-      ],
-      "type": "object"
+      ]
     }
-  },
-  "description": "Colors are hex strings in the form \"#rrggbb\". Every key in [ui] and [log]\nexcept `tokens` takes either a hex color or the name of a [palette] entry.\nAll [ui] and [log] keys are required; unknown keys are rejected.",
-  "properties": {
-    "log": {
-      "allOf": [
-        {
-          "$ref": "#/definitions/LogSection"
-        }
-      ],
-      "description": "Colors of the log lines, used both in the TUI log view and in plain output\n(and in copied or exported text). Each key except `tokens` takes a [palette]\nname or a hex color \"#rrggbb\". Log lines use these exact 24-bit colors when\nthe environment sets COLORTERM to \"truecolor\" or \"24bit\", and the closest\nbasic ANSI colors otherwise."
-    },
-    "palette": {
-      "additionalProperties": {
-        "pattern": "^#[0-9a-fA-F]{6}$",
-        "type": "string"
-      },
-      "default": {},
-      "description": "Named colors that the [ui] and [log] tables can refer to by name.\nNames are free-form (letters, digits, '-' and '_'), values are hex colors in\nthe form \"#rrggbb\". The palette is optional; [ui] and [log] keys may also use\nhex colors directly.\nexample: bg0 = \"#181818\"",
-      "type": "object"
-    },
-    "ui": {
-      "allOf": [
-        {
-          "$ref": "#/definitions/UiSection"
-        }
-      ],
-      "description": "Colors of the interactive TUI chrome. Plain output does not use this table.\nEach key takes a [palette] name or a hex color \"#rrggbb\"."
-    }
-  },
-  "required": [
-    "ui",
-    "log"
-  ],
-  "title": "pidcat color theme",
-  "type": "object"
+  }
 }

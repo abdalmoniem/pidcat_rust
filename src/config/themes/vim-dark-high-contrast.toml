@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Vim default dark color scheme (high contrast)
 # Ported by Jesse Luehrs
 #

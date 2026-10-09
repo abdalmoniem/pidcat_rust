@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # JetBrains Dark, the default JetBrains IDE dark theme
 # Ported by Yannic Nuwenhof
 #

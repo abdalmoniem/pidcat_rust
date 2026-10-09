@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Dracula at Night by Billy Ceskavich (bceskavich)
 # https://github.com/bceskavich/dracula-at-night
 # Ported by Sam Sartor

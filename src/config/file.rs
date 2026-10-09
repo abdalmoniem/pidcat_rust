@@ -24,6 +24,9 @@ use super::doc_toml::DocItem;
 use super::doc_toml::DocSection;
 use super::doc_toml::render;
 use super::paths::default_config_file;
+use super::schema::CONFIG_SCHEMA_URL;
+use super::schema::schema_directive_prefix;
+use super::schema::theme_name_schema;
 use super::schema::value_enum_schema;
 
 pub const PACKAGES_DOC: &[&str] = &[
@@ -276,12 +279,12 @@ pub const OUTPUT_DOC: &[&str] = &[
 
 pub const THEME_DOC: &[&str] = &[
     "Color theme of the TUI and of the log output (also in plain mode).",
-    "Either the name of a theme file in the `themes` directory next to the default",
-    "config file, without the .toml extension, or a path to a theme file. A value",
-    "containing a path separator or ending in .toml is a path; relative paths are",
-    "resolved from the current directory. The bundled themes are written to the",
-    "themes directory when missing and can be edited there.",
-    "type: string (theme name or file path)",
+    "Use a bundled theme name (see the JSON schema enum), a custom theme file name",
+    "in the `themes` directory next to the default config file (without the .toml",
+    "extension), or a path to a theme file. A value containing a path separator or",
+    "ending in .toml is a path; relative paths are resolved from the current",
+    "directory. Bundled themes are written to the themes directory when missing.",
+    "type: string (bundled name, custom name, or file path)",
     "default: \"gruber-darker\"",
     "command line: --theme <THEME>",
     "example: theme = \"monokai\"",
@@ -374,7 +377,7 @@ pub struct Config {
     pub output: Option<String>,
     #[schemars(description = PLAIN_DOC.join("\n"))]
     pub plain: Option<bool>,
-    #[schemars(description = THEME_DOC.join("\n"))]
+    #[schemars(description = THEME_DOC.join("\n"), schema_with = "theme_name_schema")]
     pub theme: Option<String>,
 }
 
@@ -785,6 +788,10 @@ impl Config {
         .chain(CONFIG_DOC.iter().map(|line| line.to_string()))
         .collect::<Vec<_>>();
 
-        render(&header, &self.doc_items())
+        format!(
+            "{}{}",
+            schema_directive_prefix(CONFIG_SCHEMA_URL),
+            render(&header, &self.doc_items())
+        )
     }
 }

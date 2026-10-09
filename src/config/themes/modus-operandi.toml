@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Modus Operandi by Protesilaos Stavrou
 # https://protesilaos.com/emacs/modus-themes
 # Ported by Alexis Mousset

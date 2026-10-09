@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Kanagawa Dragon by rebelot
 # https://github.com/rebelot/kanagawa.nvim
 # Ported by EricHenry

@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Hazyland
 # Inspired by the Neovim default dark color scheme by Evgeni Chasnovski (echasnovski)
 # and Kim Nørgaard's Neovim dark theme for Zed

@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Autumn Night by Kenneth Love and Chris Jones, improved by Yorick Peterse
 # https://github.com/YorickPeterse/Autumn.vim
 # Ported by Jens Getreu

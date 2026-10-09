@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # OneDarker by nuid32, based on One Dark from the Atom editor
 #
 # pidcat color theme

@@ -9,10 +9,23 @@ use schemars::generate::SchemaSettings;
 use schemars::json_schema;
 use schemars::transform::RecursiveTransform;
 
+use serde_json::json;
+
 use super::file::Config;
+use super::theme::BUNDLED_THEMES;
 use super::theme::ThemeFile;
 
+pub const CONFIG_SCHEMA_URL: &str =
+    "https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/config.schema.json";
+pub const THEME_SCHEMA_URL: &str =
+    "https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json";
+
 pub const HEX_COLOR_PATTERN: &str = "^#[0-9a-fA-F]{6}$";
+
+/// TOML language-server schema directive, a blank `#` comment line, then the body.
+pub fn schema_directive_prefix(url: &str) -> String {
+    format!("#:schema {url}\n#\n")
+}
 
 pub fn value_enum_schema<T: ValueEnum>(_: &mut SchemaGenerator) -> Schema {
     let values = T::value_variants()
@@ -40,6 +53,31 @@ pub fn hex_color_map_schema(_: &mut SchemaGenerator) -> Schema {
             "pattern": HEX_COLOR_PATTERN,
         },
     })
+}
+
+/// Bundled theme name, or any other string (custom theme name or path to a `.toml` file).
+///
+/// `anyOf` keeps a top-level-style `enum` for editor completion while a plain `string` branch
+/// accepts custom names and paths. (`oneOf` fails on bundled names because both branches match.)
+pub fn theme_name_schema(_: &mut SchemaGenerator) -> Schema {
+    let names = BUNDLED_THEMES
+        .iter()
+        .map(|theme| json!(theme.name))
+        .collect::<Vec<_>>();
+
+    serde_json::from_value(json!({
+        "anyOf": [
+            {
+                "type": "string",
+                "enum": names,
+            },
+            {
+                "type": "string",
+                "minLength": 1,
+            }
+        ]
+    }))
+    .expect("valid theme name schema")
 }
 
 /// TOML has no null, so unset optional keys are described as absent rather than

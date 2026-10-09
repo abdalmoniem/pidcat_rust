@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Base16 Terminal by NNB
 # Designed for the terminal's 16 ANSI colors; mapped here to the Tango palette
 #

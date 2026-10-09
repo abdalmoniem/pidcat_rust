@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/abdalmoniem/pidcatrs/main/schemas/theme.schema.json
+#
 # Gruvbox Material (light, hard) by sainnhe
 # https://github.com/sainnhe/gruvbox-material
 # Ported by satoqz, palette by ivan-shymkiv
