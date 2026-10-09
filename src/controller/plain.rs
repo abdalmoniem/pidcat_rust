@@ -1,3 +1,22 @@
+// Copyright (c) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+
+//! Plain (non-interactive) streaming mode.
+//!
+//! `run_plain` reads logcat output line by line, either from a freshly spawned `adb logcat`
+//! process or from piped standard input, and renders each entry to the console and, optionally,
+//! to an output file. A process-wide running flag (`set_running`, `is_running`) lets another
+//! thread (for example a Ctrl-C handler) ask the loop to stop.
+
 #![deny(clippy::unwrap_used)]
 
 use std::io::BufRead;
@@ -29,15 +48,44 @@ use crate::trim_log_line_bytes;
 use crate::write_log_line;
 
 lazy_static! {
+    /// Whether the plain-mode read loop should keep running.
+    ///
+    /// Set to `true` when the loop starts and cleared (through [`set_running`]) to request a
+    /// graceful stop.
     static ref IS_RUNNING: AtomicBool = AtomicBool::new(false);
 }
 
+/// Returns the current terminal width in columns, or `80` when it cannot be determined (for
+/// example when output is not a terminal).
 fn get_console_width() -> i16 {
     terminal_size::terminal_size()
         .map(|(terminal_size::Width(width), _)| width as i16)
         .unwrap_or(80i16)
 }
 
+/// Runs plain mode: streams, filters, and prints logcat until the input ends or a stop is
+/// requested.
+///
+/// The steps are:
+///
+/// 1. Normalize `args` and resolve the packages to follow (this may set `args.all`).
+/// 2. Create the output writers: the console, plus a file when `args.output_path` is set.
+/// 3. When standard input is a terminal, bootstrap `adb` and spawn `adb logcat`; otherwise read
+///    log lines piped through standard input.
+/// 4. Build the session state, print a "Capturing ..." status line, and loop reading lines,
+///    rendering each through [`write_log_line`]. Console writers pick up the current terminal
+///    width before every line, so resizing is honored.
+/// 5. When the loop ends, flush any pending multi-line entry, and kill and reap the `adb`
+///    child process if one was spawned.
+///
+/// The loop ends when the input reaches end of file, the child process exits, waiting on the
+/// child fails, or [`set_running`] is called with `false`. In the last case a
+/// "stopped by user." message is printed.
+///
+/// # Panics
+///
+/// Panics if the output file cannot be created, `adb logcat` cannot be started, reading the
+/// input fails, or the child process cannot be killed or waited for.
 pub fn run_plain(args: &mut CliArgs) {
     let mut adb_child = None;
     let show_colors = !args.no_color;
@@ -204,10 +252,17 @@ pub fn run_plain(args: &mut CliArgs) {
     }
 }
 
+/// Sets the plain-mode running flag.
+///
+/// Passing `false` asks a running [`run_plain`] loop to stop; the flag is checked before each
+/// read, so the loop exits once the read currently in progress returns. Passing `true` marks it
+/// as running. Safe to call from any thread, such as a Ctrl-C handler.
 pub fn set_running(running: bool) {
     IS_RUNNING.store(running, Relaxed);
 }
 
+/// Returns the plain-mode running flag: `true` while [`run_plain`] is looping and no stop has
+/// been requested.
 pub fn is_running() -> bool {
     IS_RUNNING.load(Relaxed)
 }
