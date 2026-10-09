@@ -134,7 +134,7 @@ tag tag:
     @git-cliff --offline --body="$(cat cliff_body.tera)" "$(git describe --tags --abbrev=0)..HEAD" --tag=$tag | cat - CHANGELOG.md | tee temp.md
     @mv temp.md CHANGELOG.md
     @git add CHANGELOG.md
-    @git commit -sm 'chore(changelogs): update CHANGELOG.md'
+    @git commit -sm 'doc(changelog): update CHANGELOG.md'
     @git tag $tag
 
 [arg('tag', help='the tag to show changelog for')]
