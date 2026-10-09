@@ -1,10 +1,17 @@
 [package]
-name = "pidcatrs"
 edition = "2024"
+name = "pidcatrs"
 version = "2.0.0"
+readme = "README.md"
 build = "build/build.rs"
-description = "A colorized Android logcat viewer with advanced filtering capabilities."
+license-file = "LICENSE.md"
+homepage = "https://github.com/abdalmoniem/pidcatrs"
+license = "GPL-2.0-or-later WITH Bison-exception-2.2"
+repository = "https://github.com/abdalmoniem/pidcatrs"
+keywords = ["adb","log","logcat","android","pidcatrs"]
 authors = ["AbdElMoniem ElHifnawy <hifnawy_moniem@hotmail.com>"]
+description = "A colorized Android logcat viewer with advanced filtering capabilities."
+categories = ["parsing", "development-tools", "command-line-interface", "command-line-utilities"]
 
 [workspace]
 members = [
