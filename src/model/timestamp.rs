@@ -1,3 +1,17 @@
+// Copyright (c) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+
+//! Timestamp formatting for log columns and parsing from logcat lines.
+
 use std::fmt::Write;
 
 use chrono::DateTime;
@@ -6,15 +20,19 @@ use chrono::Local;
 use chrono::NaiveDateTime;
 use chrono::TimeZone;
 
+/// Default strftime pattern for the time column when none is configured.
 pub const DEFAULT_TIMESTAMP_FORMAT: &str = "%I:%M:%S%.3f%P";
 
+/// Link appended to format validation errors for user-facing help.
 pub const CHRONO_STRFTIME_DOCS: &str =
     "https://docs.rs/chrono/latest/chrono/format/strftime/index.html";
 
+/// Builds a user-facing validation error including [`CHRONO_STRFTIME_DOCS`].
 fn timestamp_format_error(detail: impl std::fmt::Display) -> String {
     format!("{detail}\nSee {CHRONO_STRFTIME_DOCS}")
 }
 
+/// Renders `time` with chrono's `format` and maps write failures to validation errors.
 fn format_datetime(format: &str, time: DateTime<Local>) -> Result<String, String> {
     let mut output = String::new();
     write!(output, "{}", time.format(format))
@@ -22,6 +40,7 @@ fn format_datetime(format: &str, time: DateTime<Local>) -> Result<String, String
     Ok(output)
 }
 
+/// Adds one fixed local datetime to `samples` when `with_ymd_and_hms` succeeds.
 fn push_sample(samples: &mut Vec<DateTime<Local>>, year: i32, month: u32, day: u32, hour: u32) {
     if let Some(sample) = Local
         .with_ymd_and_hms(year, month, day, hour, 30, 45)
@@ -31,6 +50,7 @@ fn push_sample(samples: &mut Vec<DateTime<Local>>, year: i32, month: u32, day: u
     }
 }
 
+/// Representative datetimes used to measure worst-case formatted width.
 fn timestamp_validation_samples() -> Vec<DateTime<Local>> {
     let mut samples = vec![Local::now()];
 
@@ -79,6 +99,7 @@ pub fn timestamp_column_width(format: &str) -> Result<usize, String> {
     Ok(max_width)
 }
 
+/// Formats `time` with `format`, enforces fixed `width`, and right-pads with spaces.
 pub fn format_log_timestamp(
     time: DateTime<Local>,
     format: &str,
@@ -101,6 +122,7 @@ pub fn format_log_timestamp(
     Ok(formatted)
 }
 
+/// Parses Android log date (`MM-DD`) and time fields using the current local year.
 pub fn parse_android_log_timestamp(date: &str, time: &str) -> Option<DateTime<Local>> {
     let year = Local::now().year();
     let trimmed_time = time.trim();
@@ -120,6 +142,7 @@ pub fn parse_android_log_timestamp(date: &str, time: &str) -> Option<DateTime<Lo
     None
 }
 
+/// Extracts timestamp from `line` using [`crate::CliArgs`] log format regex, or [`Local::now`].
 pub fn timestamp_from_log_line(args: &crate::CliArgs, line: &str) -> DateTime<Local> {
     if let (Some(date_index), Some(time_index)) = (
         args.log_format.date_index().as_ref(),
