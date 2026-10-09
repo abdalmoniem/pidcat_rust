@@ -1,3 +1,24 @@
+// Copyright (C) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+//! Error types for [`crate::Shell`] filesystem helpers and [`crate::Cmd`] subprocess execution.
+//!
+//! [`Error`] wraps a private `ErrorKind` that records the failing operation and relevant paths
+//! or command metadata. Display formatting is intended for human-readable `xtask` logs; use
+//! [`std::error::Error`] when integrating with `anyhow` or other error stacks.
+
 use std::{env, ffi::OsString, fmt, io, path::PathBuf, process::ExitStatus, string::FromUtf8Error};
 
 use crate::{Cmd, CmdData};
@@ -10,7 +31,7 @@ pub struct Error {
     kind: Box<ErrorKind>,
 }
 
-/// Note: this is intentionally not public.
+/// Internal classification for [`Error`]; not exposed outside this module.
 enum ErrorKind {
     CurrentDir {
         err: io::Error,
