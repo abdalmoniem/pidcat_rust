@@ -1,3 +1,36 @@
+// Copyright (C) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+//! Shell scripting utilities for Rust build tooling.
+//!
+//! This crate is a maintained fork of [xshell](https://github.com/matklad/xshell) used by
+//! `pidcatrs` `xtask` helpers. Compared to upstream, spawned processes **inherit** the parent
+//! terminal's standard input, output, and error streams by default, which makes interactive
+//! `cargo` workflows feel natural while still supporting capture via [`Cmd::read`] and
+//! [`Cmd::output`].
+//!
+//! # Core types
+//!
+//! - [`Shell`] — logical working directory and environment map, independent of the process
+//!   [`std::env::current_dir`] / [`std::env::var`].
+//! - [`cmd!`] — compile-time command builder with interpolation and splat expansion.
+//! - [`Cmd`] — fluent subprocess builder (quiet mode, env overrides, stdin payload, etc.).
+//! - [`Error`] — structured failures for filesystem, environment, and command errors.
+//!
+//! Convention: hold the shell in a variable named `sh`.
+
 mod error;
 
 use std::{
