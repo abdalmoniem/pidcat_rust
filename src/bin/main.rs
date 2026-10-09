@@ -1,3 +1,20 @@
+// Copyright (c) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+//! pidcatrs binary entry point: CLI parsing, early-exit utilities, and plain or TUI log viewing.
+
 #![deny(clippy::unwrap_used)]
 
 use std::panic;
@@ -27,6 +44,11 @@ use pidcatrs::set_running;
 use pidcatrs::write_completions;
 
 use scope_functions::Run;
+
+/// Custom panic hook that restores the terminal, prints location-aware messages, and respects `--no-color`.
+///
+/// Called for any thread panic after [`main`] installs this hook. Ensures the TUI does not leave
+/// the terminal in raw mode when the process aborts.
 fn panic_hook(info: &PanicHookInfo, show_colors: bool) {
     let err_loc = info.location().unwrap_or(panic::Location::caller());
     let err_msg = match info.payload().downcast_ref::<&str>() {
@@ -59,6 +81,7 @@ fn panic_hook(info: &PanicHookInfo, show_colors: bool) {
     eprintln!("{err_msg}");
 }
 
+/// Parses CLI flags, handles utility subcommands, loads theme and config, then runs TUI or plain mode.
 fn main() {
     let args = &mut CliArgs::parse_args();
     let show_colors = !args.no_color;
