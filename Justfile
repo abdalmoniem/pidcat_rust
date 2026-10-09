@@ -34,12 +34,12 @@ clean:
 
 [doc('Build the pidcat binary')]
 [group('build')]
-build: fmt lint
+build: fmt lint generate-themes generate-schema
     @cargo xtask build --profile=dev
 
 [doc('Build the pidcat release binary')]
 [group('build')]
-build-release: fmt lint
+build-release: fmt lint generate-themes generate-schema
     @cargo xtask build --profile=release
 
 [doc('Build the installer using Inno Setup Compiler')]
@@ -67,19 +67,24 @@ run-release args:
 
 [doc('Generate the JSON schemas for the config and theme files')]
 [group('build')]
-schema:
-    @cargo xtask schema
+generate-schema:
+    @cargo xtask schema --generate
 
-[doc('Regenerate the documented bundled theme sources')]
-[group('build')]
-themes:
-    @cargo xtask themes
+[doc('Check that the JSON schemas are up to date')]
+[group('lint')]
+check-schema:
+    @cargo xtask schema --check
 
 [arg('dir', help='directory with the theme files to bundle')]
 [doc('Add or replace bundled themes with documented copies of the theme files in dir')]
 [group('build')]
 import-themes dir:
     @cargo xtask themes --import "$dir"
+
+[doc('Regenerate the documented bundled theme sources')]
+[group('build')]
+generate-themes:
+    @cargo xtask themes --generate
 
 [doc('Check that the bundled theme sources are up to date')]
 [group('lint')]
@@ -101,7 +106,7 @@ nextest:
 [doc('Install the application by running the generated installer')]
 [group('install')]
 [script]
-install: fmt lint
+install: build-release
     if [ "$TARGET_OS" != "windows" ]; then
         cargo xtask install
     else

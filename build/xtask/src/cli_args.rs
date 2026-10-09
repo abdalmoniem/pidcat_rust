@@ -89,13 +89,29 @@ pub enum Command {
         args: Vec<String>,
     },
 
-    /// Generate the JSON schemas for the config and theme files
-    Schema,
+    /// Generate or check the JSON schemas for the config and theme files
+    Schema {
+        /// Write the JSON schema files
+        #[arg(long = "generate", default_value_t = false)]
+        #[arg(conflicts_with = "check")]
+        generate: bool,
 
-    /// Regenerate the documented bundled theme sources
+        /// Fail if a schema file is not up to date instead of writing it
+        #[arg(long = "check", default_value_t = false)]
+        #[arg(conflicts_with = "generate")]
+        check: bool,
+    },
+
+    /// Generate, check, or import the documented bundled theme sources
     Themes {
+        /// Write bundled theme source files
+        #[arg(long = "generate", default_value_t = false)]
+        #[arg(conflicts_with = "check")]
+        generate: bool,
+
         /// Fail if a bundled theme source is not up to date instead of writing it
-        #[arg(short = 'c', long = "check", default_value_t = false)]
+        #[arg(long = "check", default_value_t = false)]
+        #[arg(conflicts_with = "generate")]
         check: bool,
 
         /// Add or replace bundled themes with the theme files found in IMPORT_DIR

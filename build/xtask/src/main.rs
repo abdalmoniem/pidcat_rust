@@ -157,25 +157,66 @@ fn run(shell: &Shell, profile: &Profile, args: &[String]) -> Result<()> {
     cargo().and_then(cmd).context("failed to run!")
 }
 
+fn schema_entries() -> [(&'static str, String); 2] {
+    [
+        ("config.schema.json", config_schema()),
+        ("theme.schema.json", theme_schema()),
+    ]
+}
+
 /// Write the JSON schemas for the config and theme files
-fn schema() -> Result<()> {
+fn schema_generate() -> Result<()> {
     status(">> Generating schemas...");
 
     let schemas_dir = PathBuf::from("schemas");
     create_dir_all(&schemas_dir).context("failed to create schemas dir!")?;
 
-    [
-        ("config.schema.json", config_schema()),
-        ("theme.schema.json", theme_schema()),
-    ]
-    .into_iter()
-    .try_for_each(|(file_name, schema)| {
-        let path = schemas_dir.join(file_name);
+    schema_entries()
+        .into_iter()
+        .try_for_each(|(file_name, schema)| {
+            let path = schemas_dir.join(file_name);
 
-        write(&path, schema)
-            .with_context(|| format!("failed to write {path:?}!"))
-            .map(|_| println!("wrote {path:?}"))
-    })
+            write(&path, schema)
+                .with_context(|| format!("failed to write {path:?}!"))
+                .map(|_| println!("wrote {path:?}"))
+        })
+}
+
+/// Check that the JSON schema files match the generated schemas
+fn schema_check() -> Result<()> {
+    status(">> Checking schemas...");
+
+    let schemas_dir = PathBuf::from("schemas");
+    let outdated = schema_entries()
+        .into_iter()
+        .filter(|(file_name, schema)| {
+            read_to_string(schemas_dir.join(file_name)).ok().as_ref() != Some(schema)
+        })
+        .map(|(file_name, _)| schemas_dir.join(file_name))
+        .collect::<Vec<_>>();
+
+    match outdated.is_empty() {
+        true => {
+            println!("schemas are up to date");
+            Ok(())
+        }
+        false => Err(Error::msg(
+            outdated
+                .iter()
+                .map(|path| format!("  {path:?}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        ))
+        .context("outdated schemas, run 'just generate-schema'!"),
+    }
+}
+
+fn schema(check: bool) -> Result<()> {
+    if check {
+        schema_check()
+    } else {
+        schema_generate()
+    }
 }
 
 /// The `.toml` theme files in [dir], sorted by name
@@ -195,11 +236,14 @@ fn theme_files(dir: &Path) -> Result<Vec<PathBuf>> {
 
 /// Write or check the documented bundled theme sources embedded in the binary, rendering
 /// each from the bundled source itself or, when importing, from the imported theme file
-fn themes(check: bool, import_dir: Option<PathBuf>) -> Result<()> {
+fn themes(generate: bool, check: bool, import_dir: Option<PathBuf>) -> Result<()> {
     match (check, &import_dir) {
         (true, _) => status(">> Checking bundled themes..."),
         (false, Some(dir)) => status(&format!(">> Importing themes from {dir:?}...")),
-        (false, None) => status(">> Generating bundled themes..."),
+        (false, None) if generate => status(">> Generating bundled themes..."),
+        (false, None) => {
+            return Err(Error::msg("specify --generate, --check, or --import"));
+        }
     }
 
     let themes_dir = PathBuf::from("src/config/themes");
@@ -241,7 +285,7 @@ fn themes(check: bool, import_dir: Option<PathBuf>) -> Result<()> {
                     .collect::<Vec<_>>()
                     .join("\n"),
             ))
-            .context("outdated bundled themes, run 'just themes'!"),
+            .context("outdated bundled themes, run 'just generate-themes'!"),
         },
 
         false => outdated.iter().try_for_each(|(path, rendered)| {
@@ -319,9 +363,13 @@ fn main() -> Result<()> {
 
         Command::Run { profile, args } => run(&shell, &profile, &args),
 
-        Command::Schema => schema(),
+        Command::Schema { check, .. } => schema(check),
 
-        Command::Themes { check, import_dir } => themes(check, import_dir),
+        Command::Themes {
+            generate,
+            check,
+            import_dir,
+        } => themes(generate, check, import_dir),
 
         #[cfg(target_os = "windows")]
         Command::Install { silent } => install(&shell, silent),
