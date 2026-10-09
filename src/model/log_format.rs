@@ -1,3 +1,36 @@
+// Copyright (c) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+//! Regex layouts for native Android `adb logcat -v` line formats.
+//!
+//! Each [`LogFormatKind`] maps to one line shape. [`LogFormatMatchConfig`] stores the compiled
+//! pattern and capture-group indices for date, time, level, tag, pid, uid, tid, and message.
+//!
+//! # ADB format reference
+//!
+//! Single format verbs (from `adb logcat -v`):
+//!
+//! - **brief** — priority, tag, and PID of the issuing process.
+//! - **long** — all metadata fields; messages separated by blank lines.
+//! - **process** — PID only (plus level and message in practice).
+//! - **raw** — message body only.
+//! - **tag** — priority and tag only.
+//! - **thread** — priority, PID, and TID of the issuing thread.
+//! - **threadtime** — date, time, priority, tag, PID, and TID (adb default).
+//! - **time** — date, time, priority, tag, and PID.
+
 use clap::Arg;
 use clap::Command;
 use clap::Error;
@@ -14,57 +47,67 @@ use std::fmt::Formatter;
 use std::fmt::Result as fmtResult;
 use std::result::Result;
 
-/*
-LOG_LINE native adb formats:
-Single format verbs:
-
-brief      Show priority, tag, and PID of the process issuing the message.
-long       Show all metadata fields and separate messages with blank lines.
-process    Show PID only.
-raw        Show the raw log message with no other metadata fields.
-tag        Show the priority and tag only.
-thread     Show priority, PID, and TID of the thread issuing the message.
-threadtime Show the date, invocation time, priority, tag, PID, and TID of the thread issuing the message. (This is the default.)
-time       Show the date, invocation time, priority, tag, and PID of the process issuing the message.
-*/
-
+/// Compiled regex and 1-based capture indices for one logcat `-v` layout.
 #[derive(Clone, Debug)]
 pub struct LogFormatMatchConfig {
+    /// Whole-line matcher for this format.
     pub regex: Regex,
+    /// Capture group index for the date portion, if present.
     pub date_index: Option<usize>,
+    /// Capture group index for the time portion, if present.
     pub time_index: Option<usize>,
+    /// Capture group index for the single-letter priority (`V`…`F`).
     pub level_index: Option<usize>,
+    /// Capture group index for the log tag.
     pub tag_index: Option<usize>,
+    /// Capture group index for the process ID.
     pub pid_index: Option<usize>,
+    /// Capture group index for the user/application ID.
     pub uid_index: Option<usize>,
+    /// Capture group index for the thread ID.
     pub tid_index: Option<usize>,
+    /// Capture group index for the log message body.
     pub msg_index: Option<usize>,
 }
 
+/// Native adb logcat verbosity format (maps to `logcat -v` names).
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum LogFormatKind {
+    /// `brief` format.
     Brief = 0isize,
+    /// `long` format.
     Long = 1isize,
+    /// `process` format.
     Process = 2isize,
+    /// `raw` format.
     Raw = 3isize,
+    /// `tag` format.
     Tag = 4isize,
+    /// `thread` format.
     Thread = 5isize,
+    /// `threadtime` format (Android default).
     ThreadTime = 6isize,
+    /// `time` format.
     Time = 7isize,
 }
 
+/// Active log line parser: kind plus private match configuration.
 #[derive(Clone, Debug)]
 pub struct LogFormat {
+    /// Selected adb verbosity kind.
     pub kind: LogFormatKind,
     match_cfg: LogFormatMatchConfig,
 }
 
+/// clap [`TypedValueParser`] that accepts [`LogFormatKind`] names and builds a [`LogFormat`].
 #[derive(Clone)]
 pub struct LogFormatParser;
 
+/// Result type for [`LogFormatParser::parse_ref`].
 type LogFormatParserResult = Result<LogFormat, Error>;
 
 impl Display for LogFormatKind {
+    /// Writes the adb `-v` verb (`brief`, `long`, …).
     fn fmt(&self, formatter: &mut Formatter) -> fmtResult {
         let name = match self {
             Self::Brief => "brief",
@@ -82,6 +125,7 @@ impl Display for LogFormatKind {
 }
 
 impl LogFormat {
+    /// Builds a parser for `kind`, compiling the appropriate line regex and capture indices.
     pub fn new(kind: LogFormatKind) -> Self {
         let match_cfg = match kind {
             LogFormatKind::Brief => LogFormatMatchConfig {
@@ -188,44 +232,52 @@ impl LogFormat {
         Self { kind, match_cfg }
     }
 
+    /// Line-matching regex for this format.
     pub fn regex(&self) -> &Regex {
         &self.match_cfg.regex
     }
 
+    /// Capture index for the date field, if any.
     pub fn date_index(&self) -> &Option<usize> {
         &self.match_cfg.date_index
     }
 
+    /// Capture index for the time field, if any.
     pub fn time_index(&self) -> &Option<usize> {
         &self.match_cfg.time_index
     }
 
+    /// Capture index for the priority letter.
     pub fn level_index(&self) -> &Option<usize> {
         &self.match_cfg.level_index
     }
 
+    /// Capture index for the tag name.
     pub fn tag_index(&self) -> &Option<usize> {
         &self.match_cfg.tag_index
     }
 
+    /// Capture index for the process ID.
     pub fn pid_index(&self) -> &Option<usize> {
         &self.match_cfg.pid_index
     }
 
+    /// Capture index for the user ID.
     pub fn uid_index(&self) -> &Option<usize> {
         &self.match_cfg.uid_index
     }
 
+    /// Capture index for the thread ID.
     pub fn tid_index(&self) -> &Option<usize> {
         &self.match_cfg.tid_index
     }
 
+    /// Capture index for the message body.
     pub fn msg_index(&self) -> &Option<usize> {
         &self.match_cfg.msg_index
     }
 
-    /// ADB logcat `-v` format string, including `uid` when supported.
-    /// Owner ids from a `-v long` header (`uid:pid:tid` or `pid:tid`).
+    /// Parses `(uid, pid)` from a `-v long` regex match (handles `uid:pid:tid` vs `pid:tid`).
     pub fn long_owner_ids(captures: &regex::Captures) -> (String, String) {
         if captures.get(3).is_some() {
             let uid = captures
@@ -243,6 +295,7 @@ impl LogFormat {
         (String::default(), pid)
     }
 
+    /// Argument to `adb logcat -v`, including `uid` when the device supports it.
     pub fn adb_verb(&self) -> String {
         match self.kind {
             LogFormatKind::Brief | LogFormatKind::ThreadTime => {
@@ -259,6 +312,11 @@ impl LogFormat {
 }
 
 impl From<&str> for LogFormatKind {
+    /// Parses compact CLI codes (`B`, `L`, `P`, …) into a [`LogFormatKind`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `str` is not a recognized code.
     fn from(str: &str) -> Self {
         match str {
             "B" => Self::Brief,
@@ -275,6 +333,7 @@ impl From<&str> for LogFormatKind {
 }
 
 impl From<&str> for LogFormat {
+    /// Builds [`LogFormat`] from a compact kind code (see [`LogFormatKind::from`]).
     fn from(str: &str) -> Self {
         let kind = LogFormatKind::from(str);
 
@@ -283,18 +342,21 @@ impl From<&str> for LogFormat {
 }
 
 impl From<String> for LogFormat {
+    /// Builds [`LogFormat`] from an owned kind code string.
     fn from(str: String) -> Self {
         Self::from(str.as_str())
     }
 }
 
 impl Display for LogFormat {
+    /// Displays the adb verb name ([`LogFormatKind`]).
     fn fmt(&self, formatter: &mut Formatter) -> fmtResult {
         write!(formatter, "{kind}", kind = self.kind)
     }
 }
 
 impl ValueEnum for LogFormatKind {
+    /// All variants offered on the command line.
     fn value_variants<'a>() -> &'a [Self] {
         &[
             Self::Brief,
@@ -308,6 +370,7 @@ impl ValueEnum for LogFormatKind {
         ]
     }
 
+    /// clap name, aliases, and help for one variant.
     fn to_possible_value(&self) -> Option<PossibleValue> {
         Some(match self {
             Self::Brief => PossibleValue::new("B").alias("brief").help("brief"),
@@ -325,8 +388,10 @@ impl ValueEnum for LogFormatKind {
 }
 
 impl TypedValueParser for LogFormatParser {
+    /// Parsed CLI value type.
     type Value = LogFormat;
 
+    /// Parses a [`LogFormatKind`] then wraps it with [`LogFormat::new`].
     fn parse_ref(&self, cmd: &Command, arg: Option<&Arg>, value: &OsStr) -> LogFormatParserResult {
         let enum_value_parser = EnumValueParser::<LogFormatKind>::new();
         let kind = enum_value_parser.parse_ref(cmd, arg, value)?;
@@ -334,6 +399,7 @@ impl TypedValueParser for LogFormatParser {
         Ok(LogFormat::new(kind))
     }
 
+    /// Enumerates valid `--log-format` strings for shell completions.
     fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue>>> {
         let value_variants = LogFormatKind::value_variants()
             .iter()
