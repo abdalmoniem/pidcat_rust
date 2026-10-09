@@ -1,3 +1,27 @@
+// Copyright (c) AbdAlMoniem AlHifnawy <hifnawy_moniem@hotmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+
+//! Start-up helpers shared by plain mode and the TUI.
+//!
+//! These functions prepare a run before any log line is processed:
+//!
+//! - normalizing parsed CLI arguments (`normalize_cli_args`);
+//! - resolving which packages and processes to follow (`current_app_packages`,
+//!   `resolve_packages`);
+//! - creating and refreshing the session `State` (`build_state`, `refresh_process_maps`);
+//! - producing the initial TUI filter text (`seed_filter_input`);
+//! - bringing up `adb` and the device list (`bootstrap_adb_plain`, `bootstrap_adb_tui`,
+//!   `maybe_clear_logcat`).
+
 #![deny(clippy::unwrap_used)]
 
 use std::collections::HashSet;
@@ -29,6 +53,13 @@ use super::adb::NO_ADB_DEVICES_ERROR_MESSAGE;
 use super::util::colored;
 use super::util::split_csv_args;
 
+/// Normalizes tag-related CLI arguments in place.
+///
+/// - When `args.ignore_system_tags` is set, every entry of [`SYSTEM_TAGS`] is added to
+///   `args.ignore_tag` as an anchored pattern (`^tag$`), after any tags already present.
+/// - The `ignore_tag` and `tag` lists are then expanded so that comma-separated values inside a
+///   single argument become separate entries (see
+///   [`split_csv_args`]).
 pub fn normalize_cli_args(args: &mut CliArgs) {
     if args.ignore_system_tags {
         let mut system_tags: Vec<String> =
@@ -51,6 +82,10 @@ pub fn normalize_cli_args(args: &mut CliArgs) {
     }
 }
 
+/// Returns the packages of the foreground (visible) apps when `--current-app` is enabled.
+///
+/// Queries the device selected by `device_serial` (or the one configured in `args`). Returns an
+/// empty list when the option is disabled, or when no visible package could be determined.
 pub fn current_app_packages(args: &CliArgs, device_serial: Option<&str>) -> Vec<String> {
     if !args.current_app {
         return Vec::default();
@@ -59,6 +94,18 @@ pub fn current_app_packages(args: &CliArgs, device_serial: Option<&str>) -> Vec<
     get_current_app_package(&build_adb_command(args, device_serial)).unwrap_or_default()
 }
 
+/// Determines which packages and processes to follow.
+///
+/// The set of packages is the configured `args.packages` plus the foreground apps from
+/// [`current_app_packages`]. Entries are then classified into:
+///
+/// - *catch-all packages*: entries without a `:`; they match the package and all of its
+///   `package:process` children;
+/// - *named processes*: entries containing a `:`, with a single trailing `:` removed.
+///
+/// If no package ended up selected, `args.all` is switched on so every process is captured.
+///
+/// Returns `(packages, catchall_packages, named_processes)`.
 pub fn resolve_packages(
     args: &mut CliArgs,
     device_serial: Option<&str>,
@@ -90,6 +137,12 @@ pub fn resolve_packages(
     (packages, catchall_packages, named_processes)
 }
 
+/// Creates the initial session [`State`].
+///
+/// Reads the device's current PID and UID maps through [`get_processes`] for the device
+/// selected by `device_serial`, takes the rotating token color palette from the active theme,
+/// and starts with no known tokens, no last tag, no app PID, and no pending multi-line entry.
+/// The minimum log level comes from `args.log_level`.
 pub fn build_state(
     args: &CliArgs,
     catchall_packages: &[String],
@@ -120,6 +173,14 @@ pub fn build_state(
     }
 }
 
+/// Builds the text the TUI filter input starts with, mirroring the CLI selection.
+///
+/// The parts, separated by single spaces, are in order:
+///
+/// 1. `package:<name>` for each catch-all package (entries without `:`), sorted alphabetically;
+/// 2. `tag:<tag>` for each configured tag;
+/// 3. the configured filter regex, verbatim;
+/// 4. `level:<name>` when the log level is anything other than verbose.
 pub fn seed_filter_input(args: &CliArgs, packages: &HashSet<String>) -> String {
     let mut parts = Vec::default();
 
@@ -149,6 +210,10 @@ pub fn seed_filter_input(args: &CliArgs, packages: &HashSet<String>) -> String {
     parts.join(" ")
 }
 
+/// Re-reads the device's PID and UID maps and stores them in `state`.
+///
+/// Used to pick up processes that started before capture began or while capture was running. The
+/// maps are replaced wholesale; other parts of `state` are left untouched.
 pub fn refresh_process_maps(
     state: &mut State,
     args: &CliArgs,
@@ -161,6 +226,21 @@ pub fn refresh_process_maps(
     state.uids_map = uids_map;
 }
 
+/// Prepares `adb` for plain mode, reporting progress on the console.
+///
+/// In order, this starts the ADB server, lists the attached devices, and, unless
+/// `args.keep_logcat` is set, clears the logcat buffers. Status lines are printed in bright cyan
+/// (when `show_colors` is `true`).
+///
+/// # Exits
+///
+/// Terminates the process with an error message when the ADB server cannot be started (using the
+/// OS error code, or `1` if there is none) or when no device is attached (see
+/// [`NO_ADB_DEVICES_ERROR_HEADER`] and [`NO_ADB_DEVICES_ERROR_MESSAGE`]).
+///
+/// # Panics
+///
+/// Panics if the logcat buffers cannot be cleared.
 pub fn bootstrap_adb_plain(args: &CliArgs, show_colors: bool) {
     let base_adb_command = build_adb_command(args, None);
 
@@ -228,6 +308,11 @@ pub fn bootstrap_adb_plain(args: &CliArgs, show_colors: bool) {
     }
 }
 
+/// Prepares `adb` for the TUI and returns the attached devices.
+///
+/// Starts the ADB server (ignoring any failure) and lists the devices without printing
+/// anything. Returns an empty list when no devices are found, leaving the decision of how to
+/// present that to the TUI.
 pub fn bootstrap_adb_tui(args: &CliArgs) -> Vec<AdbDevice> {
     let base = build_adb_command(args, None);
     let _ = start_adb_server(&base);
@@ -235,6 +320,9 @@ pub fn bootstrap_adb_tui(args: &CliArgs) -> Vec<AdbDevice> {
     get_adb_devices(&base, true).unwrap_or_default()
 }
 
+/// Clears the logcat buffers of `device_serial`, unless `args.keep_logcat` is set.
+///
+/// Does nothing when no device is selected. Failures are ignored.
 pub fn maybe_clear_logcat(args: &CliArgs, device_serial: Option<&str>) {
     if !args.keep_logcat && device_serial.is_some() {
         let _ = clear_logcat(&build_adb_command(args, device_serial));
