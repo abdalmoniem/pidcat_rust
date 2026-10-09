@@ -1,3 +1,28 @@
+// Copyright (C) 2026 AbdAlMoniem AlHifnawy
+//
+// This file is part of pidcatrs.
+//
+// pidcatrs is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// pidcatrs is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with pidcatrs.  If not, see <https://www.gnu.org/licenses/>.
+//
+// Author: AbdAlMoniem AlHifnawy
+
+//! The "select device" dialog.
+//!
+//! Lists the devices reported by `adb devices`, lets the user narrow them
+//! down by typing, and renders the dialog. Devices that are offline or
+//! unauthorized are shown dimmed and cannot be selected.
+
 #![deny(clippy::unwrap_used)]
 
 use ratatui::Frame;
@@ -23,8 +48,10 @@ use super::palette::matches_query;
 use super::palette::render_search_field;
 use super::theme;
 
+/// Placeholder shown in the empty device search field.
 const DEVICE_SEARCH_PLACEHOLDER: &str = "search devices by serial or state...";
 
+/// Shortcut hints shown in the bottom border of the device dialog.
 const DEVICE_PICKER_HINTS: &[(&str, &str)] = &[
     ("↑↓", " navigate"),
     ("enter", " select"),
@@ -33,10 +60,30 @@ const DEVICE_PICKER_HINTS: &[(&str, &str)] = &[
     ("o", " open file"),
 ];
 
+/// Tests whether a device can be chosen as the log source.
+///
+/// # Arguments
+///
+/// * `device` - The device to check.
+///
+/// # Returns
+///
+/// `true` for ready physical devices and emulators; `false` for devices that
+/// are offline, unauthorized, etc.
 pub fn is_selectable(device: &AdbDevice) -> bool {
     matches!(device.device_state, AdbState::Device | AdbState::Emulator)
 }
 
+/// Looks up the human-readable state of a device by serial number.
+///
+/// # Arguments
+///
+/// * `devices` - The known devices.
+/// * `serial` - The serial number to look for.
+///
+/// # Returns
+///
+/// The state label (e.g. `"device"`), or `None` if no device has that serial.
 pub fn device_state_label(devices: &[AdbDevice], serial: &str) -> Option<&'static str> {
     devices
         .iter()
@@ -44,6 +91,19 @@ pub fn device_state_label(devices: &[AdbDevice], serial: &str) -> Option<&'stati
         .map(|device| device.device_state.label())
 }
 
+/// Filters devices by a search query.
+///
+/// The query is matched against `"<serial> <state label>"` using
+/// [`matches_query`], so every whitespace-separated token must match.
+///
+/// # Arguments
+///
+/// * `devices` - The devices to filter.
+/// * `query` - The user's search text.
+///
+/// # Returns
+///
+/// Indices into `devices` of the matching devices, in their original order.
 pub fn filter_device_indices(devices: &[AdbDevice], query: &str) -> Vec<usize> {
     devices
         .iter()
@@ -56,6 +116,19 @@ pub fn filter_device_indices(devices: &[AdbDevice], query: &str) -> Vec<usize> {
         .collect()
 }
 
+/// Renders the device picker dialog.
+///
+/// Shows a search field above the device list. Depending on the state it
+/// displays an explanatory "no devices" message, a "no matching devices"
+/// notice, or the filtered list with the highlighted row. The selection and
+/// scroll offset in `search` are updated to keep the highlight visible.
+///
+/// # Arguments
+///
+/// * `frame` - Frame to draw on.
+/// * `devices` - All known devices.
+/// * `search` - Search/selection state (mutated to clamp and scroll).
+/// * `area` - Outer rectangle of the dialog.
 pub fn render_device_picker(
     frame: &mut Frame,
     devices: &[AdbDevice],
