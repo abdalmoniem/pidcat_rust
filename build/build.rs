@@ -34,9 +34,6 @@ use build_print::custom_println;
 use scope_functions::Apply;
 use scope_functions::Run;
 
-use std::env::var;
-
-use std::fs::read_dir;
 use std::fs::read_to_string;
 use std::fs::write;
 
@@ -44,8 +41,6 @@ use std::io::Error;
 use std::io::ErrorKind;
 
 use std::panic;
-use std::path::Path;
-use std::path::PathBuf;
 use std::process;
 
 /// Can be used to print info messages during a build script.
@@ -86,53 +81,6 @@ macro_rules! note {
     ($($arg:tt)+) => {
         custom_println!("NOTE:", cyan, $($arg)+)
     }
-}
-
-/// Generates `$OUT_DIR/bundled_themes.rs`, the `BUNDLED_THEMES` registry with one entry per
-/// theme file in [THEMES_DIR], sorted by name and embedded with [include_str].
-fn generate_bundled_themes() {
-    const THEMES_DIR: &str = "src/config/themes";
-    const REGISTRY_FILE: &str = "bundled_themes.rs";
-
-    println!("cargo:rerun-if-changed={THEMES_DIR}");
-
-    let manifest_dir = var("CARGO_MANIFEST_DIR")
-        .unwrap_or_else(|err| panic!("CARGO_MANIFEST_DIR is not set: {err}"));
-    let out_dir = var("OUT_DIR").unwrap_or_else(|err| panic!("OUT_DIR is not set: {err}"));
-    let themes_dir = Path::new(&manifest_dir).join(THEMES_DIR);
-
-    let mut theme_files = read_dir(&themes_dir)
-        .unwrap_or_else(|err| panic!("Failed to read {THEMES_DIR}: {err}"))
-        .map(|entry| {
-            entry
-                .map(|entry| entry.path())
-                .unwrap_or_else(|err| panic!("Failed to read {THEMES_DIR}: {err}"))
-        })
-        .filter(|path| path.extension().is_some_and(|ext| ext == "toml"))
-        .collect::<Vec<PathBuf>>();
-    theme_files.sort();
-
-    let entries = theme_files
-        .iter()
-        .map(|path| {
-            let name = path
-                .file_stem()
-                .map(|stem| stem.to_string_lossy().to_string())
-                .unwrap_or_else(|| panic!("Invalid theme file name: {path:?}"));
-
-            format!("    BundledTheme {{\n        name: {name:?},\n        source: include_str!({path:?}),\n    }},\n")
-        })
-        .collect::<String>();
-
-    let registry = format!("pub const BUNDLED_THEMES: &[BundledTheme] = &[\n{entries}];\n");
-
-    write(Path::new(&out_dir).join(REGISTRY_FILE), registry)
-        .unwrap_or_else(|err| panic!("Failed to write {REGISTRY_FILE}: {err}"));
-
-    info!(
-        "Bundled {count} themes from {THEMES_DIR}",
-        count = theme_files.len()
-    );
 }
 
 /// The main entry point for the build script.
@@ -185,8 +133,6 @@ fn main() {
     println!("cargo:rerun-if-changed={SETUP_PATH}");
 
     info!("CARGO_PKG_VERSION: {VERSION}");
-
-    generate_bundled_themes();
 
     match read_to_string(SETUP_PATH) {
         Ok(content) => {

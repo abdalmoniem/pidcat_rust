@@ -1461,6 +1461,7 @@ dependencies = [
  "strip-ansi-escapes",
  "terminal-clipboard",
  "terminal_size",
+ "theme-macros",
  "tokio",
  "toml",
  "tui-file-explorer",
@@ -2079,6 +2080,15 @@ dependencies = [
  "wezterm-dynamic",
  "wezterm-input-types",
  "winapi",
+]
+
+[[package]]
+name = "theme-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

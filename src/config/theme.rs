@@ -34,8 +34,6 @@ use serde::Deserialize;
 use toml::Table;
 use toml::Value;
 
-use crate::ValueOrPanic;
-
 use super::doc_toml::DocItem;
 use super::doc_toml::DocSection;
 use super::doc_toml::render;
@@ -44,6 +42,10 @@ use super::schema::HEX_COLOR_PATTERN;
 use super::schema::THEME_SCHEMA_URL;
 use super::schema::hex_color_map_schema;
 use super::schema::schema_directive_prefix;
+
+use crate::ValueOrPanic;
+
+use theme_macros::include_bundled_themes;
 
 /// Default bundled theme used when none is configured.
 pub const DEFAULT_THEME_NAME: &str = "gruber-darker";
@@ -58,8 +60,7 @@ pub struct BundledTheme {
     pub source: &'static str,
 }
 
-// `BUNDLED_THEMES` is defined here; generated at build time from `themes/*.toml`.
-include!(concat!(env!("OUT_DIR"), "/bundled_themes.rs"));
+include_bundled_themes!("src/config/themes");
 
 /// Lazily initialized active theme after [`set_active`].
 static ACTIVE_THEME: OnceLock<Theme> = OnceLock::new();
